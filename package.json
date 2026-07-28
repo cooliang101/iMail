@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=22.5.0" },
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,green \"vite\" \"tsx watch server/index.ts\"",
     "build": "tsc -b && vite build",
@@ -16,6 +17,7 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "imapflow": "^1.0.195",
+    "jose": "^6.2.4",
     "mailparser": "^3.7.4",
     "nodemailer": "^9.0.3",
     "react": "^19.1.0",

@@ -10,8 +10,14 @@ export type MailSettings = {
 };
 
 export type AccountSecret = {
+  authType?: 'app-password' | 'oauth2';
   password?: string;
   accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  oauthProvider?: 'google' | 'microsoft' | 'yahoo';
+  scopes?: string[];
+  tokenType?: string;
 };
 
 export type MailAccount = {
@@ -23,6 +29,7 @@ export type MailAccount = {
   color: string;
   settings: MailSettings;
   encryptedSecret: string;
+  authMethod?: 'app-password' | 'oauth2';
   createdAt: string;
   lastSyncAt?: string;
   status: 'connected' | 'error' | 'syncing';

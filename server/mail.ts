@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
-import { decryptSecret } from './crypto.js';
+import { resolveAccountSecret } from './oauth.js';
 import { readStore, updateStore } from './store.js';
 import type { CachedMessage, MailAccount } from './types.js';
 
-function authFor(account: MailAccount, secret: Awaited<ReturnType<typeof decryptSecret>>) {
+function authFor(account: MailAccount, secret: Awaited<ReturnType<typeof resolveAccountSecret>>) {
   return secret.accessToken
     ? { user: account.email, accessToken: secret.accessToken }
     : { user: account.email, pass: secret.password ?? '' };
@@ -16,8 +16,39 @@ function address(value?: { name?: string; address?: string } | null) {
   return { name: value?.name ?? '', address: value?.address ?? '' };
 }
 
+function smtpTransport(account: MailAccount, secret: Awaited<ReturnType<typeof resolveAccountSecret>>) {
+  const auth = secret.accessToken
+    ? { type: 'OAuth2' as const, user: account.email, accessToken: secret.accessToken }
+    : { user: account.email, pass: secret.password ?? '' };
+  const yahooOAuthBearer = secret.oauthProvider === 'yahoo' && secret.accessToken;
+  return nodemailer.createTransport({
+    host: account.settings.smtpHost,
+    port: account.settings.smtpPort,
+    secure: account.settings.smtpSecure,
+    auth: yahooOAuthBearer ? { user: account.email, pass: 'oauth', method: 'OAUTHBEARER' } : auth,
+    authMethod: yahooOAuthBearer ? 'OAUTHBEARER' : undefined,
+    customAuth: yahooOAuthBearer ? {
+      OAUTHBEARER: async (context) => {
+        const payload = [
+          `n,a=${account.email},`,
+          `host=${account.settings.smtpHost}`,
+          `port=${account.settings.smtpPort}`,
+          `auth=Bearer ${secret.accessToken}`,
+          '',
+          '',
+        ].join('\x01');
+        const response = await context.sendCommand(`AUTH OAUTHBEARER ${Buffer.from(payload).toString('base64')}`);
+        if (response.status !== 235) throw new Error(`Yahoo SMTP OAuth 验证失败 (${response.status})`);
+        return true;
+      },
+    } : undefined,
+    disableFileAccess: true,
+    disableUrlAccess: true,
+  });
+}
+
 export async function testAccount(account: MailAccount): Promise<void> {
-  const secret = await decryptSecret(account.encryptedSecret);
+  const secret = await resolveAccountSecret(account);
   const client = new ImapFlow({
     host: account.settings.imapHost,
     port: account.settings.imapPort,
@@ -31,6 +62,8 @@ export async function testAccount(account: MailAccount): Promise<void> {
   } finally {
     await client.logout().catch(() => undefined);
   }
+  const transport = smtpTransport(account, secret);
+  try { await transport.verify(); } finally { transport.close(); }
 }
 
 export async function syncAccount(accountId: string): Promise<{ synced: number }> {
@@ -42,7 +75,7 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
     if (current) { current.status = 'syncing'; current.lastError = undefined; }
   });
 
-  const secret = await decryptSecret(account.encryptedSecret);
+  const secret = await resolveAccountSecret(account);
   const client = new ImapFlow({
     host: account.settings.imapHost,
     port: account.settings.imapPort,
@@ -125,18 +158,8 @@ export async function sendMessage(input: {
   const store = await readStore();
   const account = store.accounts.find((item) => item.id === input.accountId);
   if (!account) throw new Error('发件邮箱不存在');
-  const secret = await decryptSecret(account.encryptedSecret);
-  const auth = secret.accessToken
-    ? { type: 'OAuth2' as const, user: account.email, accessToken: secret.accessToken }
-    : { user: account.email, pass: secret.password ?? '' };
-  const transport = nodemailer.createTransport({
-    host: account.settings.smtpHost,
-    port: account.settings.smtpPort,
-    secure: account.settings.smtpSecure,
-    auth,
-    disableFileAccess: true,
-    disableUrlAccess: true,
-  });
+  const secret = await resolveAccountSecret(account);
+  const transport = smtpTransport(account, secret);
   const result = await transport.sendMail({
     from: { name: account.displayName, address: account.email },
     to: input.to,

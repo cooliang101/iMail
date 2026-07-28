@@ -1,15 +1,18 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { encryptSecret } from './crypto.js';
 import { sendMessage, syncAccount, testAccount } from './mail.js';
+import { beginOAuth, beginOAuthReconnect, completeOAuth, oauthCallbackHtml, oauthProviderCatalog, type OAuthProviderKey } from './oauth.js';
 import { settingsFor } from './providers.js';
 import { readStore, updateStore } from './store.js';
 import { authenticateToken, issueToken } from './tokens.js';
 import type { MailAccount, MailSettings, ProviderId, TokenScope } from './types.js';
 
-const app = express();
+export const app = express();
 const origins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map((item) => item.trim());
 app.use(cors({ origin: origins }));
 app.use(express.json({ limit: '2mb' }));
@@ -35,26 +38,62 @@ const accountSchema = z.object({
 
 function publicAccount(account: MailAccount) {
   const { encryptedSecret: _secret, ...safe } = account;
-  return safe;
+  return { ...safe, authMethod: safe.authMethod ?? 'app-password' };
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'imail' }));
 
 app.get('/api/providers', (_req, res) => res.json({
   providers: [
-    { id: 'outlook', name: 'Outlook', hint: 'Microsoft 365 / 工作邮箱' },
-    { id: 'gmail', name: 'Gmail', hint: '推荐使用应用专用密码' },
-    { id: 'qq', name: 'QQ 邮箱', hint: '使用邮箱授权码' },
-    { id: 'yahoo', name: 'Yahoo', hint: '使用应用密码' },
-    { id: 'hotmail', name: 'Hotmail', hint: 'Microsoft 个人邮箱' },
-    { id: 'icloud', name: 'iCloud', hint: '使用 Apple 应用专用密码' },
+    { id: 'outlook', name: 'Outlook', hint: 'Microsoft 365 / 工作邮箱', authMode: 'oauth2', oauthProvider: 'microsoft' },
+    { id: 'gmail', name: 'Gmail', hint: '使用 Google 安全登录', authMode: 'oauth2', oauthProvider: 'google' },
+    { id: 'qq', name: 'QQ 邮箱', hint: 'QQ 未公开邮件 OAuth，请使用授权码', authMode: 'app-password', helpUrl: 'https://service.mail.qq.com/' },
+    { id: 'yahoo', name: 'Yahoo', hint: 'OAuth 需要 Yahoo Mail 接入审核', authMode: 'oauth2', oauthProvider: 'yahoo' },
+    { id: 'hotmail', name: 'Hotmail', hint: '使用 Microsoft 安全登录', authMode: 'oauth2', oauthProvider: 'microsoft' },
+    { id: 'icloud', name: 'iCloud', hint: '公开跨平台接入使用应用专用密码', authMode: 'app-password', helpUrl: 'https://account.apple.com/account/manage' },
     { id: 'custom', name: '其他邮箱', hint: '自定义 IMAP / SMTP' },
   ],
+  oauth: oauthProviderCatalog(),
 }));
+
+const oauthStartSchema = z.object({
+  provider: z.enum(['outlook', 'gmail', 'yahoo', 'hotmail']),
+  displayName: z.string().max(80).optional(),
+  group: z.string().min(1).max(40).default('个人'),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#168f78'),
+});
+app.post('/api/oauth/start', asyncRoute(async (req, res) => {
+  res.json(beginOAuth(oauthStartSchema.parse(req.body)));
+}));
+
+for (const providerKey of ['google', 'microsoft', 'yahoo'] as const) {
+  app.get(`/api/oauth/${providerKey}/callback`, asyncRoute(async (req, res) => {
+    try {
+      const account = await completeOAuth({
+        providerKey: providerKey as OAuthProviderKey,
+        state: typeof req.query.state === 'string' ? req.query.state : undefined,
+        code: typeof req.query.code === 'string' ? req.query.code : undefined,
+        error: typeof req.query.error === 'string' ? req.query.error : undefined,
+        errorDescription: typeof req.query.error_description === 'string' ? req.query.error_description : undefined,
+      });
+      res.type('html').send(oauthCallbackHtml({ success: true, accountId: account.id, message: `${account.email} 已通过 OAuth 安全连接。` }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'OAuth 登录失败';
+      res.status(400).type('html').send(oauthCallbackHtml({ success: false, message }));
+    }
+  }));
+}
 
 app.get('/api/accounts', asyncRoute(async (_req, res) => {
   const data = await readStore();
   res.json({ accounts: data.accounts.map(publicAccount) });
+}));
+
+app.post('/api/accounts/:id/oauth/reconnect', asyncRoute(async (req, res) => {
+  const data = await readStore();
+  const account = data.accounts.find((item) => item.id === req.params.id);
+  if (!account) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
+  res.json(beginOAuthReconnect(account));
 }));
 
 app.post('/api/accounts', asyncRoute(async (req, res) => {
@@ -68,7 +107,8 @@ app.post('/api/accounts', asyncRoute(async (req, res) => {
     group: input.group,
     color: input.color,
     settings,
-    encryptedSecret: await encryptSecret({ password: input.password, accessToken: input.accessToken }),
+    encryptedSecret: await encryptSecret({ authType: input.password ? 'app-password' : 'oauth2', password: input.password, accessToken: input.accessToken }),
+    authMethod: input.password ? 'app-password' : 'oauth2',
     createdAt: new Date().toISOString(),
     status: 'connected',
   };
@@ -190,4 +230,8 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? '127.0.0.1';
-app.listen(port, host, () => console.log(`iMail API running at http://${host}:${port}`));
+export function startServer() {
+  return app.listen(port, host, () => console.log(`iMail API running at http://${host}:${port}`));
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) startServer();

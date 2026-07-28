@@ -8,6 +8,7 @@ export type Account = {
   group: string;
   color: string;
   status: 'connected' | 'syncing' | 'error';
+  authMethod?: 'app-password' | 'oauth2';
   lastSyncAt?: string;
   lastError?: string;
 };

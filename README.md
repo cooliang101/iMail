@@ -6,8 +6,12 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 
 - 统一收件箱、账户切换、工作空间分组、搜索、星标与邮件阅读
 - Outlook、Gmail、QQ、Yahoo、Hotmail、iCloud 的内置 IMAP/SMTP 配置
+- Gmail、Outlook、Hotmail 的 OAuth 2.0 授权码 + PKCE 登录和自动 Token 刷新
+- Yahoo OAuth 2.0 流程（需要 Yahoo 审核开放 `mail-r` / `mail-w`）
+- QQ 与 iCloud 的交互式应用专用密码 / 授权码引导
 - 通用 IMAP/SMTP 接入
 - 邮箱凭据本地 AES-256-GCM 加密
+- SQLite 本地数据库、外键约束、事务写入与旧 JSON 自动迁移
 - 同步最近 80 封收件箱邮件并保存在本地缓存
 - SMTP 写信、回复和发送
 - 短期开发 Token，支持指定邮箱、最小权限、自动过期和即时撤销
@@ -16,7 +20,7 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 
 ## 启动
 
-需要 Node.js 22 或更新版本。
+需要 Node.js 22.5 或更新版本（使用 Node 内置 `node:sqlite`）。
 
 ```bash
 npm install
@@ -34,22 +38,51 @@ npm start
 
 ## 添加邮箱
 
-点击左侧账户栏的 `+`，选择服务商并填写邮箱、显示名称、分组和应用专用密码。系统会先测试 IMAP 连接，连接成功才会保存。
+点击左侧账户栏的 `+` 并选择服务商。Gmail、Outlook、Hotmail 和审核通过的 Yahoo 应用会打开服务商官方登录窗口；iMail 使用 OAuth 2.0 Authorization Code + PKCE 获取授权并加密保存 Refresh Token。QQ、iCloud 和通用 IMAP 使用应用专用密码或授权码。所有方式都会先测试 IMAP 与 SMTP 连接，全部成功后才保存账户。
 
 不同服务商的准备工作：
 
-- Gmail：开启两步验证后创建应用专用密码。
-- Outlook / Hotmail：组织策略需要允许 IMAP；账户启用现代身份验证时可使用 OAuth Access Token，当前 UI 的交互式 OAuth 流程留待下一阶段。
+- Gmail：使用 Google OAuth；`https://mail.google.com/` 是受限 scope，应用对外发布前必须完成 Google OAuth 验证。
+- Outlook / Hotmail：使用 Microsoft OAuth；Microsoft 365 组织仍需在租户与邮箱级别允许 IMAP 和 SMTP AUTH。
 - QQ 邮箱：在邮箱设置中开启 IMAP/SMTP，并使用生成的授权码。
-- Yahoo：创建第三方应用密码。
-- iCloud：在 Apple Account 中创建应用专用密码。
+- Yahoo：OAuth 邮件权限需要先向 Yahoo Developer Access 申请，未审核时可使用第三方应用密码。
+- iCloud：Apple 尚未公开通用跨平台 iCloud Mail OAuth scope 与接入协议，当前使用 Apple 应用专用密码。
 - 自定义邮箱：准备 IMAP/SMTP 主机、端口、TLS 设置和授权凭据。
 
-凭据保存在 `.data/store.json`，其中敏感字段为密文。加密主密钥默认生成在 `.data/master.key`。也可在 `.env` 中配置 32 字节密钥的 64 位十六进制值：
+### OAuth 应用配置
+
+复制 `.env.example` 为 `.env`，然后按需要配置服务商。OAuth Client Secret 只能保存在本地 `.env`，不得提交到 Git。
+
+Google Cloud Console：
+
+1. 创建 OAuth 2.0 Web application Client。
+2. 登记回调 `http://localhost:8787/api/oauth/google/callback`。
+3. 配置 OAuth consent screen 与测试用户，并申请 `https://mail.google.com/`。
+4. 填写 `GOOGLE_OAUTH_CLIENT_ID`、`GOOGLE_OAUTH_CLIENT_SECRET`。
+
+Microsoft Entra：
+
+1. 创建 App Registration，账户类型选择同时支持组织账户与个人 Microsoft 账户。
+2. 登记回调 `http://localhost:8787/api/oauth/microsoft/callback`。
+3. 添加 Office 365 Exchange Online Delegated Permissions：`IMAP.AccessAsUser.All` 与 `SMTP.Send`。
+4. 填写 `MICROSOFT_OAUTH_CLIENT_ID`；Web 机密客户端同时填写 `MICROSOFT_OAUTH_CLIENT_SECRET`。
+
+Yahoo Developer Network：
+
+1. 先在 [Yahoo Developer Access](https://senders.yahooinc.com/developer/developer-access/) 申请 IMAP/SMTP 商业接入。
+2. 审核通过并获得 `mail-r`、`mail-w` 后登记回调 `http://localhost:8787/api/oauth/yahoo/callback`。
+3. 填写 `YAHOO_OAUTH_CLIENT_ID`、`YAHOO_OAUTH_CLIENT_SECRET`，并设置 `YAHOO_MAIL_OAUTH_APPROVED=true`。
+
+可用的公开回调地址、scope 与当前配置状态可通过 `GET /api/providers` 查看。生产环境必须设置 HTTPS 的 `OAUTH_CALLBACK_BASE_URL` 和 `FRONTEND_URL`。
+
+账户、邮件缓存和开发 Token 保存在 `.data/imail.sqlite`。凭据字段仍使用 AES-256-GCM 加密，加密主密钥默认生成在 `.data/master.key`。也可在 `.env` 中配置数据目录和 32 字节密钥的 64 位十六进制值：
 
 ```env
+IMAIL_DATA_DIR=.data
 APP_MASTER_KEY=请替换为64位十六进制值
 ```
+
+从旧版本升级时，首次启动会在一个事务中把 `.data/store.json` 导入 SQLite；成功后原文件会保留为 `.data/store.json.migrated`，不会重复导入。
 
 不要提交 `.data`、`.env` 或任何 Token，项目已在 `.gitignore` 中排除这些文件。
 
@@ -106,7 +139,8 @@ Token 有效期范围为 5 分钟至 7 天，且只能访问创建时选中的�
 - 服务默认仅监听回环地址，适合作为本地开发工具。
 - 邮箱密码和授权码不会由 API 返回，落盘前使用 AES-256-GCM 加密。
 - 临时 Token 不以明文落盘。
-- 邮件正文和元数据保存在 `.data/store.json`，因此磁盘权限和设备加密仍然重要。
+- 邮件正文和元数据保存在 `.data/imail.sqlite`，因此磁盘权限和设备加密仍然重要。
+- SQLite 启用外键、WAL、繁忙等待和事务替换；账户删除会级联清理邮件及 Token 账户授权关系。
 - HTML 邮件当前以纯文本正文展示，避免直接渲染不可信 HTML。
 - 这是本地单用户 MVP。若需要远程部署，必须先增加管理端身份验证、TLS、数据库权限隔离、审计日志、速率限制和密钥托管。
 
@@ -116,8 +150,9 @@ Token 有效期范围为 5 分钟至 7 天，且只能访问创建时选中的�
 src/                 React + TypeScript 客户端
 server/index.ts      管理 API 与开发者 API
 server/mail.ts       IMAP 同步和 SMTP 发送
+server/oauth.ts      OAuth PKCE、回调、身份校验与 Token 刷新
 server/crypto.ts     本地凭据加密
-server/store.ts      原子 JSON 数据存储
+server/store.ts      SQLite schema、事务存储与 JSON 迁移
 server/providers.ts  服务商预设
 .data/               本地数据与密钥，不进入 Git
 ```
@@ -142,8 +177,7 @@ npm run build
 
 ## MVP 后续优先级
 
-1. Gmail 与 Microsoft 的完整 OAuth 2.0 授权、刷新与撤销流程
-2. IMAP IDLE 实时收信、分页同步、自定义文件夹和服务端已读/星标回写
-3. 附件下载、富文本写信、草稿与会话视图
-4. SQLite/PostgreSQL 存储、全文索引和大邮箱增量同步
-5. 管理端登录、设备会话、审计日志和远程安全部署模式
+1. IMAP IDLE 实时收信、分页同步、自定义文件夹和服务端已读/星标回写
+2. 附件下载、富文本写信、草稿与会话视图
+3. SQLite 全文索引、大邮箱增量同步和可选 PostgreSQL 远程模式
+4. 管理端登录、设备会话、审计日志和远程安全部署模式

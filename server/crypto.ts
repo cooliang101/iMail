@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AccountSecret } from './types.js';
 
-const dataDir = path.resolve('.data');
+const dataDir = path.resolve(process.env.IMAIL_DATA_DIR ?? '.data');
 const keyFile = path.join(dataDir, 'master.key');
 
 async function loadKey(): Promise<Buffer> {

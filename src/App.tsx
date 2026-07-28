@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button, Tooltip } from '@fluentui/react-components';
 import {
   AddressBook, Archive, ArrowClockwise, ArrowLeft, ArrowRight, Bell, CaretDown, Check,
@@ -13,10 +13,10 @@ type View = 'inbox' | 'starred' | 'tokens';
 type Notice = { kind: 'success' | 'error'; text: string } | null;
 
 const providerLabel: Record<ProviderId, string> = { outlook: 'Outlook', gmail: 'Gmail', qq: 'QQ', yahoo: 'Yahoo', hotmail: 'Hotmail', icloud: 'iCloud', custom: 'IMAP' };
-const providers: Array<{ id: ProviderId; name: string; mark: string }> = [
-  { id: 'outlook', name: 'Outlook', mark: 'O' }, { id: 'gmail', name: 'Gmail', mark: 'G' },
-  { id: 'qq', name: 'QQ 邮箱', mark: 'Q' }, { id: 'yahoo', name: 'Yahoo', mark: 'Y' },
-  { id: 'hotmail', name: 'Hotmail', mark: 'H' }, { id: 'icloud', name: 'iCloud', mark: 'i' },
+const providers: Array<{ id: ProviderId; name: string; mark: string; oauthKey?: 'google' | 'microsoft' | 'yahoo'; helpUrl?: string }> = [
+  { id: 'outlook', name: 'Outlook', mark: 'O', oauthKey: 'microsoft' }, { id: 'gmail', name: 'Gmail', mark: 'G', oauthKey: 'google' },
+  { id: 'qq', name: 'QQ 邮箱', mark: 'Q', helpUrl: 'https://service.mail.qq.com/' }, { id: 'yahoo', name: 'Yahoo', mark: 'Y', oauthKey: 'yahoo', helpUrl: 'https://login.yahoo.com/account/security' },
+  { id: 'hotmail', name: 'Hotmail', mark: 'H', oauthKey: 'microsoft' }, { id: 'icloud', name: 'iCloud', mark: 'i', helpUrl: 'https://account.apple.com/account/manage' },
   { id: 'custom', name: '其他 IMAP', mark: '+' },
 ];
 
@@ -52,6 +52,7 @@ function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [tokenOpen, setTokenOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [syncing, setSyncing] = useState(false);
@@ -119,7 +120,7 @@ function App() {
         </Tooltip>)}
         <Tooltip content="添加邮箱" relationship="label"><button className="rail-avatar rail-add" onClick={() => setAddOpen(true)}><Plus size={19} /></button></Tooltip>
       </div>
-      <Tooltip content="设置" relationship="label"><button className="rail-avatar rail-settings"><Gear size={19} /></button></Tooltip>
+      <Tooltip content="邮箱设置" relationship="label"><button className="rail-avatar rail-settings" onClick={() => setSettingsOpen(true)}><Gear size={19} /></button></Tooltip>
     </aside>
 
     <aside className={`primary-sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
@@ -173,6 +174,7 @@ function App() {
     {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} onAdded={async () => { setAddOpen(false); await load(); setNotice({ kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} />}
     {composeOpen && <ComposeModal accounts={realAccounts} reply={selected} onClose={() => setComposeOpen(false)} onSent={() => { setComposeOpen(false); setNotice({ kind: 'success', text: '邮件已发送' }); }} />}
     {tokenOpen && <CreateTokenModal accounts={realAccounts} onClose={() => setTokenOpen(false)} onCreated={async () => { await load(); }} />}
+    {settingsOpen && <AccountSettingsModal accounts={realAccounts} onClose={() => setSettingsOpen(false)} onReload={load} setNotice={setNotice} />}
   </div>;
 }
 
@@ -191,14 +193,53 @@ function MessageReader({ message, account, onReply }: { message?: Message; accou
   </article>;
 }
 
-function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void | Promise<void> }) {
   const [provider, setProvider] = useState<ProviderId>('outlook');
   const [advanced, setAdvanced] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [oauthCatalog, setOauthCatalog] = useState<Array<{ id: string; configured: boolean; redirectUri: string; configurationHint: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const popupRef = useRef<Window | null>(null);
+  const selectedProvider = providers.find((item) => item.id === provider)!;
+  const oauthStatus = selectedProvider.oauthKey ? oauthCatalog.find((item) => item.id === selectedProvider.oauthKey) : undefined;
+  const usesOAuth = Boolean(selectedProvider.oauthKey && !manualMode);
+
+  useEffect(() => {
+    void api<{ oauth: Array<{ id: string; configured: boolean; redirectUri: string; configurationHint: string }> }>('/api/providers')
+      .then((result) => setOauthCatalog(result.oauth))
+      .catch((value) => setError(value instanceof Error ? value.message : '无法读取 OAuth 配置'));
+  }, []);
+
+  useEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.source !== popupRef.current || event.data?.source !== 'imail-oauth') return;
+      setBusy(false);
+      popupRef.current = null;
+      if (event.data.success) void onAdded();
+      else setError(event.data.message || 'OAuth 登录未完成');
+    };
+    window.addEventListener('message', receive);
+    return () => window.removeEventListener('message', receive);
+  }, [onAdded]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError('');
     const form = new FormData(event.currentTarget);
+    if (usesOAuth) {
+      const popup = window.open('', 'imail-oauth', 'popup,width=560,height=720,menubar=no,toolbar=no');
+      if (!popup) { setError('浏览器阻止了登录窗口，请允许弹出窗口后重试'); setBusy(false); return; }
+      popup.document.write('<title>iMail</title><p style="font-family:system-ui;padding:32px">正在打开安全登录…</p>');
+      popupRef.current = popup;
+      try {
+        const result = await api<{ authorizationUrl: string }>('/api/oauth/start', { method: 'POST', body: JSON.stringify({ provider, displayName: form.get('displayName') || undefined, group: form.get('group'), color: '#168f78' }) });
+        popup.location.replace(result.authorizationUrl);
+      } catch (value) {
+        popup.close(); popupRef.current = null; setBusy(false);
+        setError(value instanceof Error ? value.message : '无法开始 OAuth 登录');
+      }
+      return;
+    }
     const body: Record<string, unknown> = { provider, email: form.get('email'), displayName: form.get('displayName'), group: form.get('group'), password: form.get('password'), color: '#168f78' };
     if (provider === 'custom') body.settings = { imapHost: form.get('imapHost'), imapPort: Number(form.get('imapPort')), imapSecure: true, smtpHost: form.get('smtpHost'), smtpPort: Number(form.get('smtpPort')), smtpSecure: Number(form.get('smtpPort')) === 465 };
     try { await api('/api/accounts', { method: 'POST', body: JSON.stringify(body) }); await onAdded(); }
@@ -206,14 +247,86 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
     finally { setBusy(false); }
   }
   return <Overlay onClose={onClose} wide><form className="account-modal" onSubmit={submit}>
-    <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>选择服务商，我们会自动配置安全连接。</p></div><button type="button" onClick={onClose}><X size={21} /></button></div>
-    <div className="provider-grid">{providers.map((item) => <button type="button" key={item.id} className={provider === item.id ? 'selected' : ''} onClick={() => setProvider(item.id)}><i className={`provider-mark provider-${item.id}`}>{item.mark}</i><span>{item.name}</span>{provider === item.id && <Check size={15} weight="bold" />}</button>)}</div>
-    <div className="form-grid"><label><span>邮箱地址</span><input name="email" type="email" placeholder="name@example.com" required /></label><label><span>显示名称</span><input name="displayName" placeholder="例如：工作邮箱" required /></label><label><span>分组</span><select name="group" defaultValue="工作"><option>工作</option><option>个人</option><option>对外支持</option><option>开发测试</option><option>同学联系</option></select></label><label><span>应用专用密码 / 授权码</span><input name="password" type="password" placeholder="不会以明文保存" required /></label></div>
-    {provider !== 'custom' && <div className="provider-tip"><Key size={19} /><span><strong>{providerLabel[provider]} 安全提示</strong><small>请使用应用专用密码或邮箱授权码，不要填写网页登录密码。</small></span></div>}
+    <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>优先使用服务商安全登录，iMail 不会接触你的网页登录密码。</p></div><button type="button" onClick={onClose}><X size={21} /></button></div>
+    <div className="provider-grid">{providers.map((item) => <button type="button" key={item.id} className={provider === item.id ? 'selected' : ''} onClick={() => { setProvider(item.id); setManualMode(false); setError(''); }}><i className={`provider-mark provider-${item.id}`}>{item.mark}</i><span>{item.name}</span>{item.oauthKey && <small className="oauth-chip">OAuth</small>}{provider === item.id && <Check size={15} weight="bold" />}</button>)}</div>
+    {usesOAuth ? <>
+      <div className="oauth-panel">
+        <div className={`oauth-status ${oauthStatus?.configured ? 'ready' : 'setup'}`}><Key size={21} weight="duotone" /><span><strong>{providerLabel[provider]} 安全登录</strong><small>{oauthStatus?.configured ? 'OAuth 已配置。登录将在服务商官方页面完成，并自动安全刷新授权。' : oauthStatus?.configurationHint || '正在读取 OAuth 配置…'}</small></span></div>
+        <div className="form-grid oauth-profile"><label><span>显示名称（可选）</span><input name="displayName" placeholder="默认使用账户名称" /></label><label><span>加入分组</span><select name="group" defaultValue="工作"><option>工作</option><option>个人</option><option>对外支持</option><option>开发测试</option><option>同学联系</option></select></label></div>
+        {provider === 'yahoo' && <div className="oauth-review"><WarningCircle size={17} /><span>Yahoo 的 mail-r/mail-w 权限只对审核通过的应用开放。</span></div>}
+      </div>
+      <button type="button" className="manual-switch" onClick={() => setManualMode(true)}>无法使用 OAuth？改用应用专用密码</button>
+    </> : <>
+      <div className="form-grid"><label><span>邮箱地址</span><input name="email" type="email" placeholder="name@example.com" required /></label><label><span>显示名称</span><input name="displayName" placeholder="例如：工作邮箱" required /></label><label><span>分组</span><select name="group" defaultValue="工作"><option>工作</option><option>个人</option><option>对外支持</option><option>开发测试</option><option>同学联系</option></select></label><label><span>应用专用密码 / 授权码</span><input name="password" type="password" placeholder="不会以明文保存" required /></label></div>
+      {provider !== 'custom' && <div className="provider-tip"><Key size={19} /><span><strong>{providerLabel[provider]} 安全提示</strong><small>{provider === 'qq' ? 'QQ 邮箱尚未公开第三方邮件 OAuth，请在邮箱设置中生成授权码。' : provider === 'icloud' ? 'Apple 尚未公开通用跨平台 iCloud Mail OAuth 接入，请使用应用专用密码。' : '请使用应用专用密码，不要填写网页登录密码。'}</small></span>{selectedProvider.helpUrl && <a href={selectedProvider.helpUrl} target="_blank" rel="noreferrer">打开授权页面 <ArrowRight size={14} /></a>}</div>}
+      {selectedProvider.oauthKey && <button type="button" className="manual-switch" onClick={() => setManualMode(false)}>返回 {providerLabel[provider]} OAuth 安全登录</button>}
+    </>}
     {provider === 'custom' && <div className="advanced-settings"><button type="button" onClick={() => setAdvanced(!advanced)}><Gear size={17} />IMAP / SMTP 设置<CaretDown size={15} /></button>{(advanced || provider === 'custom') && <div className="form-grid"><label><span>IMAP 主机</span><input name="imapHost" placeholder="imap.example.com" required /></label><label><span>IMAP 端口</span><input name="imapPort" type="number" defaultValue="993" required /></label><label><span>SMTP 主机</span><input name="smtpHost" placeholder="smtp.example.com" required /></label><label><span>SMTP 端口</span><input name="smtpPort" type="number" defaultValue="465" required /></label></div>}</div>}
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
-    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy}>{busy ? '正在验证连接…' : '验证并添加'}</Button></div>
+    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy || (usesOAuth && !oauthStatus?.configured)}>{busy ? (usesOAuth ? '等待授权…' : '正在验证连接…') : usesOAuth ? `使用 ${providerLabel[provider]} 登录` : '验证并添加'}</Button></div>
   </form></Overlay>;
+}
+
+function AccountSettingsModal({ accounts, onClose, onReload, setNotice }: { accounts: Account[]; onClose: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const popupRef = useRef<Window | null>(null);
+
+  useEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.source !== popupRef.current || event.data?.source !== 'imail-oauth') return;
+      popupRef.current = null;
+      setBusyId(null);
+      if (event.data.success) {
+        void onReload().then(() => setNotice({ kind: 'success', text: '邮箱授权已更新' }));
+      } else setError(event.data.message || '重新授权未完成');
+    };
+    window.addEventListener('message', receive);
+    const timer = window.setInterval(() => {
+      if (popupRef.current?.closed) { popupRef.current = null; setBusyId(null); }
+    }, 700);
+    return () => { window.removeEventListener('message', receive); window.clearInterval(timer); };
+  }, [onReload, setNotice]);
+
+  async function reconnect(account: Account) {
+    setError('');
+    const popup = window.open('', 'imail-oauth', 'popup,width=560,height=720,menubar=no,toolbar=no');
+    if (!popup) { setError('浏览器阻止了登录窗口，请允许弹出窗口后重试'); return; }
+    popup.document.write('<title>iMail</title><p style="font-family:system-ui;padding:32px">正在打开安全登录…</p>');
+    popupRef.current = popup;
+    setBusyId(account.id);
+    try {
+      const result = await api<{ authorizationUrl: string }>(`/api/accounts/${account.id}/oauth/reconnect`, { method: 'POST' });
+      popup.location.replace(result.authorizationUrl);
+    } catch (value) {
+      popup.close(); popupRef.current = null; setBusyId(null);
+      setError(value instanceof Error ? value.message : '无法开始重新授权');
+    }
+  }
+
+  async function remove(account: Account) {
+    if (!window.confirm(`确定从 iMail 移除 ${account.email}？本地邮件缓存也会一并删除。`)) return;
+    setBusyId(account.id); setError('');
+    try {
+      await api(`/api/accounts/${account.id}`, { method: 'DELETE' });
+      await onReload();
+      setNotice({ kind: 'success', text: `${account.displayName} 已从本机移除` });
+    } catch (value) { setError(value instanceof Error ? value.message : '移除失败'); }
+    finally { setBusyId(null); }
+  }
+
+  return <Overlay onClose={onClose}><section className="account-settings-modal">
+    <div className="modal-header"><div><span>连接与授权</span><h2>邮箱设置</h2><p>查看连接状态，更新 OAuth 授权或移除本地账户。</p></div><button type="button" onClick={onClose}><X size={21} /></button></div>
+    {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>关闭设置后，点击左侧的加号接入第一个邮箱。</p></div> : <div className="settings-account-list">
+      {accounts.map((account) => <article key={account.id} className="settings-account">
+        <i style={{ background: account.color }}>{initials(account.displayName)}</i>
+        <span><strong>{account.displayName}</strong><small>{account.email}</small><em className={`connection-${account.status}`}>{account.status === 'connected' ? '连接正常' : account.status === 'syncing' ? '正在同步' : account.lastError || '连接异常'}</em></span>
+        <div><small>{account.authMethod === 'oauth2' ? 'OAuth 2.0' : '授权码 / 专用密码'}</small>{account.authMethod === 'oauth2' && <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => void reconnect(account)}><ArrowClockwise size={15} />{busyId === account.id ? '等待登录' : '重新授权'}</button>}<button type="button" className="remove-account" disabled={busyId === account.id} onClick={() => void remove(account)}><Trash size={15} />移除</button></div>
+      </article>)}
+    </div>}
+    {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
+    <div className="modal-footer"><Button appearance="primary" onClick={onClose}>完成</Button></div>
+  </section></Overlay>;
 }
 
 function ComposeModal({ accounts, reply, onClose, onSent }: { accounts: Account[]; reply?: Message; onClose: () => void; onSent: () => void }) {
