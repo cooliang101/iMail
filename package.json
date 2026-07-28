@@ -1,0 +1,40 @@
+{
+  "name": "relaybox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,green \"vite\" \"tsx watch server/index.ts\"",
+    "build": "tsc -b && vite build",
+    "start": "tsx server/index.ts",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fluentui/react-components": "^9.69.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "imapflow": "^1.0.195",
+    "mailparser": "^3.7.4",
+    "nodemailer": "^9.0.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^24.0.3",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.5.2",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}
