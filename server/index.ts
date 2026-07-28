@@ -38,7 +38,7 @@ function publicAccount(account: MailAccount) {
   return safe;
 }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'relaybox' }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'imail' }));
 
 app.get('/api/providers', (_req, res) => res.json({
   providers: [
@@ -190,4 +190,4 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? '127.0.0.1';
-app.listen(port, host, () => console.log(`RelayBox API running at http://${host}:${port}`));
+app.listen(port, host, () => console.log(`iMail API running at http://${host}:${port}`));

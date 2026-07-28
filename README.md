@@ -1,6 +1,6 @@
-# RelayBox
+# iMail
 
-RelayBox 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商的 IMAP/SMTP 邮箱聚合到一个轻量界面，同时提供带范围和过期时间的开发 Token，让本地项目通过统一 API 读取或发送邮件。
+iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商的 IMAP/SMTP 邮箱聚合到一个轻量界面，同时提供带范围和过期时间的开发 Token，让本地项目通过统一 API 读取或发送邮件。
 
 ## 当前能力
 
@@ -67,26 +67,26 @@ http://127.0.0.1:8787/api/dev/v1
 
 ```bash
 curl "http://127.0.0.1:8787/api/dev/v1/messages?limit=10" \
-  -H "Authorization: Bearer rbx_your_token"
+  -H "Authorization: Bearer imail_your_token"
 ```
 
 读取可用账户：
 
 ```bash
 curl "http://127.0.0.1:8787/api/dev/v1/accounts" \
-  -H "Authorization: Bearer rbx_your_token"
+  -H "Authorization: Bearer imail_your_token"
 ```
 
 发送邮件：
 
 ```bash
 curl -X POST "http://127.0.0.1:8787/api/dev/v1/send" \
-  -H "Authorization: Bearer rbx_your_token" \
+  -H "Authorization: Bearer imail_your_token" \
   -H "Content-Type: application/json" \
   -d '{
     "accountId": "账户 UUID",
     "to": ["recipient@example.com"],
-    "subject": "RelayBox test",
+    "subject": "iMail test",
     "text": "Hello from a local app"
   }'
 ```
@@ -121,6 +121,16 @@ server/store.ts      原子 JSON 数据存储
 server/providers.ts  服务商预设
 .data/               本地数据与密钥，不进入 Git
 ```
+
+## 品牌素材
+
+- `public/brand/imail-logo.png`：1024×1024 透明 Logo 母版
+- `public/brand/imail-app-icon.png`：1024×1024 应用图标
+- `public/favicon.ico`：包含 16 至 256 像素的 Windows / 浏览器图标
+- `public/favicon-16.png`、`favicon-32.png`、`favicon-48.png`：浏览器图标
+- `public/apple-touch-icon.png`：180×180 Apple Touch Icon
+- `public/pwa-192.png`、`public/pwa-512.png`：PWA 安装图标
+- `public/manifest.webmanifest`：iMail Web App Manifest
 
 ## 验证
 

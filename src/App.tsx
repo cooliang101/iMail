@@ -109,7 +109,7 @@ function App() {
     {notice && <div className={`toast toast-${notice.kind}`}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
 
     <aside className="account-rail" aria-label="邮箱账户">
-      <button className="brand-mark" aria-label="RelayBox"><Envelope size={23} weight="duotone" /></button>
+      <button className="brand-mark" aria-label="iMail"><img src="/brand/imail-app-icon.png" alt="" /></button>
       <div className="rail-accounts">
         <Tooltip content="聚合所有邮箱" relationship="label"><button className={`rail-avatar rail-all ${accountFilter === 'all' ? 'active' : ''}`} onClick={() => selectScope('inbox')}><Tray size={20} /></button></Tooltip>
         {accounts.map((account) => <Tooltip key={account.id} content={`${account.displayName} · ${account.email}`} relationship="label">
@@ -123,7 +123,7 @@ function App() {
     </aside>
 
     <aside className={`primary-sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
-      <div className="sidebar-heading"><div><strong>RelayBox</strong><span>统一通信工作台</span></div><button className="mobile-close" onClick={() => setSidebarOpen(false)}><X size={20} /></button></div>
+      <div className="sidebar-heading"><div><strong>iMail</strong><span>统一通信工作台</span></div><button className="mobile-close" onClick={() => setSidebarOpen(false)}><X size={20} /></button></div>
       <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => setComposeOpen(true)}>写邮件</Button>
       <nav className="nav-block">
         <button className={view === 'inbox' && !groupFilter ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={19} /><span>统一收件箱</span><b>{messages.filter((m) => m.unread).length}</b></button>
@@ -233,7 +233,7 @@ function TokenWorkspace({ accounts, tokens, onCreate, onReload, setNotice }: { a
   return <section className="token-workspace"><header><div><span>本地开发能力</span><h1>邮件网关</h1><p>让本地项目用一个短期 Token 安全读取或发送邮件，无需重复配置每个邮箱的 IMAP。</p></div><Button appearance="primary" icon={<Plus size={17} />} onClick={onCreate} disabled={accounts.length === 0}>创建临时 Token</Button></header>
     <div className="endpoint-strip"><Code size={21} /><span><small>开发 API 地址</small><code>http://127.0.0.1:8787/api/dev/v1</code></span><button onClick={() => void navigator.clipboard.writeText('http://127.0.0.1:8787/api/dev/v1')}><Copy size={17} />复制</button></div>
     <div className="token-columns"><div className="token-list"><div className="token-title"><h2>有效 Token</h2><span>{tokens.filter((token) => token.expiresAt > new Date().toISOString()).length} 个正在生效</span></div>{accounts.length === 0 ? <div className="token-empty"><Key size={38} weight="duotone" /><h3>接入邮箱后即可创建</h3><p>Token 只会访问你明确选择的邮箱和权限。</p></div> : tokens.length === 0 ? <div className="token-empty"><Key size={38} weight="duotone" /><h3>还没有临时 Token</h3><p>创建一个给本地应用使用，原始值只显示一次。</p><button onClick={onCreate}>创建第一个 Token</button></div> : tokens.map((token) => <article className="token-item" key={token.id}><div className="token-icon"><Key size={20} /></div><div><strong>{token.name}</strong><code>{token.prefix}••••••••••••</code><span>{token.scopes.map((scope) => scope.replace('messages:', '')).join(' · ')} · {token.accountIds.length} 个邮箱</span></div><div className="token-time"><small>到期时间</small><span>{new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(token.expiresAt))}</span></div><button className="revoke" onClick={() => void revoke(token.id)}>撤销</button></article>)}</div>
-      <aside className="quickstart"><div className="quickstart-title"><AddressBook size={21} /><div><strong>快速调用</strong><span>读取最新 10 封邮件</span></div></div><pre><code><span className="code-muted">curl</span> http://127.0.0.1:8787/api/dev/v1/messages?limit=10 \\{`\n`}  -H <span className="code-string">&quot;Authorization: Bearer rbx_xxx&quot;</span></code></pre><div className="security-note"><WarningCircle size={18} /><p><strong>最小权限原则</strong><span>只选择当前测试真正需要的邮箱。Token 到期后会自动失效。</span></p></div><a href="/README.md" target="_blank">查看完整 API 文档 <ArrowRight size={15} /></a></aside></div>
+      <aside className="quickstart"><div className="quickstart-title"><AddressBook size={21} /><div><strong>快速调用</strong><span>读取最新 10 封邮件</span></div></div><pre><code><span className="code-muted">curl</span> http://127.0.0.1:8787/api/dev/v1/messages?limit=10 \\{`\n`}  -H <span className="code-string">&quot;Authorization: Bearer imail_xxx&quot;</span></code></pre><div className="security-note"><WarningCircle size={18} /><p><strong>最小权限原则</strong><span>只选择当前测试真正需要的邮箱。Token 到期后会自动失效。</span></p></div><a href="/README.md" target="_blank">查看完整 API 文档 <ArrowRight size={15} /></a></aside></div>
   </section>;
 }
 

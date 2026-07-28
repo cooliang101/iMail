@@ -17,7 +17,7 @@ describe('provider presets', () => {
 
 describe('developer token hashing', () => {
   it('is deterministic without storing the raw token', () => {
-    expect(hashToken('rbx_example')).toBe(hashToken('rbx_example'));
-    expect(hashToken('rbx_example')).not.toContain('rbx_example');
+    expect(hashToken('imail_example')).toBe(hashToken('imail_example'));
+    expect(hashToken('imail_example')).not.toContain('imail_example');
   });
 });

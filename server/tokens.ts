@@ -7,7 +7,7 @@ export function hashToken(token: string): string {
 }
 
 export async function issueToken(input: { name: string; scopes: TokenScope[]; accountIds: string[]; ttlSeconds: number }) {
-  const raw = `rbx_${randomBytes(30).toString('base64url')}`;
+  const raw = `imail_${randomBytes(30).toString('base64url')}`;
   const now = new Date();
   const token: DeveloperToken = {
     id: crypto.randomUUID(),
@@ -24,7 +24,7 @@ export async function issueToken(input: { name: string; scopes: TokenScope[]; ac
 }
 
 export async function authenticateToken(raw: string | undefined, scope: TokenScope): Promise<DeveloperToken | null> {
-  if (!raw?.startsWith('rbx_')) return null;
+  if (!raw?.startsWith('imail_')) return null;
   const digest = Buffer.from(hashToken(raw), 'hex');
   const store = await readStore();
   const token = store.tokens.find((candidate) => {
