@@ -171,7 +171,14 @@ Token 有效期范围为 5 分钟至 7 天，且只能访问创建时选中的�
 ## 工程结构
 
 ```text
-src/                 React + TypeScript 客户端
+src/App.tsx          客户端顶层状态与页面编排，不放业务组件实现
+src/components/      跨业务复用的基础 UI、服务商标识与展示工具
+src/features/mail/   邮件列表虚拟化与阅读器
+src/features/accounts/ 邮箱接入、授权与账户设置
+src/features/compose/  写信与草稿工作区
+src/features/organize/ 标签、稍后处理、通知和工作空间
+src/features/developer/ 开发者网关与临时 Token UI
+src/app-model.ts     跨 feature 的客户端类型
 server/index.ts      管理 API 与开发者 API
 server/mail.ts       IMAP 同步和 SMTP 发送
 server/oauth.ts      OAuth PKCE、回调、身份校验与 Token 刷新
