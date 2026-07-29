@@ -15,6 +15,8 @@ const state = vi.hoisted(() => ({
   verify: vi.fn(async () => true),
   close: vi.fn(),
   sendMail: vi.fn(async () => ({ messageId: '<sent@example.com>', accepted: ['recipient@example.com'] })),
+  messageFlagsAdd: vi.fn(async () => true),
+  messageFlagsRemove: vi.fn(async () => true),
   simpleParser: vi.fn(async () => state.parsed),
 }));
 
@@ -31,6 +33,8 @@ vi.mock('imapflow', () => ({
     connect = state.connect;
     mailboxOpen = state.mailboxOpen;
     logout = state.logout;
+    messageFlagsAdd = state.messageFlagsAdd;
+    messageFlagsRemove = state.messageFlagsRemove;
     fetch(range: unknown, query: Record<string, unknown>, options?: Record<string, unknown>) {
       const index = state.fetchCalls.length;
       state.fetchCalls.push({ range, query, options });
@@ -47,7 +51,7 @@ vi.mock('nodemailer', () => ({
   }) },
 }));
 
-import { sendMessage, syncAccount, testAccount } from './mail.js';
+import { describeProtocolError, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
 
 function account(overrides: Partial<MailAccount> = {}): MailAccount {
   return {
@@ -64,6 +68,7 @@ beforeEach(() => {
   state.imapOptions = []; state.smtpOptions = []; state.fetchBatches = []; state.fetchCalls = [];
   state.connect.mockResolvedValue(undefined); state.mailboxOpen.mockResolvedValue({ exists: 0, uidNext: 1 }); state.logout.mockResolvedValue(undefined);
   state.verify.mockResolvedValue(true); state.sendMail.mockResolvedValue({ messageId: '<sent@example.com>', accepted: ['recipient@example.com'] });
+  state.messageFlagsAdd.mockResolvedValue(true); state.messageFlagsRemove.mockResolvedValue(true);
   state.parsed = {};
 });
 
@@ -84,9 +89,39 @@ describe('mail account connection', () => {
     expect(state.imapOptions[0].auth).toEqual({ user: 'owner@example.com', accessToken: 'google-access' });
     expect(state.smtpOptions[0].auth).toEqual({ type: 'OAuth2', user: 'owner@example.com', accessToken: 'google-access' });
   });
+
+  it('surfaces the provider response instead of a generic IMAP command error', async () => {
+    const failure = Object.assign(new Error('Command failed'), { responseText: '[AUTHENTICATIONFAILED] Invalid credentials', responseStatus: 'NO' });
+    state.connect.mockRejectedValueOnce(failure);
+    await expect(testAccount(account({ authMethod: 'oauth2' }))).rejects.toThrow('IMAP 验证失败 (NO)：[AUTHENTICATIONFAILED] Invalid credentials');
+    expect(describeProtocolError('IMAP', failure).message).not.toContain('Command failed');
+  });
+
+  it('identifies SMTP verification failures separately', async () => {
+    state.verify.mockRejectedValueOnce(Object.assign(new Error('Invalid login'), { code: 'EAUTH', response: '535 Authentication failed' }));
+    await expect(testAccount(account())).rejects.toThrow('SMTP 验证失败 (EAUTH)：535 Authentication failed');
+  });
 });
 
 describe('message synchronization', () => {
+  it('writes read and star changes back to the source IMAP mailbox by UID', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'cached-42', accountId: configured.id, mailbox: 'INBOX', uid: 42, from: { name: '', address: '' }, to: [], subject: 'Cached', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [] }];
+    await expect(updateRemoteMessageFlags('cached-42', { unread: false, flagged: true })).resolves.toBeUndefined();
+    expect(state.mailboxOpen).toHaveBeenCalledWith('INBOX', { readOnly: false });
+    expect(state.messageFlagsAdd).toHaveBeenCalledWith(42, ['\\Seen'], { uid: true });
+    expect(state.messageFlagsAdd).toHaveBeenCalledWith(42, ['\\Flagged'], { uid: true });
+    expect(state.logout).toHaveBeenCalledOnce();
+  });
+
+  it('removes source IMAP flags when a message becomes unread or unstarred', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'cached-43', accountId: configured.id, mailbox: 'INBOX', uid: 43, from: { name: '', address: '' }, to: [], subject: 'Cached', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: false, flagged: true, hasAttachments: false, attachments: [] }];
+    await updateRemoteMessageFlags('cached-43', { unread: true, flagged: false });
+    expect(state.messageFlagsRemove).toHaveBeenCalledWith(43, ['\\Seen'], { uid: true });
+    expect(state.messageFlagsRemove).toHaveBeenCalledWith(43, ['\\Flagged'], { uid: true });
+  });
+
   it('maps IMAP messages, flags and attachment metadata into the cache', async () => {
     const configured = account(); state.store.accounts = [configured];
     state.mailboxOpen.mockResolvedValue({ exists: 1, uidNext: 43 });

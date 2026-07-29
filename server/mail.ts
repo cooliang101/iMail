@@ -47,6 +47,26 @@ function smtpTransport(account: MailAccount, secret: Awaited<ReturnType<typeof r
   });
 }
 
+type ProtocolError = Error & {
+  responseText?: unknown;
+  response?: unknown;
+  responseStatus?: unknown;
+  serverResponseCode?: unknown;
+  code?: unknown;
+};
+
+export function describeProtocolError(stage: 'IMAP' | 'SMTP', error: unknown): Error {
+  const value = error instanceof Error ? error as ProtocolError : undefined;
+  const responseText = typeof value?.responseText === 'string' ? value.responseText : undefined;
+  const response = typeof value?.response === 'string' ? value.response : undefined;
+  const generic = value?.message === 'Command failed' ? undefined : value?.message;
+  const detail = responseText || response || generic || '服务商拒绝了连接请求';
+  const status = [value?.serverResponseCode, value?.responseStatus, value?.code]
+    .find((item) => typeof item === 'string' || typeof item === 'number');
+  const safeDetail = String(detail).replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+  return new Error(`${stage} 验证失败${status ? ` (${String(status)})` : ''}：${safeDetail}`);
+}
+
 export async function testAccount(account: MailAccount): Promise<void> {
   const secret = await resolveAccountSecret(account);
   const client = new ImapFlow({
@@ -57,13 +77,20 @@ export async function testAccount(account: MailAccount): Promise<void> {
     logger: false,
   });
   try {
-    await client.connect();
-    await client.mailboxOpen('INBOX', { readOnly: true });
+    try {
+      await client.connect();
+      await client.mailboxOpen('INBOX', { readOnly: true });
+    } catch (error) {
+      throw describeProtocolError('IMAP', error);
+    }
   } finally {
     await client.logout().catch(() => undefined);
   }
   const transport = smtpTransport(account, secret);
-  try { await transport.verify(); } finally { transport.close(); }
+  try {
+    try { await transport.verify(); }
+    catch (error) { throw describeProtocolError('SMTP', error); }
+  } finally { transport.close(); }
 }
 
 export async function syncAccount(accountId: string): Promise<{ synced: number }> {
@@ -163,6 +190,39 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
       if (current) { current.status = 'error'; current.lastError = message; }
     });
     throw error;
+  } finally {
+    await client.logout().catch(() => undefined);
+  }
+}
+
+export async function updateRemoteMessageFlags(messageId: string, input: { unread?: boolean; flagged?: boolean }): Promise<void> {
+  const store = await readStore();
+  const message = store.messages.find((item) => item.id === messageId);
+  if (!message) throw new Error('邮件不存在');
+  const account = store.accounts.find((item) => item.id === message.accountId);
+  if (!account) throw new Error('邮箱账户不存在');
+
+  const secret = await resolveAccountSecret(account);
+  const client = new ImapFlow({
+    host: account.settings.imapHost,
+    port: account.settings.imapPort,
+    secure: account.settings.imapSecure,
+    auth: authFor(account, secret),
+    logger: false,
+  });
+  try {
+    await client.connect();
+    await client.mailboxOpen(message.mailbox, { readOnly: false });
+    if (input.unread !== undefined) {
+      if (input.unread) await client.messageFlagsRemove(message.uid, ['\\Seen'], { uid: true });
+      else await client.messageFlagsAdd(message.uid, ['\\Seen'], { uid: true });
+    }
+    if (input.flagged !== undefined) {
+      if (input.flagged) await client.messageFlagsAdd(message.uid, ['\\Flagged'], { uid: true });
+      else await client.messageFlagsRemove(message.uid, ['\\Flagged'], { uid: true });
+    }
+  } catch (error) {
+    throw describeProtocolError('IMAP', error);
   } finally {
     await client.logout().catch(() => undefined);
   }

@@ -32,6 +32,20 @@ describe('credential encryption', () => {
     expect(await encryptSecret({ password: 'same' })).not.toBe(await encryptSecret({ password: 'same' }));
   });
 
+  it('decrypts transient OAuth state after a process-module restart using the persisted master key', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'imail-oauth-state-'));
+    directories.push(directory);
+    process.env.IMAIL_DATA_DIR = directory;
+    vi.resetModules();
+    const firstRuntime = await import('./crypto.js');
+    const encrypted = await firstRuntime.encryptPayload({ providerKey: 'google', codeVerifier: 'pkce-verifier', createdAt: 123 });
+    expect(encrypted).not.toContain('pkce-verifier');
+
+    vi.resetModules();
+    const restartedRuntime = await import('./crypto.js');
+    await expect(restartedRuntime.decryptPayload(encrypted)).resolves.toEqual({ providerKey: 'google', codeVerifier: 'pkce-verifier', createdAt: 123 });
+  });
+
   it('rejects tampered ciphertext', async () => {
     const { encryptSecret, decryptSecret } = await isolatedCrypto();
     const encrypted = await encryptSecret({ password: 'secret' });

@@ -7,8 +7,10 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - 统一收件箱、账户切换、工作空间分组、搜索、星标与邮件阅读
 - Outlook、Gmail、QQ、Yahoo、Hotmail、iCloud 的内置 IMAP/SMTP 配置
 - Gmail、Outlook、Hotmail 的 OAuth 2.0 授权码 + PKCE 登录和自动 Token 刷新
+- OAuth PKCE 会话使用本地主密钥加密，授权窗口期间 API 热更新或重启不会丢失 state
 - Yahoo OAuth 2.0 流程（需要 Yahoo 审核开放 `mail-r` / `mail-w`）
 - QQ 与 iCloud 的交互式应用专用密码 / 授权码引导
+- 设置页可直接复用现有授权重试连接，或验证并更新授权码 / 应用专用密码
 - 通用 IMAP/SMTP 接入
 - 邮箱凭据本地 AES-256-GCM 加密
 - SQLite 本地数据库、外键约束、事务写入与旧 JSON 自动迁移
@@ -39,15 +41,16 @@ npm start
 
 ## 添加邮箱
 
-点击左侧账户栏的 `+` 并选择服务商。Gmail、Outlook、Hotmail 和审核通过的 Yahoo 应用会打开服务商官方登录窗口；iMail 使用 OAuth 2.0 Authorization Code + PKCE 获取授权并加密保存 Refresh Token。QQ、iCloud 和通用 IMAP 使用应用专用密码或授权码。所有方式都会先测试 IMAP 与 SMTP 连接，全部成功后才保存账户。
+点击左侧账户栏的 `+` 并选择服务商。Gmail、Outlook、Hotmail 和审核通过的 Yahoo 应用会打开服务商官方登录窗口；iMail 使用 OAuth 2.0 Authorization Code + PKCE 获取授权并加密保存 Refresh Token。OAuth 授权会先安全保存，再验证 IMAP 与 SMTP；即使邮件协议暂时不可用，已取得的 Refresh Token 也不会丢失。进入“邮箱设置”点击“重试连接”会直接复用已保存授权，只有 Token 被服务商撤销或失效时才需要“重新授权”。QQ、iCloud、未获审核的 Yahoo 和通用 IMAP 使用应用专用密码或授权码，并在保存前完成连接验证。
 
 不同服务商的准备工作：
 
 - Gmail：使用 Google OAuth；`https://mail.google.com/` 是受限 scope，应用对外发布前必须完成 Google OAuth 验证。
-- Outlook / Hotmail：使用 Microsoft OAuth；Microsoft 365 组织仍需在租户与邮箱级别允许 IMAP 和 SMTP AUTH。
-- QQ 邮箱：在邮箱设置中开启 IMAP/SMTP，并使用生成的授权码。
+- Outlook / Microsoft 365：使用 Microsoft OAuth 的多租户入口；组织仍需在租户与邮箱级别允许 IMAP 和 SMTP AUTH。
+- Hotmail / Outlook.com：使用 Microsoft OAuth 的 `consumers` 个人账户入口，避免个人账户被错误路由到组织租户。
+- QQ 邮箱：QQ 没有公开第三方邮件 OAuth；在邮箱设置中开启 IMAP/SMTP，并使用生成的授权码。添加页内置完整的三步引导。
 - Yahoo：OAuth 邮件权限需要先向 Yahoo Developer Access 申请，未审核时可使用第三方应用密码。
-- iCloud：Apple 尚未公开通用跨平台 iCloud Mail OAuth scope 与接入协议，当前使用 Apple 应用专用密码。
+- iCloud：Apple 已为“受支持应用”提供账户授权，但公开开发文档尚未提供普通跨平台邮件客户端可申请的 iCloud Mail scope；iMail 当前使用 Apple 官方应用专用密码流程，并内置三步引导。
 - 自定义邮箱：准备 IMAP/SMTP 主机、端口、TLS 设置和授权凭据。
 
 ### OAuth 应用配置
@@ -104,6 +107,16 @@ curl "http://127.0.0.1:8787/api/dev/v1/messages?limit=10" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
+指定邮箱可使用账户级路由，或在聚合路由上传入 `accountId`、`accountEmail`、`account`（UUID 或邮箱地址）或 `provider`：
+
+```bash
+curl "http://127.0.0.1:8787/api/dev/v1/accounts/账户UUID/messages?limit=10" \
+  -H "Authorization: Bearer imail_your_token"
+
+curl "http://127.0.0.1:8787/api/dev/v1/messages?accountEmail=user@example.com" \
+  -H "Authorization: Bearer imail_your_token"
+```
+
 读取可用账户：
 
 ```bash
@@ -118,7 +131,7 @@ curl -X POST "http://127.0.0.1:8787/api/dev/v1/send" \
   -H "Authorization: Bearer imail_your_token" \
   -H "Content-Type: application/json" \
   -d '{
-    "accountId": "账户 UUID",
+    "accountEmail": "sender@example.com",
     "to": ["recipient@example.com"],
     "subject": "iMail test",
     "text": "Hello from a local app"

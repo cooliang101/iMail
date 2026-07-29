@@ -5,10 +5,10 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { encryptSecret } from './crypto.js';
-import { sendMessage, syncAccount, testAccount } from './mail.js';
-import { beginOAuth, beginOAuthReconnect, completeOAuth, oauthCallbackHtml, oauthProviderCatalog, type OAuthProviderKey } from './oauth.js';
+import { sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
+import { beginOAuth, beginOAuthReconnect, completeOAuth, oauthCallbackHtml, oauthProviderCatalog, validateStoredAccountConnection, type OAuthProviderKey } from './oauth.js';
 import { settingsFor } from './providers.js';
-import { getCachedMessage, listCachedMessages, readStore, updateStore } from './store.js';
+import { getCachedMessage, getMessageStats, listCachedMessages, readStore, updateStore } from './store.js';
 import { authenticateToken, issueToken } from './tokens.js';
 import type { MailAccount, MailSettings, ProviderId, TokenScope } from './types.js';
 
@@ -45,13 +45,13 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'imail' }));
 
 app.get('/api/providers', (_req, res) => res.json({
   providers: [
-    { id: 'outlook', name: 'Outlook', hint: 'Microsoft 365 / 工作邮箱', authMode: 'oauth2', oauthProvider: 'microsoft' },
-    { id: 'gmail', name: 'Gmail', hint: '使用 Google 安全登录', authMode: 'oauth2', oauthProvider: 'google' },
-    { id: 'qq', name: 'QQ 邮箱', hint: 'QQ 未公开邮件 OAuth，请使用授权码', authMode: 'app-password', helpUrl: 'https://service.mail.qq.com/' },
-    { id: 'yahoo', name: 'Yahoo', hint: 'OAuth 需要 Yahoo Mail 接入审核', authMode: 'oauth2', oauthProvider: 'yahoo' },
-    { id: 'hotmail', name: 'Hotmail', hint: '使用 Microsoft 安全登录', authMode: 'oauth2', oauthProvider: 'microsoft' },
-    { id: 'icloud', name: 'iCloud', hint: '公开跨平台接入使用应用专用密码', authMode: 'app-password', helpUrl: 'https://account.apple.com/account/manage' },
-    { id: 'custom', name: '其他邮箱', hint: '自定义 IMAP / SMTP' },
+    { id: 'outlook', name: 'Outlook / Microsoft 365', hint: '使用 Microsoft 安全登录', authMode: 'oauth2', oauthProvider: 'microsoft', fallbackAuthMode: null },
+    { id: 'gmail', name: 'Gmail', hint: '使用 Google 安全登录', authMode: 'oauth2', oauthProvider: 'google', fallbackAuthMode: 'app-password' },
+    { id: 'qq', name: 'QQ 邮箱', hint: 'QQ 未公开邮件 OAuth，请使用授权码', authMode: 'authorization-code', oauthProvider: null, helpUrl: 'https://help.mail.qq.com/detail/106/985' },
+    { id: 'yahoo', name: 'Yahoo', hint: 'OAuth 需要 Yahoo Mail 接入审核；未审核可使用第三方应用密码', authMode: 'oauth2', oauthProvider: 'yahoo', fallbackAuthMode: 'app-password', helpUrl: 'https://login.yahoo.com/account/security' },
+    { id: 'hotmail', name: 'Hotmail / Outlook.com', hint: '使用 Microsoft 个人账户安全登录', authMode: 'oauth2', oauthProvider: 'microsoft', oauthTenant: 'consumers', fallbackAuthMode: null },
+    { id: 'icloud', name: 'iCloud', hint: '普通跨平台客户端使用 Apple 应用专用密码', authMode: 'app-password', oauthProvider: null, helpUrl: 'https://account.apple.com/account/manage' },
+    { id: 'custom', name: '其他邮箱', hint: '自定义 IMAP / SMTP', authMode: 'custom' },
   ],
   oauth: oauthProviderCatalog(),
 }));
@@ -63,7 +63,7 @@ const oauthStartSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#168f78'),
 });
 app.post('/api/oauth/start', asyncRoute(async (req, res) => {
-  res.json(beginOAuth(oauthStartSchema.parse(req.body)));
+  res.json(await beginOAuth(oauthStartSchema.parse(req.body)));
 }));
 
 for (const providerKey of ['google', 'microsoft', 'yahoo'] as const) {
@@ -76,9 +76,18 @@ for (const providerKey of ['google', 'microsoft', 'yahoo'] as const) {
         error: typeof req.query.error === 'string' ? req.query.error : undefined,
         errorDescription: typeof req.query.error_description === 'string' ? req.query.error_description : undefined,
       });
-      res.type('html').send(oauthCallbackHtml({ success: true, accountId: account.id, message: `${account.email} 已通过 OAuth 安全连接。` }));
+      const warning = account.status === 'error' ? account.lastError : undefined;
+      res.type('html').send(oauthCallbackHtml({
+        success: true,
+        accountId: account.id,
+        warning,
+        message: warning ? `${account.email} 的 OAuth 授权已安全保存。邮件连接暂时失败，iMail 将保留授权供后续重试。` : `${account.email} 已通过 OAuth 安全连接。`,
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'OAuth 登录失败';
+      const correlationId = typeof req.query.correlation_id === 'string' ? req.query.correlation_id : undefined;
+      const traceId = typeof req.query.trace_id === 'string' ? req.query.trace_id : undefined;
+      console.error(`[OAuth ${providerKey}] ${message}`, { correlationId, traceId, error });
       res.status(400).type('html').send(oauthCallbackHtml({ success: false, message }));
     }
   }));
@@ -93,7 +102,38 @@ app.post('/api/accounts/:id/oauth/reconnect', asyncRoute(async (req, res) => {
   const data = await readStore();
   const account = data.accounts.find((item) => item.id === req.params.id);
   if (!account) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
-  res.json(beginOAuthReconnect(account));
+  res.json(await beginOAuthReconnect(account));
+}));
+
+app.post('/api/accounts/:id/connection-test', asyncRoute(async (req, res) => {
+  const data = await readStore();
+  const account = data.accounts.find((item) => item.id === req.params.id);
+  if (!account) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
+  const checked = await validateStoredAccountConnection(account);
+  res.json({ account: publicAccount(checked) });
+}));
+
+app.put('/api/accounts/:id/credential', asyncRoute(async (req, res) => {
+  const input = z.object({ password: z.string().min(1, '请填写新的授权码或应用专用密码').max(512) }).parse(req.body);
+  const data = await readStore();
+  const account = data.accounts.find((item) => item.id === req.params.id);
+  if (!account) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
+  if (account.authMethod === 'oauth2') { res.status(409).json({ error: 'OAuth 邮箱请使用重新授权' }); return; }
+  const candidate: MailAccount = {
+    ...account,
+    encryptedSecret: await encryptSecret({ authType: 'app-password', password: input.password }),
+    authMethod: 'app-password',
+    status: 'syncing',
+    lastError: undefined,
+  };
+  await testAccount(candidate);
+  const connected: MailAccount = { ...candidate, status: 'connected' };
+  await updateStore((store) => {
+    const index = store.accounts.findIndex((item) => item.id === account.id);
+    if (index < 0) throw new Error('邮箱账户已被移除');
+    store.accounts[index] = connected;
+  });
+  res.json({ account: publicAccount(connected) });
 }));
 
 app.post('/api/accounts', asyncRoute(async (req, res) => {
@@ -152,6 +192,10 @@ app.get('/api/messages', asyncRoute(async (req, res) => {
   res.json({ messages, total: result.total, nextOffset: input.offset + messages.length, hasMore: input.offset + messages.length < result.total });
 }));
 
+app.get('/api/message-stats', asyncRoute(async (_req, res) => {
+  res.json(await getMessageStats());
+}));
+
 app.get('/api/messages/:id', asyncRoute(async (req, res) => {
   const message = await getCachedMessage(String(req.params.id));
   if (!message) { res.status(404).json({ error: '邮件不存在' }); return; }
@@ -160,6 +204,7 @@ app.get('/api/messages/:id', asyncRoute(async (req, res) => {
 
 app.patch('/api/messages/:id', asyncRoute(async (req, res) => {
   const input = z.object({ unread: z.boolean().optional(), flagged: z.boolean().optional() }).parse(req.body);
+  await updateRemoteMessageFlags(String(req.params.id), input);
   let updated;
   await updateStore((data) => {
     updated = data.messages.find((item) => item.id === req.params.id);
@@ -209,20 +254,48 @@ app.get('/api/dev/v1/accounts', requireDevToken('accounts:read'), asyncRoute(asy
   const data = await readStore();
   res.json({ accounts: data.accounts.filter((account) => token.accountIds.includes(account.id)).map(publicAccount) });
 }));
-app.get('/api/dev/v1/messages', requireDevToken('messages:read'), asyncRoute(async (req, res) => {
+function devAccountSelector(req: Request) {
+  return {
+    account: typeof req.params.account === 'string' ? req.params.account : typeof req.query.account === 'string' ? req.query.account : undefined,
+    accountId: typeof req.query.accountId === 'string' ? req.query.accountId : undefined,
+    accountEmail: typeof req.query.accountEmail === 'string' ? req.query.accountEmail.toLowerCase() : undefined,
+    provider: typeof req.query.provider === 'string' ? req.query.provider : undefined,
+  };
+}
+
+async function devMessages(req: Request, res: Response) {
   const token = res.locals.devToken;
   const data = await readStore();
-  const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined;
-  if (accountId && !token.accountIds.includes(accountId)) { res.status(403).json({ error: 'Token 无权访问这个邮箱' }); return; }
-  const limit = Math.min(Number(req.query.limit) || 50, 100);
-  const messages = data.messages.filter((message) => token.accountIds.includes(message.accountId) && (!accountId || message.accountId === accountId)).slice(0, limit);
-  res.json({ messages, total: messages.length });
-}));
+  const selector = devAccountSelector(req);
+  const matchingAccounts = data.accounts.filter((account) =>
+    (!selector.account || account.id === selector.account || account.email.toLowerCase() === selector.account.toLowerCase()) &&
+    (!selector.accountId || account.id === selector.accountId) &&
+    (!selector.accountEmail || account.email.toLowerCase() === selector.accountEmail) &&
+    (!selector.provider || account.provider === selector.provider));
+  const hasSelector = Boolean(selector.account || selector.accountId || selector.accountEmail || selector.provider);
+  if (hasSelector && matchingAccounts.length === 0) { res.status(404).json({ error: '指定的邮箱不存在' }); return; }
+  const requestedAccounts = matchingAccounts.filter((account) => token.accountIds.includes(account.id));
+  if (hasSelector && requestedAccounts.length === 0) { res.status(403).json({ error: 'Token 无权访问这个邮箱' }); return; }
+  const permittedIds = new Set(hasSelector ? requestedAccounts.map((account) => account.id) : token.accountIds);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  const filtered = data.messages.filter((message) => permittedIds.has(message.accountId));
+  res.json({ messages: filtered.slice(offset, offset + limit), total: filtered.length, nextOffset: Math.min(offset + limit, filtered.length) });
+}
+
+app.get('/api/dev/v1/messages', requireDevToken('messages:read'), asyncRoute(devMessages));
+app.get('/api/dev/v1/accounts/:account/messages', requireDevToken('messages:read'), asyncRoute(devMessages));
 app.post('/api/dev/v1/send', requireDevToken('messages:send'), asyncRoute(async (req, res) => {
   const token = res.locals.devToken;
-  const input = sendSchema.parse(req.body);
-  if (!token.accountIds.includes(input.accountId)) { res.status(403).json({ error: 'Token 无权使用这个发件箱' }); return; }
-  res.status(201).json(await sendMessage(input));
+  const input = sendSchema.omit({ accountId: true }).extend({
+    accountId: z.string().uuid().optional(), accountEmail: z.string().email().optional(),
+  }).refine((value) => Boolean(value.accountId || value.accountEmail), '请提供 accountId 或 accountEmail').parse(req.body);
+  const data = await readStore();
+  const account = data.accounts.find((item) => (!input.accountId || item.id === input.accountId) && (!input.accountEmail || item.email.toLowerCase() === input.accountEmail.toLowerCase()));
+  if (!account) { res.status(404).json({ error: '指定的发件邮箱不存在' }); return; }
+  if (!token.accountIds.includes(account.id)) { res.status(403).json({ error: 'Token 无权使用这个发件箱' }); return; }
+  const { accountEmail: _accountEmail, ...message } = input;
+  res.status(201).json(await sendMessage({ ...message, accountId: account.id }));
 }));
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

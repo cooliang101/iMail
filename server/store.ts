@@ -19,6 +19,13 @@ export type MessageQuery = {
   offset: number;
 };
 
+export type MessageStats = {
+  total: number;
+  unread: number;
+  byAccount: Array<{ accountId: string; total: number; unread: number }>;
+  byGroup: Array<{ group: string; total: number; unread: number }>;
+};
+
 function text(row: Row, key: string) { return String(row[key] ?? ''); }
 function optionalText(row: Row, key: string) { return row[key] === null || row[key] === undefined ? undefined : String(row[key]); }
 function json<T>(row: Row, key: string): T { return JSON.parse(text(row, key)) as T; }
@@ -189,6 +196,20 @@ export class SQLiteStore {
     return row ? messageFromRow(row) : undefined;
   }
 
+  async messageStats(): Promise<MessageStats> {
+    await this.queue;
+    const overall = this.db.prepare('SELECT count(*) AS total, coalesce(sum(unread), 0) AS unread FROM messages').get() as Row;
+    const byAccount = this.all(this.db.prepare(`SELECT account_id, count(*) AS total, coalesce(sum(unread), 0) AS unread
+      FROM messages GROUP BY account_id ORDER BY account_id`)).map((row) => ({
+      accountId: text(row, 'account_id'), total: integer(row, 'total'), unread: integer(row, 'unread'),
+    }));
+    const byGroup = this.all(this.db.prepare(`SELECT a.group_name, count(*) AS total, coalesce(sum(m.unread), 0) AS unread
+      FROM messages m JOIN accounts a ON a.id = m.account_id GROUP BY a.group_name ORDER BY a.group_name`)).map((row) => ({
+      group: text(row, 'group_name'), total: integer(row, 'total'), unread: integer(row, 'unread'),
+    }));
+    return { total: integer(overall, 'total'), unread: integer(overall, 'unread'), byAccount, byGroup };
+  }
+
   async update(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> {
     let output = structuredClone(initial);
     const operation = this.queue.catch(() => undefined).then(async () => {
@@ -247,4 +268,5 @@ export function readStore(): Promise<StoreData> { return configuredStore().read(
 export function updateStore(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> { return configuredStore().update(mutator); }
 export function listCachedMessages(input: MessageQuery) { return configuredStore().listMessages(input); }
 export function getCachedMessage(id: string) { return configuredStore().getMessage(id); }
+export function getMessageStats() { return configuredStore().messageStats(); }
 export function closeStore() { defaultStore?.close(); defaultStore = undefined; }

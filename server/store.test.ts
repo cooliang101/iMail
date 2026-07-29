@@ -87,6 +87,18 @@ describe('SQLiteStore', () => {
     expect((await store.listMessages({ group: '工作', query: 'invoice', hasAttachments: true, limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['m2']);
     expect((await store.listMessages({ accountId: account().id, unread: true, limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['m4']);
     expect((await store.listMessages({ flagged: true, limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['m3']);
+    expect(await store.messageStats()).toEqual({
+      total: 4,
+      unread: 3,
+      byAccount: [
+        { accountId: account().id, total: 2, unread: 1 },
+        { accountId: second.id, total: 2, unread: 2 },
+      ],
+      byGroup: [
+        { group: '个人', total: 2, unread: 1 },
+        { group: '工作', total: 2, unread: 2 },
+      ],
+    });
   });
 
   it('serializes concurrent updates without losing writes', async () => {

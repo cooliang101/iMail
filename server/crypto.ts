@@ -23,19 +23,27 @@ async function loadKey(): Promise<Buffer> {
   return key;
 }
 
-export async function encryptSecret(secret: AccountSecret): Promise<string> {
+export async function encryptPayload(value: unknown): Promise<string> {
   const key = await loadKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const encrypted = Buffer.concat([cipher.update(JSON.stringify(secret), 'utf8'), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
   return [iv, cipher.getAuthTag(), encrypted].map((value) => value.toString('base64url')).join('.');
 }
 
-export async function decryptSecret(payload: string): Promise<AccountSecret> {
+export async function decryptPayload<T>(payload: string): Promise<T> {
   const key = await loadKey();
   const [iv, tag, encrypted] = payload.split('.').map((value) => Buffer.from(value, 'base64url'));
   if (!iv || !tag || !encrypted) throw new Error('账户凭据已损坏');
   const decipher = createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(tag);
-  return JSON.parse(Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8')) as AccountSecret;
+  return JSON.parse(Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8')) as T;
+}
+
+export async function encryptSecret(secret: AccountSecret): Promise<string> {
+  return encryptPayload(secret);
+}
+
+export async function decryptSecret(payload: string): Promise<AccountSecret> {
+  return decryptPayload<AccountSecret>(payload);
 }

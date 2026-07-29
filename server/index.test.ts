@@ -5,6 +5,11 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MailAccount } from './types.js';
 
+vi.mock('./mail.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./mail.js')>();
+  return { ...actual, updateRemoteMessageFlags: vi.fn(async () => undefined) };
+});
+
 let directory: string;
 let server: Server;
 let baseUrl: string;
@@ -56,6 +61,8 @@ describe('iMail HTTP API', () => {
     const providers = await request('/api/providers');
     expect(providers.body.providers.map((item: { id: string }) => item.id)).toEqual(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
     expect(providers.body.oauth).toHaveLength(3);
+    expect(providers.body.providers.find((item: { id: string }) => item.id === 'qq')).toMatchObject({ authMode: 'authorization-code', oauthProvider: null });
+    expect(providers.body.providers.find((item: { id: string }) => item.id === 'hotmail')).toMatchObject({ authMode: 'oauth2', oauthTenant: 'consumers', fallbackAuthMode: null });
   });
 
   it('never exposes encrypted mailbox credentials', async () => {
@@ -86,6 +93,25 @@ describe('iMail HTTP API', () => {
     expect(invalid.response.status).toBe(400);
     const missing = await request('/api/accounts/missing/oauth/reconnect', { method: 'POST' });
     expect(missing.response.status).toBe(404); expect(missing.body.error).toBe('邮箱账户不存在');
+    const missingTest = await request('/api/accounts/missing/connection-test', { method: 'POST' });
+    expect(missingTest.response.status).toBe(404); expect(missingTest.body.error).toBe('邮箱账户不存在');
+  });
+
+  it('retries a connection with saved authorization without exposing or replacing credentials', async () => {
+    const checked = await request(`/api/accounts/${account.id}/connection-test`, { method: 'POST' });
+    expect(checked.response.status).toBe(200);
+    expect(checked.body.account).toMatchObject({ id: account.id, authMethod: 'oauth2', status: 'error' });
+    expect(checked.body.account).not.toHaveProperty('encryptedSecret');
+    const stored = await request('/api/accounts');
+    expect(stored.body.accounts[0].status).toBe('error');
+  });
+
+  it('does not allow replacing an OAuth token through the app-password credential endpoint', async () => {
+    const result = await request(`/api/accounts/${account.id}/credential`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'must-not-replace-oauth' }),
+    });
+    expect(result.response.status).toBe(409);
+    expect(result.body.error).toBe('OAuth 邮箱请使用重新授权');
   });
 
   it('returns paged summaries and loads a single message body on demand', async () => {
@@ -99,6 +125,33 @@ describe('iMail HTTP API', () => {
     const detail = await request('/api/messages/message-lazy');
     expect(detail.body.message).toMatchObject({ text: 'Full body', html: '<p>Full body</p>' });
     expect((await request('/api/messages/missing')).response.status).toBe(404);
+    expect((await request('/api/message-stats')).body).toMatchObject({ total: 1, unread: 1, byAccount: [{ accountId: account.id, total: 1, unread: 1 }] });
+    const markedRead = await request('/api/messages/message-lazy', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread: false }),
+    });
+    expect(markedRead.response.status).toBe(200);
+    expect(markedRead.body.message).toMatchObject({ id: 'message-lazy', unread: false });
+    expect((await request('/api/message-stats')).body).toMatchObject({ total: 1, unread: 0, byAccount: [{ accountId: account.id, total: 1, unread: 0 }] });
+    expect((await request('/api/messages?unread=true&limit=10&offset=0')).body).toMatchObject({ total: 0, messages: [] });
+  });
+
+  it('lets a developer token select a mailbox by route, email or provider', async () => {
+    await updateStore((data) => { data.messages = [{
+      id: 'message-dev', accountId: account.id, mailbox: 'INBOX', uid: 9, from: { name: 'Sender', address: 'sender@example.com' }, to: [],
+      subject: 'Gateway message', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [],
+    }]; });
+    const created = await request('/api/developer-tokens', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Gateway', scopes: ['messages:read'], accountIds: [account.id], ttlSeconds: 3600 }),
+    });
+    const headers = { Authorization: `Bearer ${created.body.token}` };
+    const byRoute = await request(`/api/dev/v1/accounts/${account.id}/messages?limit=10`, { headers });
+    const byEmail = await request(`/api/dev/v1/messages?accountEmail=${encodeURIComponent(account.email)}`, { headers });
+    const byProvider = await request('/api/dev/v1/messages?provider=gmail', { headers });
+    expect(byRoute.body).toMatchObject({ total: 1, nextOffset: 1 });
+    expect(byEmail.body.messages[0].id).toBe('message-dev');
+    expect(byProvider.body.messages[0].accountId).toBe(account.id);
+    expect((await request('/api/dev/v1/messages?accountEmail=missing@example.com', { headers })).response.status).toBe(404);
   });
 
   it('deletes account-owned cache and removes it from token grants', async () => {

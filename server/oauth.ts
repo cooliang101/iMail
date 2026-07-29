@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
-import { decryptSecret, encryptSecret } from './crypto.js';
+import { decryptPayload, decryptSecret, encryptPayload, encryptSecret } from './crypto.js';
 import { settingsFor } from './providers.js';
 import { readStore, updateStore } from './store.js';
 import type { AccountSecret, MailAccount, ProviderId } from './types.js';
@@ -22,7 +22,6 @@ type OAuthConfig = {
 };
 
 type PendingOAuth = {
-  state: string;
   providerKey: OAuthProviderKey;
   accountProvider: ProviderId;
   codeVerifier: string;
@@ -46,11 +45,11 @@ type OAuthTokenResponse = {
   error_description?: string;
 };
 
-const pending = new Map<string, PendingOAuth>();
+const completed = new Map<string, { accountId: string; completedAt: number }>();
 const refreshes = new Map<string, Promise<AccountSecret>>();
 const callbackBase = process.env.OAUTH_CALLBACK_BASE_URL ?? `http://localhost:${process.env.PORT ?? 8787}/api/oauth`;
 
-function providerConfig(key: OAuthProviderKey): OAuthConfig {
+function providerConfig(key: OAuthProviderKey, accountProvider?: ProviderId): OAuthConfig {
   if (key === 'google') {
     const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -67,11 +66,12 @@ function providerConfig(key: OAuthProviderKey): OAuthConfig {
   }
   if (key === 'microsoft') {
     const clientId = process.env.MICROSOFT_OAUTH_CLIENT_ID;
+    const tenant = accountProvider === 'hotmail' ? 'consumers' : 'common';
     return {
       key, clientId, clientSecret: process.env.MICROSOFT_OAUTH_CLIENT_SECRET,
       redirectUri: process.env.MICROSOFT_OAUTH_REDIRECT_URI ?? `${callbackBase}/microsoft/callback`,
-      authorizationEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-      tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+      authorizationEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`,
+      tokenEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
       jwksUri: 'https://login.microsoftonline.com/common/discovery/v2.0/keys',
       scopes: ['openid', 'email', 'profile', 'offline_access', 'https://outlook.office.com/IMAP.AccessAsUser.All', 'https://outlook.office.com/SMTP.Send'],
       configured: Boolean(clientId),
@@ -113,31 +113,40 @@ export function oauthProviderCatalog() {
   });
 }
 
+export function describeOAuthCallbackError(error: string, description?: string) {
+  const detail = description?.trim();
+  if (detail) return detail;
+  if (error === 'access_denied') return '你已取消或拒绝授权，邮箱没有发生更改';
+  if (error === 'server_error' || error === 'temporarily_unavailable') return '服务商暂时未能完成授权。iMail 会先检查授权是否已经保存；若账户仍未出现，请稍后重试';
+  if (error === 'invalid_request' || error === 'unauthorized_client') return 'OAuth 应用或回调地址配置不正确，请检查服务商开发者控制台';
+  return `授权未完成：${error}`;
+}
+
 function base64Url(bytes: Buffer) {
   return bytes.toString('base64url');
 }
 
-function cleanupPending() {
+function cleanupCompleted() {
   const cutoff = Date.now() - 10 * 60_000;
-  for (const [state, value] of pending) if (value.createdAt < cutoff) pending.delete(state);
+  for (const [state, value] of completed) if (value.completedAt < cutoff) completed.delete(state);
 }
 
-export function beginOAuth(input: { provider: ProviderId; displayName?: string; group?: string; color?: string; accountId?: string; expectedEmail?: string }) {
-  cleanupPending();
+export async function beginOAuth(input: { provider: ProviderId; displayName?: string; group?: string; color?: string; accountId?: string; expectedEmail?: string }) {
+  cleanupCompleted();
   const providerKey = oauthKeyFor(input.provider);
   if (!providerKey) throw new Error(`${input.provider} 没有公开可用的邮件 OAuth 接口，请使用应用专用密码或授权码`);
-  const config = providerConfig(providerKey);
+  const config = providerConfig(providerKey, input.provider);
   if (!config.configured) throw new Error(config.configurationHint);
-  const state = base64Url(crypto.randomBytes(32));
   const nonce = base64Url(crypto.randomBytes(24));
   const codeVerifier = base64Url(crypto.randomBytes(48));
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
-  pending.set(state, {
-    state, providerKey, accountProvider: input.provider, codeVerifier, nonce,
+  const session: PendingOAuth = {
+    providerKey, accountProvider: input.provider, codeVerifier, nonce,
     createdAt: Date.now(), displayName: input.displayName,
     group: input.group?.trim() || '个人', color: input.color || '#168f78',
     accountId: input.accountId, expectedEmail: input.expectedEmail?.toLowerCase(),
-  });
+  };
+  const state = await encryptPayload(session);
   const url = new URL(config.authorizationEndpoint);
   url.searchParams.set('client_id', config.clientId!);
   url.searchParams.set('redirect_uri', config.redirectUri);
@@ -157,7 +166,7 @@ export function beginOAuth(input: { provider: ProviderId; displayName?: string; 
   return { authorizationUrl: url.toString(), state, provider: providerKey };
 }
 
-export function beginOAuthReconnect(account: MailAccount) {
+export async function beginOAuthReconnect(account: MailAccount) {
   if (account.authMethod !== 'oauth2') throw new Error('这个邮箱不是通过 OAuth 接入的');
   return beginOAuth({
     provider: account.provider,
@@ -212,12 +221,24 @@ function tokenToSecret(config: OAuthConfig, token: OAuthTokenResponse, previousR
 }
 
 export async function completeOAuth(input: { providerKey: OAuthProviderKey; state?: string; code?: string; error?: string; errorDescription?: string }) {
-  if (input.error) throw new Error(input.errorDescription || `授权被拒绝：${input.error}`);
+  cleanupCompleted();
+  const remembered = input.state ? completed.get(input.state) : undefined;
+  if (remembered) {
+    const existing = await readStore();
+    const account = existing.accounts.find((item) => item.id === remembered.accountId);
+    if (account) return account;
+    completed.delete(input.state!);
+  }
+  if (input.error) throw new Error(describeOAuthCallbackError(input.error, input.errorDescription));
   if (!input.state || !input.code) throw new Error('OAuth 回调缺少 code 或 state');
-  const session = pending.get(input.state);
-  pending.delete(input.state);
-  if (!session || session.providerKey !== input.providerKey || Date.now() - session.createdAt > 10 * 60_000) throw new Error('OAuth state 无效或已过期，请重新开始');
-  const config = providerConfig(input.providerKey);
+  let session: PendingOAuth;
+  try {
+    session = await decryptPayload<PendingOAuth>(input.state);
+  } catch {
+    throw new Error('OAuth state 无效或已过期，请重新开始');
+  }
+  if (session.providerKey !== input.providerKey || Date.now() - session.createdAt > 10 * 60_000) throw new Error('OAuth state 无效或已过期，请重新开始');
+  const config = providerConfig(input.providerKey, session.accountProvider);
   const token = await tokenRequest(config, new URLSearchParams({
     grant_type: 'authorization_code', code: input.code,
     redirect_uri: config.redirectUri, code_verifier: session.codeVerifier,
@@ -236,17 +257,17 @@ export async function completeOAuth(input: { providerKey: OAuthProviderKey; stat
       ...current,
       encryptedSecret: await encryptSecret(secret),
       authMethod: 'oauth2',
-      status: 'connected',
+      status: 'syncing',
       lastError: undefined,
     };
-    const { testAccount } = await import('./mail.js');
-    await testAccount(reconnected);
     await updateStore((data) => {
       const index = data.accounts.findIndex((account) => account.id === reconnected.id);
       if (index < 0) throw new Error('需要重新授权的邮箱已不存在');
       data.accounts[index] = reconnected;
     });
-    return reconnected;
+    const validated = await validateStoredAccountConnection(reconnected);
+    completed.set(input.state, { accountId: validated.id, completedAt: Date.now() });
+    return validated;
   }
   if (existing.accounts.some((account) => account.email === identity.email)) throw new Error('这个邮箱已经添加');
   const account: MailAccount = {
@@ -256,20 +277,41 @@ export async function completeOAuth(input: { providerKey: OAuthProviderKey; stat
     group: session.group, color: session.color,
     settings: settingsFor(session.accountProvider),
     encryptedSecret: await encryptSecret(secret), authMethod: 'oauth2',
-    createdAt: new Date().toISOString(), status: 'connected',
+    createdAt: new Date().toISOString(), status: 'syncing',
   };
-  const { testAccount } = await import('./mail.js');
-  await testAccount(account);
   await updateStore((data) => {
     if (data.accounts.some((item) => item.email === account.email)) throw new Error('这个邮箱刚刚被其他操作添加');
     data.accounts.push(account);
   });
-  return account;
+  const validated = await validateStoredAccountConnection(account);
+  completed.set(input.state, { accountId: validated.id, completedAt: Date.now() });
+  return validated;
+}
+
+export async function validateStoredAccountConnection(account: MailAccount): Promise<MailAccount> {
+  try {
+    const { testAccount } = await import('./mail.js');
+    await testAccount(account);
+    const connected: MailAccount = { ...account, status: 'connected', lastError: undefined };
+    await updateStore((data) => {
+      const current = data.accounts.find((item) => item.id === account.id);
+      if (current) { current.status = 'connected'; current.lastError = undefined; }
+    });
+    return connected;
+  } catch (error) {
+    const lastError = error instanceof Error ? error.message : '邮箱连接验证失败';
+    const failed: MailAccount = { ...account, status: 'error', lastError };
+    await updateStore((data) => {
+      const current = data.accounts.find((item) => item.id === account.id);
+      if (current) { current.status = 'error'; current.lastError = lastError; }
+    });
+    return failed;
+  }
 }
 
 async function refreshAccountSecret(account: MailAccount, secret: AccountSecret): Promise<AccountSecret> {
   if (!secret.oauthProvider || !secret.refreshToken) throw new Error('OAuth 授权已过期且没有刷新 Token，请重新连接邮箱');
-  const config = providerConfig(secret.oauthProvider);
+  const config = providerConfig(secret.oauthProvider, account.provider);
   if (!config.configured) throw new Error(`OAuth Token 已过期。${config.configurationHint}`);
   const token = await tokenRequest(config, new URLSearchParams({ grant_type: 'refresh_token', refresh_token: secret.refreshToken }));
   const refreshed = tokenToSecret(config, token, secret.refreshToken);
@@ -290,8 +332,8 @@ export async function resolveAccountSecret(account: MailAccount): Promise<Accoun
   return operation;
 }
 
-export function oauthCallbackHtml(payload: { success: boolean; accountId?: string; message: string }) {
+export function oauthCallbackHtml(payload: { success: boolean; accountId?: string; message: string; warning?: string }) {
   const targetOrigin = process.env.FRONTEND_URL ?? 'http://localhost:5173';
   const serialized = JSON.stringify({ source: 'imail-oauth', ...payload }).replace(/</g, '\\u003c');
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>iMail OAuth</title><style>body{font-family:system-ui;background:#edf3f1;color:#18302a;display:grid;place-items:center;min-height:100vh;margin:0}.box{background:white;padding:32px;border-radius:18px;box-shadow:0 20px 60px #163a3022;text-align:center;max-width:420px}h1{font-size:22px}p{color:#647b74;line-height:1.6}</style></head><body><div class="box"><h1>${payload.success ? '邮箱已连接' : '连接未完成'}</h1><p>${payload.message.replace(/[<>&]/g, '')}</p><p>可以关闭此窗口并返回 iMail。</p></div><script>if(window.opener){window.opener.postMessage(${serialized},${JSON.stringify(targetOrigin)});setTimeout(()=>window.close(),900)}</script></body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>iMail OAuth</title><style>body{font-family:system-ui;background:#edf3f1;color:#18302a;display:grid;place-items:center;min-height:100vh;margin:0}.box{background:white;padding:32px;border-radius:18px;box-shadow:0 20px 60px #163a3022;text-align:center;max-width:420px}h1{font-size:22px}p{color:#647b74;line-height:1.6}</style></head><body><div class="box"><h1>${payload.success ? payload.warning ? '授权已保存' : '邮箱已连接' : '连接未完成'}</h1><p>${payload.message.replace(/[<>&]/g, '')}</p><p>可以关闭此窗口并返回 iMail。</p></div><script>if(window.opener){window.opener.postMessage(${serialized},${JSON.stringify(targetOrigin)});setTimeout(()=>window.close(),900)}</script></body></html>`;
 }
