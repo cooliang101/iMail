@@ -160,7 +160,26 @@ describe('iMail HTTP API', () => {
     expect((await request('/api/message-stats')).body).toMatchObject({ total: 0, unread: 0 });
   });
 
+  it('builds a contact library from every cached sender and recipient', async () => {
+    await updateStore((data) => { data.messages = [
+      { id: 'received-1', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 12, from: { name: 'Alice', address: 'Alice@example.com' }, to: [{ name: 'Owner', address: account.email }], subject: 'Received', preview: '', text: '', date: '2026-07-29T02:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [] },
+      { id: 'sent-1', accountId: account.id, mailbox: 'Sent', mailboxRole: 'sent', uid: 13, from: { name: 'Owner', address: account.email }, to: [{ name: 'Alice Zhang', address: 'alice@example.com' }, { name: 'Bob', address: 'bob@example.com' }], subject: 'Sent', preview: '', text: '', date: '2026-07-29T03:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [] },
+    ]; });
+
+    const result = await request('/api/contacts');
+    expect(result.response.status).toBe(200);
+    expect(result.body.contacts).toEqual([
+      { address: 'alice@example.com', name: 'Alice Zhang', messageCount: 2, lastContactAt: '2026-07-29T03:00:00.000Z' },
+      { address: 'bob@example.com', name: 'Bob', messageCount: 1, lastContactAt: '2026-07-29T03:00:00.000Z' },
+    ]);
+    expect(JSON.stringify(result.body)).not.toContain(account.email);
+  });
+
   it('persists drafts and exposes labels, snooze state and notifications', async () => {
+    const partialDraft = await request('/api/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: account.id, to: ['@'], subject: '', text: '' }) });
+    expect(partialDraft.response.status).toBe(201);
+    expect(partialDraft.body.draft.to).toEqual(['@']);
+    expect((await request(`/api/drafts/${partialDraft.body.draft.id}`, { method: 'DELETE' })).response.status).toBe(204);
     const createdDraft = await request('/api/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: account.id, to: ['friend@example.com'], subject: 'Draft subject', text: 'Draft body', html: '<p><strong>Draft body</strong></p>', attachments: [{ id: 'attachment-1', filename: 'note.txt', contentType: 'text/plain', size: 5, data: 'aGVsbG8=' }] }) });
     expect(createdDraft.response.status).toBe(201);
     expect((await request('/api/drafts')).body.drafts[0]).toMatchObject({ subject: 'Draft subject', to: ['friend@example.com'], html: '<p><strong>Draft body</strong></p>', attachments: [{ filename: 'note.txt', size: 5 }] });

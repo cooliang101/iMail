@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@fluentui/react-components';
 import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
 import { api } from './api';
-import type { Account, DeveloperToken, Draft, MailboxRole, Message } from './types';
+import type { Account, Contact, DeveloperToken, Draft, MailboxRole, Message } from './types';
 import type { MailNotification, Notice } from './app-model';
 import { AccountProviderMark, ProviderIcon, providerLabel } from './components/shared';
 import { AppInput } from './components/form-controls';
 import { VirtualMessageList, MessageReader } from './features/mail';
 import { AddAccountModal, AccountSettingsModal } from './features/accounts';
-import { ComposePane, DraftWorkspace } from './features/compose';
+import { ComposePane, DraftWorkspace, type ComposePaneHandle } from './features/compose';
 import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal, type WorkspaceFolder } from './features/organize';
 import { CreateTokenModal, TokenWorkspace } from './features/developer';
 
@@ -26,6 +26,7 @@ function App() {
   const [realMessages, setRealMessages] = useState<Message[]>([]);
   const [tokens, setTokens] = useState<DeveloperToken[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [labels, setLabels] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<View>('inbox');
@@ -60,24 +61,27 @@ function App() {
   const messageQueryRef = useRef('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const folderDiscoveryStarted = useRef(false);
+  const composePaneRef = useRef<ComposePaneHandle | null>(null);
 
   const accounts = realAccounts;
   const messages = realMessages;
 
   async function load() {
     try {
-      const [accountData, tokenData, statsData, draftData, labelData] = await Promise.all([
+      const [accountData, tokenData, statsData, draftData, labelData, contactData] = await Promise.all([
         api<{ accounts: Account[] }>('/api/accounts'),
         api<{ tokens: DeveloperToken[] }>('/api/developer-tokens'),
         api<MessageStats>('/api/message-stats'),
         api<{ drafts: Draft[] }>('/api/drafts'),
         api<{ labels: string[] }>('/api/labels'),
+        api<{ contacts: Contact[] }>('/api/contacts'),
       ]);
       setRealAccounts(accountData.accounts);
       setTokens(tokenData.tokens);
       setMessageStats(statsData);
       setDrafts(draftData.drafts);
       setLabels(labelData.labels);
+      setContacts(contactData.contacts);
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '服务连接失败' });
     }
@@ -255,7 +259,8 @@ function App() {
     }));
   }
 
-  function selectMessage(id: string) {
+  async function selectMessage(id: string) {
+    if (composeMode) await composePaneRef.current?.close();
     setSelectedId(id);
     const message = realMessages.find((item) => item.id === id);
     if (!message?.unread) return;
@@ -388,7 +393,7 @@ function App() {
             <div className="message-filters"><button className={mailFilter === 'all' ? 'active' : ''} onClick={() => setMailFilter('all')}>全部</button><button className={mailFilter === 'unread' ? 'active' : ''} onClick={() => setMailFilter('unread')}>未读</button><button className={mailFilter === 'attachments' ? 'active' : ''} onClick={() => setMailFilter('attachments')}>有附件</button></div>
             <VirtualMessageList messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
           </section>}
-          {composeMode ? <ComposePane key={`${composeMode}-${activeDraft?.id ?? selected?.id ?? 'new'}`} accounts={realAccounts} mode={composeMode} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' ? <section className="composer-pane composer-welcome"><PencilSimple size={48} weight="duotone" /><h2>选择草稿继续编辑</h2><p>修改会自动保存，也可以直接新建一封邮件。</p><button onClick={() => { setActiveDraft(undefined); setComposeMode('new'); }}>新建邮件</button></section> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => { setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)}
+          {composeMode ? <ComposePane ref={composePaneRef} key={`${composeMode}-${activeDraft?.id ?? selected?.id ?? 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' ? <section className="composer-pane composer-welcome"><PencilSimple size={48} weight="duotone" /><h2>选择草稿继续编辑</h2><p>修改会自动保存，也可以直接新建一封邮件。</p><button onClick={() => { setActiveDraft(undefined); setComposeMode('new'); }}>新建邮件</button></section> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => { setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}

@@ -25,6 +25,33 @@ messagesRouter.get('/messages', asyncRoute(async (req, res) => {
 
 messagesRouter.get('/message-stats', asyncRoute(async (_req, res) => res.json(await getMessageStats())));
 
+messagesRouter.get('/contacts', asyncRoute(async (_req, res) => {
+  const data = await readStore();
+  const ownAddresses = new Set(data.accounts.map((account) => account.email.trim().toLocaleLowerCase()));
+  const contacts = new Map<string, { address: string; name: string; messageCount: number; lastContactAt: string }>();
+
+  for (const message of data.messages) {
+    const participants = [message.from, ...message.to];
+    const seenInMessage = new Set<string>();
+    for (const participant of participants) {
+      const address = participant.address.trim();
+      const key = address.toLocaleLowerCase();
+      if (!address || ownAddresses.has(key) || seenInMessage.has(key)) continue;
+      seenInMessage.add(key);
+      const current = contacts.get(key);
+      const isLatest = !current || message.date > current.lastContactAt;
+      contacts.set(key, {
+        address: isLatest ? address : current.address,
+        name: isLatest ? (participant.name.trim() || current?.name || '') : current.name,
+        messageCount: (current?.messageCount ?? 0) + 1,
+        lastContactAt: current && current.lastContactAt > message.date ? current.lastContactAt : message.date,
+      });
+    }
+  }
+
+  res.json({ contacts: Array.from(contacts.values()).sort((left, right) => right.lastContactAt.localeCompare(left.lastContactAt) || right.messageCount - left.messageCount || left.address.localeCompare(right.address)) });
+}));
+
 messagesRouter.get('/messages/:id', asyncRoute(async (req, res) => {
   const message = await getCachedMessage(String(req.params.id));
   if (!message) { res.status(404).json({ error: '邮件不存在' }); return; }
