@@ -19,7 +19,7 @@ html, body, #root { margin: 0; min-height: 100%; }
 body { overflow: hidden; }
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #2eb89b; outline-offset: 2px; }
+button:focus-visible { outline: 2px solid #2eb89b; outline-offset: 2px; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 button:disabled { cursor: not-allowed !important; opacity: .42; }
 
@@ -34,7 +34,8 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .app-input, .app-select { min-height: 40px; }
 .app-input:hover, .app-select:hover, .app-textarea:hover { border-color: #b9ccc6 !important; }
 .app-input:focus-within, .app-select:focus-within, .app-select[aria-expanded="true"], .app-textarea:focus-within { border-color: #45aa94 !important; box-shadow: 0 0 0 3px #45aa9417 !important; }
-.app-input input, .app-textarea textarea { min-width: 0; color: inherit; font-size: inherit; }
+.app-input input, .app-textarea textarea { min-width: 0; border: 0 !important; outline: 0 !important; background: transparent !important; color: inherit; box-shadow: none !important; font-size: inherit; }
+.app-select:focus-visible { outline: 0; }
 .app-input input::placeholder, .app-textarea textarea::placeholder { color: #9aa6a3; }
 .app-select-wrap { display: block; width: 100%; min-width: 0; }
 .app-select { font-size: 11px; }
