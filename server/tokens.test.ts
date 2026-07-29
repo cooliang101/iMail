@@ -27,6 +27,14 @@ describe('developer tokens', () => {
     expect((await store.read()).tokens[0].lastUsedAt).toBeTruthy();
   });
 
+  it('issues visibly distinct full-control MCP authorization codes', async () => {
+    const store = memoryStore();
+    const { raw } = await issueToken({ name: 'Trusted agent', scopes: ['mcp:full'], accountIds: [], ttlSeconds: 3600 }, store);
+    expect(raw).toMatch(/^imail_mcp_[A-Za-z0-9_-]{40}$/);
+    await expect(authenticateToken(raw, 'mcp:full', store)).resolves.toMatchObject({ name: 'Trusted agent', scopes: ['mcp:full'] });
+    await expect(authenticateToken(raw, 'messages:read', store)).resolves.toBeNull();
+  });
+
   it('rejects malformed, unknown, expired and under-scoped tokens', async () => {
     const store = memoryStore();
     const { raw } = await issueToken({ name: 'Local tests', scopes: ['messages:read'], accountIds: ['account-1'], ttlSeconds: -1 }, store);

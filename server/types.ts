@@ -94,7 +94,7 @@ export type DraftAttachment = {
   data: string;
 };
 
-export type TokenScope = 'messages:read' | 'messages:send' | 'accounts:read';
+export type TokenScope = 'messages:read' | 'messages:send' | 'accounts:read' | 'mcp:full';
 
 export type DeveloperToken = {
   id: string;

@@ -25,6 +25,7 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - 附件元数据随正文缓存，文件内容点击时才从源 IMAP 按需下载
 - 短期开发 Token，支持指定邮箱、最小权限、自动过期和即时撤销
 - 面向本地程序的账户、邮件读取和邮件发送 API
+- MCP Streamable HTTP 与 stdio 接入，可信 Agent 可用短期授权码管理账户、邮件、附件、草稿、标签和同步
 - 首次启动引导、加载态、空状态、错误提示和响应式布局
 
 ### 平台验收口径
@@ -199,14 +200,94 @@ Token 有效期范围为 5 分钟至 7 天，且只能访问创建时选中的�
 
 网关错误统一返回 `error.code`、`error.message` 与 `error.requestId`，响应头同时包含 `X-Request-Id`，便于日志关联。
 
+## MCP Agent 接入
+
+iMail 内置基于官方 TypeScript SDK v2 的 MCP 服务，同时支持 Streamable HTTP 和 stdio。MCP 使用单独的 `mcp:full` 短期授权码；普通 `messages:*` / `accounts:read` Token 无法调用 MCP，避免已有只读 Token 意外获得账户删除、授权码更新或发信能力。
+
+在“开发者网关”中创建 Token，勾选“MCP 完整控制”。生成的授权码以 `imail_mcp_` 开头，只显示一次，服务端仍只保存 SHA-256 哈希。它默认最长有效 7 天，可以在同一页面即时撤销。即使尚未接入邮箱，也可以先签发 MCP 授权码，让可信 Agent 通过 `account_add_with_code` 接入第一个邮箱。
+
+### Streamable HTTP
+
+服务随 iMail API 一起启动，MCP 地址为：
+
+```text
+http://127.0.0.1:8787/mcp
+```
+
+客户端应把授权码放入 Bearer 请求头：
+
+```text
+Authorization: Bearer imail_mcp_xxx
+```
+
+通用远程 MCP 客户端配置示例：
+
+```json
+{
+  "url": "http://127.0.0.1:8787/mcp",
+  "headers": {
+    "Authorization": "Bearer ${IMAIL_MCP_AUTH_CODE}"
+  }
+}
+```
+
+HTTP MCP 默认只接受 `localhost`、`127.0.0.1` 和 `::1` 的 Host/Origin，并且 API 默认只监听回环地址。确需远程部署时，必须使用 HTTPS，并通过 `MCP_ALLOWED_HOSTS` 显式添加实际主机名：
+
+```env
+MCP_ALLOWED_HOSTS=mail.example.com
+```
+
+### stdio
+
+只支持 stdio 的本地 Agent 可以直接启动：
+
+```bash
+IMAIL_MCP_AUTH_CODE=imail_mcp_xxx npm run mcp
+```
+
+Windows PowerShell：
+
+```powershell
+$env:IMAIL_MCP_AUTH_CODE='imail_mcp_xxx'
+npm run mcp
+```
+
+通用 stdio 客户端配置示例：
+
+```json
+{
+  "command": "npm",
+  "args": ["run", "mcp"],
+  "cwd": "/absolute/path/to/imail",
+  "env": {
+    "IMAIL_MCP_AUTH_CODE": "imail_mcp_xxx"
+  }
+}
+```
+
+### MCP 工具
+
+| 领域 | 工具 |
+| --- | --- |
+| 状态 | `imail_status` |
+| 账户 | `accounts_list`、`account_add_with_code`、`account_start_oauth`、`account_reconnect_oauth`、`account_update`、`account_update_authorization_code`、`account_test_connection`、`account_remove` |
+| 同步与邮件 | `mailbox_sync`、`messages_list`、`message_get`、`message_update`、`message_move`、`message_send`、`attachment_download` |
+| 草稿 | `drafts_list`、`draft_get`、`draft_save`、`draft_delete` |
+| 整理 | `labels_list`、`notifications_list` |
+
+带副作用的工具提供 MCP annotations：读取工具标记为只读，账户移除、邮件移动和草稿删除标记为 destructive。邮箱授权码、应用专用密码、OAuth Token 和加密字段永远不会出现在 MCP 响应中。
+
+完整接入流程、工具参数、安全模型和排障见 [`docs/mcp-integration.md`](docs/mcp-integration.md)、[`docs/architecture.md`](docs/architecture.md) 与 [`docs/operator-runbook.md`](docs/operator-runbook.md)。
+
 ## 数据与安全边界
 
 - 服务默认仅监听回环地址，适合作为本地开发工具。
 - 邮箱密码和授权码不会由 API 返回，落盘前使用 AES-256-GCM 加密。
 - 临时 Token 不以明文落盘。
+- MCP 完整控制需要独立的 `mcp:full` 授权码；普通网关 Token 不能升级为 MCP 管理权限。
 - 邮件正文和元数据保存在 `.data/imail.sqlite`，因此磁盘权限和设备加密仍然重要。
 - SQLite 启用外键、WAL、繁忙等待和事务替换；账户删除会级联清理邮件及 Token 账户授权关系。
-- HTML 邮件当前以纯文本正文展示，避免直接渲染不可信 HTML。
+- HTML 邮件在带 CSP 的 sandbox iframe 中渲染，禁用脚本、对象和表单提交；纯文本邮件保持文本展示。
 - 这是本地单用户 MVP。若需要远程部署，必须先增加管理端身份验证、TLS、数据库权限隔离、审计日志、速率限制和密钥托管。
 
 ## 工程结构
@@ -224,6 +305,7 @@ server/index.ts      服务进程启动入口
 server/app.ts        Express 应用与路由装配
 server/routes/       管理 API 与开发者网关路由
 server/http/         校验、鉴权、响应转换与错误处理
+server/mcp/          MCP HTTP/stdio 传输、授权与完整邮箱工具
 server/mail/         IMAP/SMTP 连接、同步、远程操作与发送
 server/oauth/        OAuth 配置、授权流程、身份校验与 Token 刷新
 server/storage/      SQLite schema、数据映射与事务写入
@@ -255,6 +337,6 @@ npm run build
 ## 后续增强方向
 
 1. IMAP IDLE 实时收信、任意自定义文件夹和更深历史同步
-2. 富文本写信、会话视图和发送附件
+2. 会话视图、联系人分组和模板化写信
 3. SQLite FTS 全文索引和可选 PostgreSQL 远程模式
 4. 管理端登录、设备会话、审计日志和远程安全部署模式

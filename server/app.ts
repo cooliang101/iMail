@@ -7,6 +7,7 @@ import { draftsRouter } from './routes/drafts.js';
 import { gatewayRouter } from './routes/gateway.js';
 import { gatewayDocsRouter } from './routes/gateway-docs.js';
 import { messagesRouter } from './routes/messages.js';
+import { mcpRouter } from './mcp/http.js';
 import { oauthRouter } from './routes/oauth-routes.js';
 import { systemRouter } from './routes/system.js';
 
@@ -24,6 +25,7 @@ export function createApp() {
   app.use('/api', developerTokensRouter);
   app.use('/gateway', gatewayDocsRouter);
   app.use('/gateway/v1', gatewayRouter);
+  app.use(mcpRouter);
   app.use(errorHandler);
 
   return app;

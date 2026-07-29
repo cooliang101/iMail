@@ -68,7 +68,7 @@ export const sendSchema = z.object({
 
 export const tokenSchema = z.object({
   name: z.string().min(1).max(80),
-  scopes: z.array(z.enum(['messages:read', 'messages:send', 'accounts:read'])).min(1),
-  mailboxes: z.array(z.string().email()).min(1),
+  scopes: z.array(z.enum(['messages:read', 'messages:send', 'accounts:read', 'mcp:full'])).min(1),
+  mailboxes: z.array(z.string().email()).default([]),
   ttlSeconds: z.number().int().min(300).max(7 * 24 * 3600),
-});
+}).refine((value) => value.mailboxes.length > 0 || value.scopes.includes('mcp:full'), { message: '非 MCP Token 至少需要选择一个邮箱', path: ['mailboxes'] });
