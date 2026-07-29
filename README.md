@@ -110,10 +110,32 @@ APP_MASTER_KEY=请替换为64位十六进制值
 http://127.0.0.1:8787/api/dev/v1
 ```
 
+轻量交互文档：
+
+```text
+http://127.0.0.1:8787/api/docs
+```
+
+该页面无第三方 UI 运行时依赖，可直接填入 Token、参数和 JSON 正文测试接口。OpenAPI 3.1 契约位于 `/api/docs/openapi.json`。
+
 读取邮件：
 
 ```bash
 curl "http://127.0.0.1:8787/api/dev/v1/messages?limit=10" \
+  -H "Authorization: Bearer imail_your_token"
+```
+
+列表只返回摘要，不加载邮件正文。使用响应中的 `page.nextCursor` 获取下一页：
+
+```bash
+curl "http://127.0.0.1:8787/api/dev/v1/messages?limit=10&cursor=上一页游标" \
+  -H "Authorization: Bearer imail_your_token"
+```
+
+读取单封邮件正文：
+
+```bash
+curl "http://127.0.0.1:8787/api/dev/v1/messages/邮件ID" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
@@ -157,6 +179,8 @@ curl -X POST "http://127.0.0.1:8787/api/dev/v1/send" \
 | `accounts:read` | 读取指定账户的非敏感元数据 |
 
 Token 有效期范围为 5 分钟至 7 天，且只能访问创建时选中的邮箱。撤销立即生效。
+
+网关错误统一返回 `error.code`、`error.message` 与 `error.requestId`，响应头同时包含 `X-Request-Id`，便于日志关联。
 
 ## 数据与安全边界
 

@@ -11,8 +11,3 @@ export function publicDeveloperToken(token: DeveloperToken, accounts: MailAccoun
   const mailboxes = accountIds.map((id) => emailsById.get(id)).filter((email): email is string => Boolean(email));
   return { ...safe, mailboxes };
 }
-
-export function publicGatewayMailbox(account: MailAccount) {
-  const { id: _id, encryptedSecret: _secret, settings: _settings, ...safe } = account;
-  return safe;
-}

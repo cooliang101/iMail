@@ -98,6 +98,8 @@ describe('iMail HTTP API', () => {
     expect(allowed.body.mailboxes[0]).not.toHaveProperty('settings');
     const denied = await request('/api/dev/v1/messages', { headers: { Authorization: `Bearer ${created.body.token}` } });
     expect(denied.response.status).toBe(401);
+    expect(denied.body.error).toMatchObject({ code: 'UNAUTHORIZED', message: expect.any(String), requestId: expect.any(String) });
+    expect(denied.response.headers.get('x-request-id')).toBe(denied.body.error.requestId);
     const listing = await request('/api/developer-tokens');
     expect(JSON.stringify(listing.body)).not.toContain(created.body.token);
     expect(listing.body.tokens[0]).not.toHaveProperty('tokenHash');
@@ -188,29 +190,63 @@ describe('iMail HTTP API', () => {
   });
 
   it('lets a developer token select a mailbox by email without exposing internal account IDs', async () => {
-    await updateStore((data) => { data.messages = [{
-      id: 'message-dev', accountId: account.id, mailbox: 'INBOX', uid: 9, from: { name: 'Sender', address: 'sender@example.com' }, to: [],
-      subject: 'Gateway message', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [],
-    }]; });
+    await updateStore((data) => { data.messages = [
+      { id: 'message-new', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 11, from: { name: 'Alice', address: 'alice@example.com' }, to: [], subject: 'Newest gateway message', preview: 'Newest preview', text: 'Newest body', date: '2026-07-29T02:00:00.000Z', unread: true, flagged: false, hasAttachments: true, attachments: [{ filename: 'report.txt', contentType: 'text/plain', size: 5, index: 0 }], labels: [] },
+      { id: 'message-dev', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 9, from: { name: 'Sender', address: 'sender@example.com' }, to: [], subject: 'Gateway message', preview: 'Preview', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [], labels: [] },
+      { id: 'message-old', accountId: account.id, mailbox: 'Sent', mailboxRole: 'sent', uid: 7, from: { name: 'Owner', address: account.email }, to: [], subject: 'Old sent message', preview: 'Sent', text: 'Sent body', date: '2026-07-27T00:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [], labels: [] },
+    ]; });
     const created = await request('/api/developer-tokens', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Gateway', scopes: ['messages:read', 'messages:send'], mailboxes: [account.email], ttlSeconds: 3600 }),
     });
     const headers = { Authorization: `Bearer ${created.body.token}` };
     const byRoute = await request(`/api/dev/v1/mailboxes/${encodeURIComponent(account.email)}/messages?limit=10`, { headers });
-    const byEmail = await request(`/api/dev/v1/messages?mailbox=${encodeURIComponent(account.email)}`, { headers });
-    expect(byRoute.body).toMatchObject({ total: 1, nextOffset: 1 });
-    expect(byEmail.body.messages[0]).toMatchObject({ id: 'message-dev', accountEmail: account.email, folder: 'INBOX' });
+    const firstPage = await request(`/api/dev/v1/messages?mailbox=${encodeURIComponent(account.email)}&mailboxRole=inbox&limit=1`, { headers });
+    expect(byRoute.body.page).toMatchObject({ count: 3, hasMore: false, nextCursor: null });
+    expect(firstPage.body.page).toMatchObject({ limit: 1, count: 1, hasMore: true, nextCursor: expect.any(String) });
+    expect(firstPage.body.messages[0]).toMatchObject({ id: 'message-new', accountEmail: account.email, folder: 'INBOX' });
+    expect(firstPage.body.messages[0]).not.toHaveProperty('text');
+    const secondPage = await request(`/api/dev/v1/messages?mailbox=${encodeURIComponent(account.email)}&mailboxRole=inbox&limit=1&cursor=${encodeURIComponent(firstPage.body.page.nextCursor)}`, { headers });
+    expect(secondPage.body.messages[0].id).toBe('message-dev');
+    const detail = await request('/api/dev/v1/messages/message-dev', { headers });
+    expect(detail.body.message).toMatchObject({ id: 'message-dev', text: 'Body', accountEmail: account.email });
+    expect(detail.body.message).not.toHaveProperty('accountId');
+    const attachment = await fetch(`${baseUrl}/api/dev/v1/messages/message-new/attachments/0`, { headers });
+    expect(attachment.status).toBe(200); expect(await attachment.text()).toBe('hello');
+    const byEmail = firstPage;
     expect(byEmail.body.messages[0]).not.toHaveProperty('accountId');
     expect(byEmail.body.messages[0]).not.toHaveProperty('uid');
-    expect((await request('/api/dev/v1/messages?mailbox=missing@example.com', { headers })).response.status).toBe(404);
-    expect((await request(`/api/dev/v1/accounts/${account.id}/messages`, { headers })).response.status).toBe(404);
-    expect((await request(`/api/dev/v1/messages?accountId=${account.id}`, { headers })).response.status).toBe(400);
+    const missing = await request('/api/dev/v1/messages?mailbox=missing@example.com', { headers });
+    expect(missing.response.status).toBe(404); expect(missing.body.error.code).toBe('MAILBOX_NOT_AVAILABLE');
+    const oldRoute = await request(`/api/dev/v1/accounts/${account.id}/messages`, { headers });
+    expect(oldRoute.response.status).toBe(404); expect(oldRoute.body.error.code).toBe('ENDPOINT_NOT_FOUND');
+    const oldQuery = await request(`/api/dev/v1/messages?accountId=${account.id}`, { headers });
+    expect(oldQuery.response.status).toBe(400); expect(oldQuery.body.error.code).toBe('INVALID_REQUEST');
+    const invalidCursor = await request('/api/dev/v1/messages?cursor=broken', { headers });
+    expect(invalidCursor.response.status).toBe(400); expect(invalidCursor.body.error.code).toBe('INVALID_CURSOR');
     const legacySend = await request('/api/dev/v1/send', {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ accountId: account.id, to: ['recipient@example.com'], subject: 'Legacy', text: 'Not sent' }),
     });
     expect(legacySend.response.status).toBe(400);
+    expect(legacySend.body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('serves a UTF-8 lightweight interactive API console and OpenAPI contract', async () => {
+    const specification = await request('/api/docs/openapi.json');
+    expect(specification.body.info).toMatchObject({ title: 'iMail Developer Gateway', version: '1.0.0' });
+    expect(specification.body.paths).toHaveProperty('/messages/{messageId}');
+    expect(specification.body.paths).toHaveProperty('/messages/{messageId}/attachments/{index}');
+    expect(JSON.stringify(specification.body)).not.toContain('accountId');
+    const page = await fetch(`${baseUrl}/api/docs`);
+    expect(page.status).toBe(200);
+    expect(page.headers.get('content-type')).toContain('text/html; charset=utf-8');
+    const html = await page.text();
+    expect(html).toContain('Lightweight API Console');
+    expect(html).toContain('邮件能力');
+    expect(html.toLowerCase()).not.toContain('swagger');
+    expect(html).not.toContain('<script src=');
+    expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
   });
 
   it('deletes account-owned cache and removes it from token grants', async () => {
