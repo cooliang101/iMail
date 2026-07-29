@@ -40,7 +40,7 @@ export function relativeTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(new Date(value));
 }
 
-export function Overlay({ children, onClose, wide = false }: { children: ReactNode; onClose: () => void; wide?: boolean }) {
+export function Overlay({ children, onClose, wide = false, dialogClassName = '' }: { children: ReactNode; onClose: () => void; wide?: boolean; dialogClassName?: string }) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   const titleId = useId();
@@ -63,8 +63,7 @@ export function Overlay({ children, onClose, wide = false }: { children: ReactNo
     return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
   }, []);
   return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><span id={titleId} className="sr-only">iMail 对话框</span>{children}</section>
+    <section ref={dialogRef} className={`modal ${wide ? 'modal-wide' : ''} ${dialogClassName}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><span id={titleId} className="sr-only">iMail 对话框</span>{children}</section>
   </div>;
 }
-
 
