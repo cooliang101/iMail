@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@fluentui/react-components';
 import { Archive, ArrowLeft, ArrowRight, CaretDown, Clock, Envelope, File, Star, Tag, Trash, Tray } from '@phosphor-icons/react';
 import type { Account, Message } from '../../types';
 import { virtualRange } from '../../virtual';
-import { AccountProviderMark, initials, providerLabel, relativeTime } from '../../components/shared';
+import { AccountProviderMark, providerLabel, relativeTime, SenderAvatar } from '../../components/shared';
 
 const MESSAGE_ROW_HEIGHT = 108;
 const MESSAGE_OVERSCAN = 6;
@@ -44,7 +44,7 @@ export function VirtualMessageList({ messages, accounts, selectedId, ready, load
         const account = accounts.find((item) => item.id === message.accountId);
         const color = account?.color ?? '#66857d';
         return <button key={message.id} style={{ top: index * MESSAGE_ROW_HEIGHT, height: MESSAGE_ROW_HEIGHT }} className={`message-row virtual-message-row ${selectedId === message.id ? 'selected' : ''} ${message.unread ? 'unread' : ''}`} onClick={() => onSelect(message.id)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); onContextMenu?.(message, { x: event.clientX, y: event.clientY }); }}>
-          <span className="sender-avatar" style={{ '--avatar-color': color } as CSSProperties}>{initials(message.from.name || message.from.address)}</span>
+          <SenderAvatar messageId={message.id} name={message.from.name || message.from.address} color={color} />
           <span className="message-copy"><span className="message-meta"><strong>{message.from.name || message.from.address}</strong><time>{relativeTime(message.date)}</time></span><b>{message.subject}</b><span>{message.preview}</span><small className="message-account"><span className="message-account-identity">{account ? <><AccountProviderMark provider={account.provider} className="message-provider-mark" /><b>{account.displayName}</b><em title={account.email}>{account.email}</em></> : '邮箱'}</span>{message.hasAttachments && <span className="message-attachment"><File size={13} />附件</span>}</small></span>
           {message.flagged && <Star className="row-star" size={15} weight="fill" />}
         </button>;

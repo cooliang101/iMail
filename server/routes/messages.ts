@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asyncRoute } from '../http/async-route.js';
 import { mailboxRoleSchema, sendSchema } from '../http/schemas.js';
 import { downloadAttachment, moveRemoteMessage, sendMessage, updateRemoteMessageFlags } from '../mail.js';
+import { senderLogo } from '../sender-logo.js';
 import { getCachedMessage, getMessageStats, listCachedMessages, readStore, updateStore } from '../store.js';
 
 export const messagesRouter = Router();
@@ -56,6 +57,18 @@ messagesRouter.get('/messages/:id', asyncRoute(async (req, res) => {
   const message = await getCachedMessage(String(req.params.id));
   if (!message) { res.status(404).json({ error: '邮件不存在' }); return; }
   res.json({ message });
+}));
+
+messagesRouter.get('/messages/:id/sender-logo', asyncRoute(async (req, res) => {
+  const message = await getCachedMessage(String(req.params.id));
+  if (!message) { res.status(404).end(); return; }
+  const logo = await senderLogo(message);
+  if (!logo) { res.setHeader('Cache-Control', 'private, max-age=3600'); res.status(404).end(); return; }
+  res.setHeader('Content-Type', logo.contentType);
+  res.setHeader('Content-Length', String(logo.content.length));
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send(logo.content);
 }));
 
 messagesRouter.patch('/messages/:id', asyncRoute(async (req, res) => {
