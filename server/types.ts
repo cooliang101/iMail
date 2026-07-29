@@ -80,8 +80,18 @@ export type Draft = {
   cc: string[];
   subject: string;
   text: string;
+  html: string;
+  attachments: DraftAttachment[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type DraftAttachment = {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  data: string;
 };
 
 export type TokenScope = 'messages:read' | 'messages:send' | 'accounts:read';

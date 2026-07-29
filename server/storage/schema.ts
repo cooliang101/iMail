@@ -23,6 +23,7 @@ export function ensureSchema(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS drafts (
       id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
       to_json TEXT NOT NULL, cc_json TEXT NOT NULL, subject TEXT NOT NULL, text_body TEXT NOT NULL,
+      html_body TEXT NOT NULL DEFAULT '', attachments_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     ) STRICT;
     CREATE TABLE IF NOT EXISTS developer_tokens (
@@ -46,4 +47,7 @@ export function ensureSchema(db: DatabaseSync) {
   const accountColumns = new Set((db.prepare('PRAGMA table_info(accounts)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
   if (!accountColumns.has('mailboxes_json')) db.exec("ALTER TABLE accounts ADD COLUMN mailboxes_json TEXT NOT NULL DEFAULT '[]'");
   if (!accountColumns.has('group_icon')) db.exec("ALTER TABLE accounts ADD COLUMN group_icon TEXT NOT NULL DEFAULT 'folder'");
+  const draftColumns = new Set((db.prepare('PRAGMA table_info(drafts)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
+  if (!draftColumns.has('html_body')) db.exec("ALTER TABLE drafts ADD COLUMN html_body TEXT NOT NULL DEFAULT ''");
+  if (!draftColumns.has('attachments_json')) db.exec("ALTER TABLE drafts ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");
 }

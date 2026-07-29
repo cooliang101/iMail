@@ -137,7 +137,7 @@ describe('SQLiteStore', () => {
         message({ id: 'snoozed', uid: 2, snoozedUntil: '2999-01-01T09:00:00.000Z' }),
         message({ id: 'archived', uid: 3, mailbox: 'Archive', mailboxRole: 'archive' }),
       ];
-      data.drafts = [{ id: 'draft-1', accountId: account().id, to: ['friend@example.com'], cc: [], subject: 'Draft', text: 'Body', createdAt: '2026-07-28T00:00:00.000Z', updatedAt: '2026-07-28T01:00:00.000Z' }];
+      data.drafts = [{ id: 'draft-1', accountId: account().id, to: ['friend@example.com'], cc: [], subject: 'Draft', text: 'Body', html: '<p>Body</p>', attachments: [], createdAt: '2026-07-28T00:00:00.000Z', updatedAt: '2026-07-28T01:00:00.000Z' }];
     });
     expect((await store.read()).drafts).toHaveLength(1);
     expect((await store.listMessages({ mailboxRole: 'inbox', limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['inbox']);
