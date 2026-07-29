@@ -88,11 +88,14 @@ describe('iMail HTTP API', () => {
   it('issues a scoped developer token and authorizes its permitted API', async () => {
     const created = await request('/api/developer-tokens', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'API test', scopes: ['accounts:read'], accountIds: [account.id], ttlSeconds: 3600 }),
+      body: JSON.stringify({ name: 'API test', scopes: ['accounts:read'], mailboxes: [account.email], ttlSeconds: 3600 }),
     });
     expect(created.response.status).toBe(201); expect(created.body.token).toMatch(/^imail_/);
-    const allowed = await request('/api/dev/v1/accounts', { headers: { Authorization: `Bearer ${created.body.token}` } });
-    expect(allowed.response.status).toBe(200); expect(allowed.body.accounts).toHaveLength(1);
+    const allowed = await request('/api/dev/v1/mailboxes', { headers: { Authorization: `Bearer ${created.body.token}` } });
+    expect(allowed.response.status).toBe(200); expect(allowed.body.mailboxes).toHaveLength(1);
+    expect(allowed.body.mailboxes[0]).toMatchObject({ email: account.email, displayName: account.displayName });
+    expect(allowed.body.mailboxes[0]).not.toHaveProperty('id');
+    expect(allowed.body.mailboxes[0]).not.toHaveProperty('settings');
     const denied = await request('/api/dev/v1/messages', { headers: { Authorization: `Bearer ${created.body.token}` } });
     expect(denied.response.status).toBe(401);
     const listing = await request('/api/developer-tokens');
@@ -184,29 +187,36 @@ describe('iMail HTTP API', () => {
     expect(await response.text()).toBe('hello');
   });
 
-  it('lets a developer token select a mailbox by route, email or provider', async () => {
+  it('lets a developer token select a mailbox by email without exposing internal account IDs', async () => {
     await updateStore((data) => { data.messages = [{
       id: 'message-dev', accountId: account.id, mailbox: 'INBOX', uid: 9, from: { name: 'Sender', address: 'sender@example.com' }, to: [],
       subject: 'Gateway message', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [],
     }]; });
     const created = await request('/api/developer-tokens', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Gateway', scopes: ['messages:read'], accountIds: [account.id], ttlSeconds: 3600 }),
+      body: JSON.stringify({ name: 'Gateway', scopes: ['messages:read', 'messages:send'], mailboxes: [account.email], ttlSeconds: 3600 }),
     });
     const headers = { Authorization: `Bearer ${created.body.token}` };
-    const byRoute = await request(`/api/dev/v1/accounts/${account.id}/messages?limit=10`, { headers });
-    const byEmail = await request(`/api/dev/v1/messages?accountEmail=${encodeURIComponent(account.email)}`, { headers });
-    const byProvider = await request('/api/dev/v1/messages?provider=gmail', { headers });
+    const byRoute = await request(`/api/dev/v1/mailboxes/${encodeURIComponent(account.email)}/messages?limit=10`, { headers });
+    const byEmail = await request(`/api/dev/v1/messages?mailbox=${encodeURIComponent(account.email)}`, { headers });
     expect(byRoute.body).toMatchObject({ total: 1, nextOffset: 1 });
-    expect(byEmail.body.messages[0].id).toBe('message-dev');
-    expect(byProvider.body.messages[0].accountId).toBe(account.id);
-    expect((await request('/api/dev/v1/messages?accountEmail=missing@example.com', { headers })).response.status).toBe(404);
+    expect(byEmail.body.messages[0]).toMatchObject({ id: 'message-dev', accountEmail: account.email, folder: 'INBOX' });
+    expect(byEmail.body.messages[0]).not.toHaveProperty('accountId');
+    expect(byEmail.body.messages[0]).not.toHaveProperty('uid');
+    expect((await request('/api/dev/v1/messages?mailbox=missing@example.com', { headers })).response.status).toBe(404);
+    expect((await request(`/api/dev/v1/accounts/${account.id}/messages`, { headers })).response.status).toBe(404);
+    expect((await request(`/api/dev/v1/messages?accountId=${account.id}`, { headers })).response.status).toBe(400);
+    const legacySend = await request('/api/dev/v1/send', {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id, to: ['recipient@example.com'], subject: 'Legacy', text: 'Not sent' }),
+    });
+    expect(legacySend.response.status).toBe(400);
   });
 
   it('deletes account-owned cache and removes it from token grants', async () => {
     await request('/api/developer-tokens', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Delete test', scopes: ['accounts:read'], accountIds: [account.id], ttlSeconds: 3600 }),
+      body: JSON.stringify({ name: 'Delete test', scopes: ['accounts:read'], mailboxes: [account.email], ttlSeconds: 3600 }),
     });
     await updateStore((data) => { data.messages.push({
       id: 'message-1', accountId: account.id, mailbox: 'INBOX', uid: 1, from: { name: '', address: 'sender@example.com' }, to: [],
@@ -216,6 +226,6 @@ describe('iMail HTTP API', () => {
     expect(removed.response.status).toBe(204);
     expect((await request('/api/accounts')).body.accounts).toEqual([]);
     expect((await request('/api/messages')).body.messages).toEqual([]);
-    expect((await request('/api/developer-tokens')).body.tokens[0].accountIds).toEqual([]);
+    expect((await request('/api/developer-tokens')).body.tokens[0].mailboxes).toEqual([]);
   });
 });
