@@ -9,6 +9,7 @@ export type MessageQuery = {
   hasAttachments?: boolean;
   mailboxRole?: MailboxRole;
   mailbox?: string;
+  mailboxName?: string;
   snoozed?: boolean;
   label?: string;
   limit: number;

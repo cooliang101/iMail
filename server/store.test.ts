@@ -101,6 +101,24 @@ describe('SQLiteStore', () => {
     });
   });
 
+  it('merges same-named mailbox folders within one workspace', async () => {
+    const { store } = await temporaryStore();
+    const first = account({ group: '项目', mailboxes: [{ path: 'Projects', name: 'Projects', delimiter: '/', selectable: true, subscribed: true }] });
+    const second = account({ id: 'account-2', email: 'second@example.com', group: '项目', mailboxes: [{ path: 'Folders/Projects', name: 'projects', delimiter: '/', selectable: true, subscribed: true }] });
+    const outside = account({ id: 'account-3', email: 'outside@example.com', group: '个人', mailboxes: [{ path: 'Projects', name: 'Projects', delimiter: '/', selectable: true, subscribed: true }] });
+    await store.update((data) => {
+      data.accounts = [first, second, outside];
+      data.messages = [
+        message({ id: 'project-1', accountId: first.id, mailbox: 'Projects', mailboxRole: 'custom', uid: 1 }),
+        message({ id: 'project-2', accountId: second.id, mailbox: 'Folders/Projects', mailboxRole: 'custom', uid: 2 }),
+        message({ id: 'outside-project', accountId: outside.id, mailbox: 'Projects', mailboxRole: 'custom', uid: 3 }),
+      ];
+    });
+
+    const result = await store.listMessages({ group: '项目', mailboxName: 'PROJECTS', limit: 10, offset: 0 });
+    expect(result.messages.map((item) => item.id)).toEqual(['project-2', 'project-1']);
+  });
+
   it('serializes concurrent updates without losing writes', async () => {
     const { store } = await temporaryStore();
     await Promise.all(Array.from({ length: 20 }, (_, index) => store.update(async (data) => {

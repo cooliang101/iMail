@@ -53,7 +53,7 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .status-syncing { background: #f0c65b; }
 .status-error { background: #e86f62; }
 
-.primary-sidebar { min-width: 0; display: flex; flex-direction: column; padding: 23px 16px 16px; background: #f7faf9; border-right: 1px solid var(--line); }
+.primary-sidebar { min-width: 0; display: flex; flex-direction: column; overflow-y: auto; padding: 23px 16px 16px; background: #f7faf9; border-right: 1px solid var(--line); }
 .sidebar-heading { padding: 0 8px 22px; display: flex; align-items: center; justify-content: space-between; }
 .sidebar-heading strong { font: 700 17px/1 'Segoe UI Variable Display', sans-serif; letter-spacing: -.03em; display: block; }
 .sidebar-heading span { display: block; color: #91a09c; font-size: 11px; margin-top: 6px; }
@@ -68,13 +68,16 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .section-label { display: flex; justify-content: space-between; align-items: center; padding: 25px 10px 3px; color: #97a49f; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .section-label button { border: 0; background: transparent; color: #8fa09b; padding: 2px; }
 .groups { margin-top: 8px; }
+.workspace-group { display: grid; gap: 2px; }
 .workspace-row { position: relative; }
 .workspace-row > button:first-child { padding-right: 38px; }
 .workspace-row > .workspace-edit { position: absolute; top: 5px; right: 5px; width: 29px; min-height: 29px; display: grid; grid-template-columns: 1fr; place-items: center; padding: 0; opacity: 0; }
 .workspace-row:hover > .workspace-edit, .workspace-row > .workspace-edit:focus-visible { opacity: 1; }
-.mailbox-nav { max-height: 190px; overflow: auto; }
-.mailbox-nav button > span { min-width: 0; display: grid; gap: 1px; }
-.mailbox-nav button small { overflow: hidden; color: #9aa6a2; font-size: 8px; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-mailboxes { display: grid; gap: 1px; margin: 0 0 7px 14px; padding-left: 8px; border-left: 1px solid #dce7e3; }
+.workspace-mailboxes:empty { display: none; }
+.workspace-mailboxes button { min-height: 34px; padding-left: 8px; }
+.workspace-mailboxes button > span { min-width: 0; display: grid; gap: 1px; }
+.workspace-mailboxes button small { overflow: hidden; color: #9aa6a2; font-size: 8px; font-weight: 400; white-space: nowrap; text-overflow: ellipsis; }
 .group-symbol { width: 9px; height: 9px; border-radius: 3px; background: #39a98d; }
 .group-1 { background: #db7965; } .group-2 { background: #6579ce; } .group-3 { background: #ca963e; }
 .sidebar-spacer { flex: 1; min-height: 12px; }
