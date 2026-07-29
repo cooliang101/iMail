@@ -23,6 +23,7 @@ export type Message = {
   subject: string;
   preview: string;
   text?: string;
+  html?: string;
   date: string;
   unread: boolean;
   flagged: boolean;
