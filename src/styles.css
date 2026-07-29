@@ -93,8 +93,10 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .workspace-mailboxes { display: grid; gap: 1px; margin: 0 0 7px 14px; padding-left: 8px; border-left: 1px solid #dce7e3; }
 .workspace-mailboxes:empty { display: none; }
 .workspace-mailboxes button { min-height: 34px; padding-left: 8px; }
-.workspace-mailboxes button > span { min-width: 0; display: grid; gap: 1px; }
-.workspace-mailboxes button small { overflow: hidden; color: #9aa6a2; font-size: 8px; font-weight: 400; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-mailboxes button > .workspace-mailbox-label { min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; }
+.workspace-account-tag, .workspace-account-more { flex: 0 1 auto; max-width: 52px; overflow: hidden; border: 1px solid #cfe2dc; border-radius: 4px; padding: 1px 4px; background: #e6f1ee; color: #47766a; font-size: 8px; font-weight: 600; line-height: 14px; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-account-more { flex: 0 0 auto; max-width: none; padding-inline: 3px; color: #66857d; }
+.workspace-folder-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .workspace-mailboxes .workspace-folder-toggle { grid-template-columns: 21px 1fr; margin-top: 1px; color: #81908c; opacity: .56; background: linear-gradient(180deg, #f7faf966, #edf4f1); }
 .workspace-mailboxes .workspace-folder-toggle:hover { opacity: .9; }
 .workspace-mailboxes .workspace-folder-toggle.is-expanded { margin-top: 4px; background: transparent; opacity: .72; }

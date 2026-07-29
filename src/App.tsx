@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@fluentui/react-components';
-import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, Folder, FolderSimplePlus, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
+import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
 import { api } from './api';
 import type { Account, DeveloperToken, Draft, MailboxRole, Message } from './types';
 import type { MailNotification, Notice } from './app-model';
@@ -9,12 +9,11 @@ import { AppInput } from './components/form-controls';
 import { VirtualMessageList, MessageReader } from './features/mail';
 import { AddAccountModal, AccountSettingsModal } from './features/accounts';
 import { ComposeModal, DraftWorkspace } from './features/compose';
-import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceIcon, WorkspaceModal } from './features/organize';
+import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal, type WorkspaceFolder } from './features/organize';
 import { CreateTokenModal, TokenWorkspace } from './features/developer';
 
 type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
-type WorkspaceFolder = { group: string; name: string; unread: number; targets: Array<{ accountId: string; accountName: string; path: string }> };
 type MessageStats = {
   total: number;
   unread: number;
@@ -353,7 +352,7 @@ function App() {
             const icon = accounts.find((account) => account.group === group)?.groupIcon ?? 'folder';
             return <div className="workspace-group" key={group}>
               <div className="workspace-row"><button className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><WorkspaceIcon icon={icon} size={17} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button><button className="workspace-edit" title={`编辑工作空间 ${group}`} aria-label={`编辑工作空间 ${group}`} onClick={() => setWorkspaceOpen(group)}><PencilSimple size={14} /></button></div>
-              <div className="workspace-mailboxes">{visibleFolders.map((folder) => <button key={folder.name.toLocaleLowerCase()} data-icon-tone="info" className={view === 'folder' && activeMailbox?.group === group && activeMailbox.name.toLocaleLowerCase() === folder.name.toLocaleLowerCase() ? 'active' : ''} onClick={() => selectMailbox(folder)} title={folder.targets.map((target) => `${target.accountName} · ${target.path}`).join('\n')}><Folder size={15} /><span>{folder.name}<small>{folder.targets.length > 1 ? `${folder.targets.length} 个邮箱` : folder.targets[0]?.accountName}</small></span><b>{folder.unread || ''}</b></button>)}{folders.length > 3 && <button className={`workspace-folder-toggle ${expanded ? 'is-expanded' : ''}`} onClick={() => setExpandedWorkspaces((current) => { const next = new Set(current); if (expanded) next.delete(group); else next.add(group); return next; })}><CaretDown size={14} /><span>{expanded ? '收起' : `更多 ${folders.length - 3}`}</span></button>}</div>
+              <div className="workspace-mailboxes">{visibleFolders.map((folder) => <WorkspaceFolderItem key={folder.name.toLocaleLowerCase()} folder={folder} active={view === 'folder' && activeMailbox?.group === group && activeMailbox.name.toLocaleLowerCase() === folder.name.toLocaleLowerCase()} onSelect={selectMailbox} />)}{folders.length > 3 && <button className={`workspace-folder-toggle ${expanded ? 'is-expanded' : ''}`} onClick={() => setExpandedWorkspaces((current) => { const next = new Set(current); if (expanded) next.delete(group); else next.add(group); return next; })}><CaretDown size={14} /><span>{expanded ? '收起' : `更多 ${folders.length - 3}`}</span></button>}</div>
             </div>;
           })}
         </nav>
