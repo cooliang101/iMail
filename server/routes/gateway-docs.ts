@@ -10,6 +10,6 @@ gatewayDocsRouter.get('/openapi.json', (_req, res) => {
 });
 
 gatewayDocsRouter.get(['/docs', '/docs/'], (_req, res) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'");
   res.type('html').send(gatewayDocsPage());
 });

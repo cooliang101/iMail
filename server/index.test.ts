@@ -244,6 +244,8 @@ describe('iMail HTTP API', () => {
     const html = await page.text();
     expect(html).toContain('Lightweight API Console');
     expect(html).toContain('邮件能力');
+    expect(html).toContain('连接并订阅');
+    expect(html).toContain("spec['x-websocket']");
     expect(html.toLowerCase()).not.toContain('swagger');
     expect(html).not.toContain('<script src=');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
