@@ -79,9 +79,9 @@ describe('iMail HTTP API', () => {
   });
 
   it('updates account workspace metadata without exposing credentials', async () => {
-    const result = await request(`/api/accounts/${account.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group: '客户支持', displayName: 'Support' }) });
+    const result = await request(`/api/accounts/${account.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group: '客户支持', groupIcon: 'users', displayName: 'Support' }) });
     expect(result.response.status).toBe(200);
-    expect(result.body.account).toMatchObject({ group: '客户支持', displayName: 'Support' });
+    expect(result.body.account).toMatchObject({ group: '客户支持', groupIcon: 'users', displayName: 'Support' });
     expect(result.body.account).not.toHaveProperty('encryptedSecret');
   });
 

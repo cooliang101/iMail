@@ -5,7 +5,7 @@ export function ensureSchema(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY, provider TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE UNIQUE,
-      display_name TEXT NOT NULL, group_name TEXT NOT NULL, color TEXT NOT NULL, settings_json TEXT NOT NULL,
+      display_name TEXT NOT NULL, group_name TEXT NOT NULL, group_icon TEXT NOT NULL DEFAULT 'folder', color TEXT NOT NULL, settings_json TEXT NOT NULL,
       encrypted_secret TEXT NOT NULL, auth_method TEXT, created_at TEXT NOT NULL, last_sync_at TEXT,
       status TEXT NOT NULL, last_error TEXT, mailboxes_json TEXT NOT NULL DEFAULT '[]'
     ) STRICT;
@@ -45,4 +45,5 @@ export function ensureSchema(db: DatabaseSync) {
   if (!columns.has('snoozed_until')) db.exec('ALTER TABLE messages ADD COLUMN snoozed_until TEXT');
   const accountColumns = new Set((db.prepare('PRAGMA table_info(accounts)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
   if (!accountColumns.has('mailboxes_json')) db.exec("ALTER TABLE accounts ADD COLUMN mailboxes_json TEXT NOT NULL DEFAULT '[]'");
+  if (!accountColumns.has('group_icon')) db.exec("ALTER TABLE accounts ADD COLUMN group_icon TEXT NOT NULL DEFAULT 'folder'");
 }

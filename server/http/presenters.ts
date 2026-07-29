@@ -2,7 +2,7 @@ import type { DeveloperToken, MailAccount } from '../types.js';
 
 export function publicAccount(account: MailAccount) {
   const { encryptedSecret: _secret, ...safe } = account;
-  return { ...safe, authMethod: safe.authMethod ?? 'app-password', mailboxes: safe.mailboxes ?? [] };
+  return { ...safe, authMethod: safe.authMethod ?? 'app-password', groupIcon: safe.groupIcon ?? 'folder', mailboxes: safe.mailboxes ?? [] };
 }
 
 export function publicDeveloperToken(token: DeveloperToken, accounts: MailAccount[]) {

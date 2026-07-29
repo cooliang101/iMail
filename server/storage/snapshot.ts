@@ -13,6 +13,7 @@ export function readSnapshot(db: DatabaseSync): StoreData {
       authMethod: optionalText(row, 'auth_method') as MailAccount['authMethod'], createdAt: text(row, 'created_at'),
       status: text(row, 'status') as MailAccount['status'],
     };
+    const groupIcon = text(row, 'group_icon') as MailAccount['groupIcon']; if (groupIcon !== 'folder') account.groupIcon = groupIcon;
     const mailboxes = json<MailAccount['mailboxes']>(row, 'mailboxes_json'); if (mailboxes?.length) account.mailboxes = mailboxes;
     const lastSyncAt = optionalText(row, 'last_sync_at'); if (lastSyncAt) account.lastSyncAt = lastSyncAt;
     const lastError = optionalText(row, 'last_error'); if (lastError) account.lastError = lastError;

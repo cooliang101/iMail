@@ -9,7 +9,7 @@ import { AppInput } from './components/form-controls';
 import { VirtualMessageList, MessageReader } from './features/mail';
 import { AddAccountModal, AccountSettingsModal } from './features/accounts';
 import { ComposeModal, DraftWorkspace } from './features/compose';
-import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceModal } from './features/organize';
+import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceIcon, WorkspaceModal } from './features/organize';
 import { CreateTokenModal, TokenWorkspace } from './features/developer';
 
 type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
@@ -45,6 +45,7 @@ function App() {
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState<string | null | undefined>(undefined);
   const [activeMailbox, setActiveMailbox] = useState<WorkspaceFolder | null>(null);
+  const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(() => new Set());
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [activeDraft, setActiveDraft] = useState<Draft | undefined>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -342,13 +343,20 @@ function App() {
         <button className={view === 'snoozed' ? 'active' : ''} onClick={() => selectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
         <button className={view === 'archive' ? 'active' : ''} onClick={() => selectScope('archive')}><Archive size={19} /><span>归档</span></button>
       </nav>
-      <div className="section-label"><span>工作空间</span><button title="新增工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(null)}><Plus size={15} /></button></div>
-      <nav className="nav-block groups">
-        {groups.map((group, index) => <div className="workspace-group" key={group}>
-          <div className="workspace-row"><button className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><span className={`group-symbol group-${index % 4}`} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button><button className="workspace-edit" title={`编辑工作空间 ${group}`} aria-label={`编辑工作空间 ${group}`} onClick={() => setWorkspaceOpen(group)}><PencilSimple size={14} /></button></div>
-          <div className="workspace-mailboxes">{workspaceFolders.get(group)?.map((folder) => <button key={folder.name.toLocaleLowerCase()} className={view === 'folder' && activeMailbox?.group === group && activeMailbox.name.toLocaleLowerCase() === folder.name.toLocaleLowerCase() ? 'active' : ''} onClick={() => selectMailbox(folder)} title={folder.targets.map((target) => `${target.accountName} · ${target.path}`).join('\n')}><Folder size={15} /><span>{folder.name}<small>{folder.targets.length > 1 ? `${folder.targets.length} 个邮箱` : folder.targets[0]?.accountName}</small></span><b>{folder.unread || ''}</b></button>)}</div>
-        </div>)}
-      </nav>
+      <section className="workspace-section"><div className="section-label"><span>工作空间</span><button title="新增工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(null)}><Plus size={15} /></button></div>
+        <nav className="nav-block groups workspace-list">
+          {groups.map((group) => {
+            const folders = workspaceFolders.get(group) ?? [];
+            const expanded = expandedWorkspaces.has(group);
+            const visibleFolders = expanded ? folders : folders.slice(0, 3);
+            const icon = accounts.find((account) => account.group === group)?.groupIcon ?? 'folder';
+            return <div className="workspace-group" key={group}>
+              <div className="workspace-row"><button className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><WorkspaceIcon icon={icon} size={17} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button><button className="workspace-edit" title={`编辑工作空间 ${group}`} aria-label={`编辑工作空间 ${group}`} onClick={() => setWorkspaceOpen(group)}><PencilSimple size={14} /></button></div>
+              <div className="workspace-mailboxes">{visibleFolders.map((folder) => <button key={folder.name.toLocaleLowerCase()} className={view === 'folder' && activeMailbox?.group === group && activeMailbox.name.toLocaleLowerCase() === folder.name.toLocaleLowerCase() ? 'active' : ''} onClick={() => selectMailbox(folder)} title={folder.targets.map((target) => `${target.accountName} · ${target.path}`).join('\n')}><Folder size={15} /><span>{folder.name}<small>{folder.targets.length > 1 ? `${folder.targets.length} 个邮箱` : folder.targets[0]?.accountName}</small></span><b>{folder.unread || ''}</b></button>)}{folders.length > 3 && <button className={`workspace-folder-toggle ${expanded ? 'is-expanded' : ''}`} onClick={() => setExpandedWorkspaces((current) => { const next = new Set(current); if (expanded) next.delete(group); else next.add(group); return next; })}><CaretDown size={14} /><span>{expanded ? '收起' : `更多 ${folders.length - 3}`}</span></button>}</div>
+            </div>;
+          })}
+        </nav>
+      </section>
       {labels.length > 0 && <><div className="section-label"><span>邮件标签</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} className={activeLabel === label ? 'active' : ''} onClick={() => selectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
       <div className="sidebar-spacer" />
       <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => selectScope('tokens')}><Code size={19} /><span><strong>开发者网关</strong><small>Token 与邮件 API</small></span><ArrowRight size={16} /></button>
