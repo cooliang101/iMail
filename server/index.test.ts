@@ -60,6 +60,67 @@ async function request(route: string, init?: RequestInit) {
 }
 
 describe('iMail HTTP API', () => {
+  it('serves a full mail-management MCP endpoint only to mcp:full authorization codes', async () => {
+    const ordinary = await request('/api/developer-tokens', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Read only', scopes: ['messages:read'], mailboxes: [account.email], ttlSeconds: 3600 }),
+    });
+    const initialize = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'vitest', version: '1.0.0' } } };
+    const denied = await request('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${ordinary.body.token}` }, body: JSON.stringify(initialize) });
+    expect(denied.response.status).toBe(401);
+
+    const created = await request('/api/developer-tokens', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'MCP agent', scopes: ['messages:read', 'mcp:full'], mailboxes: [], ttlSeconds: 3600 }),
+    });
+    expect(created.body.token).toMatch(/^imail_mcp_/);
+    expect(created.body.detail.scopes).toEqual(['mcp:full']);
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${created.body.token}` };
+    const mcp = async (payload: unknown) => {
+      const response = await fetch(`${baseUrl}/mcp`, { method: 'POST', headers, body: JSON.stringify(payload) });
+      const text = await response.text();
+      const data = response.headers.get('content-type')?.includes('text/event-stream')
+        ? text.split('\n').find((line) => line.startsWith('data: '))?.slice(6) ?? '{}'
+        : text;
+      return { response, body: JSON.parse(data) };
+    };
+    const initialized = await mcp(initialize);
+    expect(initialized.response.status).toBe(200);
+    expect(initialized.body.result.serverInfo).toMatchObject({ name: 'imail', version: '1.0.0' });
+
+    const listed = await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+    const toolNames = listed.body.result.tools.map((tool: { name: string }) => tool.name);
+    expect(toolNames).toEqual(expect.arrayContaining([
+      'accounts_list', 'account_add_with_code', 'account_start_oauth', 'account_update_authorization_code', 'account_remove',
+      'mailbox_sync', 'messages_list', 'message_get', 'message_update', 'message_move', 'message_send', 'attachment_download',
+      'drafts_list', 'draft_get', 'draft_save', 'draft_delete', 'labels_list', 'notifications_list',
+    ]));
+    const called = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'accounts_list', arguments: {} } });
+    expect(called.body.result.structuredContent.accounts[0]).toMatchObject({ email: account.email, displayName: account.displayName });
+    expect(JSON.stringify(called.body)).not.toContain(account.encryptedSecret);
+
+    await updateStore((data) => { data.messages = [{
+      id: 'mcp-message', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 42,
+      from: { name: 'Agent Sender', address: 'sender@example.com' }, to: [{ name: 'Owner', address: account.email }],
+      subject: 'MCP test', preview: 'Cached preview', text: 'Cached body', html: '<p>Cached body</p>', date: '2026-07-29T12:00:00.000Z',
+      unread: true, flagged: false, hasAttachments: false, attachments: [], labels: [],
+    }]; });
+    const messages = await mcp({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'messages_list', arguments: { email: account.email } } });
+    expect(messages.body.result.structuredContent).toMatchObject({ total: 1, messages: [{ id: 'mcp-message', accountEmail: account.email }] });
+    const detail = await mcp({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'message_get', arguments: { messageId: 'mcp-message' } } });
+    expect(detail.body.result.structuredContent.message).toMatchObject({ text: 'Cached body', html: '<p>Cached body</p>' });
+    const labeled = await mcp({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'message_update', arguments: { messageId: 'mcp-message', labels: ['MCP'] } } });
+    expect(labeled.body.result.structuredContent.message.labels).toEqual(['MCP']);
+
+    const saved = await mcp({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'draft_save', arguments: { accountEmail: account.email, to: ['friend@example.com'], subject: 'Agent draft', text: 'Draft body' } } });
+    const draftId = saved.body.result.structuredContent.draft.id;
+    expect(draftId).toMatch(/[0-9a-f-]{36}/);
+    const drafts = await mcp({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'drafts_list', arguments: {} } });
+    expect(drafts.body.result.structuredContent.drafts[0]).toMatchObject({ id: draftId, subject: 'Agent draft', accountEmail: account.email });
+    const deleted = await mcp({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'draft_delete', arguments: { draftId } } });
+    expect(deleted.body.result.structuredContent).toEqual({ deleted: true, draftId });
+  });
+
   it('reports health and OAuth provider capability metadata', async () => {
     const health = await request('/api/health');
     expect(health.response.status).toBe(200); expect(health.body).toEqual({ ok: true, service: 'imail' });

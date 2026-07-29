@@ -14,7 +14,7 @@ export function hashToken(token: string): string {
 }
 
 export async function issueToken(input: { name: string; scopes: TokenScope[]; accountIds: string[]; ttlSeconds: number }, store: TokenStore = defaultTokenStore) {
-  const raw = `imail_${randomBytes(30).toString('base64url')}`;
+  const raw = `${input.scopes.includes('mcp:full') ? 'imail_mcp_' : 'imail_'}${randomBytes(30).toString('base64url')}`;
   const now = new Date();
   const token: DeveloperToken = {
     id: crypto.randomUUID(),

@@ -19,7 +19,9 @@ developerTokensRouter.post('/developer-tokens', asyncRoute(async (req, res) => {
   const requestedMailboxes = new Set(input.mailboxes.map((email) => email.toLowerCase()));
   const accounts = data.accounts.filter((account) => requestedMailboxes.has(account.email.toLowerCase()));
   if (accounts.length !== requestedMailboxes.size) throw new Error('包含不存在的邮箱账户');
-  const result = await issueToken({ name: input.name, scopes: input.scopes as TokenScope[], accountIds: accounts.map((account) => account.id), ttlSeconds: input.ttlSeconds });
+  const scopes: TokenScope[] = input.scopes.includes('mcp:full') ? ['mcp:full'] : input.scopes as TokenScope[];
+  const accountIds = scopes.includes('mcp:full') ? data.accounts.map((account) => account.id) : accounts.map((account) => account.id);
+  const result = await issueToken({ name: input.name, scopes, accountIds, ttlSeconds: input.ttlSeconds });
   res.status(201).json({ token: result.raw, detail: publicDeveloperToken(result.token, data.accounts) });
 }));
 
