@@ -6,7 +6,7 @@ const errorResponse = (description: string) => ({
 const pageParameters = [
   { name: 'limit', in: 'query', description: '每页数量，默认 25，最大 100', schema: { type: 'integer', minimum: 1, maximum: 100, default: 25 } },
   { name: 'cursor', in: 'query', description: '上一页返回的不透明游标', schema: { type: 'string' } },
-  { name: 'mailboxRole', in: 'query', description: '邮箱文件夹角色', schema: { type: 'string', enum: ['inbox', 'sent', 'archive', 'trash'] } },
+  { name: 'mailboxRole', in: 'query', description: '邮箱文件夹角色', schema: { type: 'string', enum: ['inbox', 'sent', 'archive', 'trash', 'custom'] } },
   { name: 'unread', in: 'query', description: '按未读状态筛选', schema: { type: 'boolean' } },
   { name: 'since', in: 'query', description: '包含该时间之后的邮件', schema: { type: 'string', format: 'date-time' } },
   { name: 'before', in: 'query', description: '包含该时间之前的邮件', schema: { type: 'string', format: 'date-time' } },
@@ -51,7 +51,7 @@ export const gatewayOpenApi = {
         type: 'object', required: ['id', 'accountEmail', 'folder', 'mailboxRole', 'from', 'to', 'subject', 'preview', 'date', 'unread', 'flagged', 'hasAttachments', 'attachments', 'labels'],
         properties: {
           id: { type: 'string' }, accountEmail: { type: 'string', format: 'email' }, folder: { type: 'string' },
-          mailboxRole: { type: 'string', enum: ['inbox', 'sent', 'archive', 'trash'] }, from: { $ref: '#/components/schemas/Address' },
+          mailboxRole: { type: 'string', enum: ['inbox', 'sent', 'archive', 'trash', 'custom'] }, from: { $ref: '#/components/schemas/Address' },
           to: { type: 'array', items: { $ref: '#/components/schemas/Address' } }, subject: { type: 'string' }, preview: { type: 'string' },
           date: { type: 'string', format: 'date-time' }, unread: { type: 'boolean' }, flagged: { type: 'boolean' }, hasAttachments: { type: 'boolean' },
           attachments: { type: 'array', items: { $ref: '#/components/schemas/Attachment' } }, labels: { type: 'array', items: { type: 'string' } },
