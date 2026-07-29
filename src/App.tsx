@@ -14,6 +14,7 @@ import { CreateTokenModal, TokenWorkspace } from './features/developer';
 
 type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
+type WorkspaceFolder = { group: string; name: string; unread: number; targets: Array<{ accountId: string; accountName: string; path: string }> };
 type MessageStats = {
   total: number;
   unread: number;
@@ -43,7 +44,7 @@ function App() {
   const [labelOpen, setLabelOpen] = useState(false);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState<string | null | undefined>(undefined);
-  const [activeMailbox, setActiveMailbox] = useState<{ accountId: string; path: string; name: string } | null>(null);
+  const [activeMailbox, setActiveMailbox] = useState<WorkspaceFolder | null>(null);
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [activeDraft, setActiveDraft] = useState<Draft | undefined>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -94,13 +95,26 @@ function App() {
   }, [notice]);
 
   const groups = useMemo(() => Array.from(new Set(accounts.map((account) => account.group))), [accounts]);
+  const workspaceFolders = useMemo(() => new Map(groups.map((group) => {
+    const merged = new Map<string, WorkspaceFolder>();
+    for (const account of accounts.filter((item) => item.group === group)) {
+      for (const mailbox of account.mailboxes.filter((item) => item.selectable && !['\\Inbox', '\\Sent', '\\Archive', '\\All'].includes(item.specialUse ?? ''))) {
+        const key = mailbox.name.toLocaleLowerCase();
+        const current = merged.get(key) ?? { group, name: mailbox.name, unread: 0, targets: [] };
+        current.unread += mailbox.unread ?? 0;
+        current.targets.push({ accountId: account.id, accountName: account.displayName, path: mailbox.path });
+        merged.set(key, current);
+      }
+    }
+    return [group, Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))] as const;
+  })), [accounts, groups]);
   const messageQuery = useMemo(() => {
     const params = new URLSearchParams();
     if (accountFilter !== 'all') params.set('accountId', accountFilter);
     if (groupFilter) params.set('group', groupFilter);
     if (search.trim()) params.set('q', search.trim());
     if (view === 'starred') params.set('flagged', 'true');
-    if (view === 'folder' && activeMailbox) params.set('mailbox', activeMailbox.path);
+    if (view === 'folder' && activeMailbox) { params.set('group', activeMailbox.group); params.set('mailboxName', activeMailbox.name); }
     else {
       const mailboxRole: MailboxRole = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : 'inbox';
       params.set('mailboxRole', mailboxRole);
@@ -151,12 +165,12 @@ function App() {
   useEffect(() => {
     if (view !== 'folder' || !activeMailbox) return;
     let cancelled = false; setSyncing(true);
-    void api(`/api/accounts/${activeMailbox.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: activeMailbox.path }) }).then(() => {
+    void Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) }))).then(() => {
       if (!cancelled) { void load(); setMessageRevision((value) => value + 1); }
     }).catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
       .finally(() => { if (!cancelled) setSyncing(false); });
     return () => { cancelled = true; };
-  }, [view, activeMailbox?.accountId, activeMailbox?.path]);
+  }, [view, activeMailbox]);
 
   useEffect(() => {
     if (!selected || selected.text !== undefined) return;
@@ -188,7 +202,7 @@ function App() {
     setSyncing(true);
     try {
       const role = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : view === 'inbox' || view === 'starred' || view === 'snoozed' ? 'inbox' : null;
-      if (view === 'folder' && activeMailbox) await api(`/api/accounts/${activeMailbox.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: activeMailbox.path }) });
+      if (view === 'folder' && activeMailbox) await Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) })));
       else if (role) await api(role === 'inbox' ? '/api/sync' : `/api/mailboxes/${role}/sync`, { method: 'POST' });
       await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: '缓存已更新' });
     }
@@ -288,8 +302,8 @@ function App() {
     setView(nextView); setAccountFilter(nextAccount); setGroupFilter(nextGroup); setActiveLabel(null); setActiveMailbox(null); setSidebarOpen(false); setSelectedId(null);
   }
 
-  function selectMailbox(accountId: string, path: string, name: string) {
-    setView('folder'); setAccountFilter(accountId); setGroupFilter(null); setActiveLabel(null); setActiveMailbox({ accountId, path, name }); setSidebarOpen(false); setSelectedId(null);
+  function selectMailbox(folder: WorkspaceFolder) {
+    setView('folder'); setAccountFilter('all'); setGroupFilter(null); setActiveLabel(null); setActiveMailbox(folder); setSidebarOpen(false); setSelectedId(null);
   }
 
   function selectLabel(label: string) { setView('inbox'); setAccountFilter('all'); setGroupFilter(null); setActiveLabel(label); setSidebarOpen(false); setSelectedId(null); }
@@ -330,9 +344,11 @@ function App() {
       </nav>
       <div className="section-label"><span>工作空间</span><button title="新增工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(null)}><Plus size={15} /></button></div>
       <nav className="nav-block groups">
-        {groups.map((group, index) => <div className="workspace-row" key={group}><button className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><span className={`group-symbol group-${index % 4}`} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button><button className="workspace-edit" title={`编辑工作空间 ${group}`} aria-label={`编辑工作空间 ${group}`} onClick={() => setWorkspaceOpen(group)}><PencilSimple size={14} /></button></div>)}
+        {groups.map((group, index) => <div className="workspace-group" key={group}>
+          <div className="workspace-row"><button className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><span className={`group-symbol group-${index % 4}`} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button><button className="workspace-edit" title={`编辑工作空间 ${group}`} aria-label={`编辑工作空间 ${group}`} onClick={() => setWorkspaceOpen(group)}><PencilSimple size={14} /></button></div>
+          <div className="workspace-mailboxes">{workspaceFolders.get(group)?.map((folder) => <button key={folder.name.toLocaleLowerCase()} data-icon-tone="info" className={view === 'folder' && activeMailbox?.group === group && activeMailbox.name.toLocaleLowerCase() === folder.name.toLocaleLowerCase() ? 'active' : ''} onClick={() => selectMailbox(folder)} title={folder.targets.map((target) => `${target.accountName} · ${target.path}`).join('\n')}><Folder size={15} /><span>{folder.name}<small>{folder.targets.length > 1 ? `${folder.targets.length} 个邮箱` : folder.targets[0]?.accountName}</small></span><b>{folder.unread || ''}</b></button>)}</div>
+        </div>)}
       </nav>
-      {accounts.some((account) => account.mailboxes.some((mailbox) => mailbox.selectable && !['\\Inbox', '\\Sent', '\\Archive', '\\All'].includes(mailbox.specialUse ?? ''))) && <><div className="section-label"><span>邮箱文件夹</span></div><nav className="nav-block mailbox-nav">{accounts.map((account) => account.mailboxes.filter((mailbox) => mailbox.selectable && !['\\Inbox', '\\Sent', '\\Archive', '\\All'].includes(mailbox.specialUse ?? '')).map((mailbox) => <button key={`${account.id}:${mailbox.path}`} data-icon-tone="info" className={view === 'folder' && activeMailbox?.accountId === account.id && activeMailbox.path === mailbox.path ? 'active' : ''} onClick={() => selectMailbox(account.id, mailbox.path, mailbox.name)} title={`${account.displayName} · ${mailbox.path}`}><Folder size={16} /><span>{mailbox.name}<small>{account.displayName}</small></span><b>{mailbox.unread || ''}</b></button>))}</nav></>}
       {labels.length > 0 && <><div className="section-label"><span>邮件标签</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} data-icon-tone="info" className={activeLabel === label ? 'active' : ''} onClick={() => selectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
       <div className="sidebar-spacer" />
       <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => selectScope('tokens')}><Code size={19} /><span><strong>开发者网关</strong><small>Token 与邮件 API</small></span><ArrowRight size={16} /></button>

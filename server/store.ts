@@ -62,6 +62,10 @@ export class SQLiteStore {
     if (input.hasAttachments) where.push('m.has_attachments = 1');
     if (input.mailboxRole) { where.push('m.mailbox_role = ?'); values.push(input.mailboxRole); }
     if (input.mailbox) { where.push('m.mailbox = ?'); values.push(input.mailbox); }
+    if (input.mailboxName) {
+      where.push("EXISTS (SELECT 1 FROM json_each(a.mailboxes_json) folder WHERE lower(json_extract(folder.value, '$.name')) = lower(?) AND json_extract(folder.value, '$.path') = m.mailbox)");
+      values.push(input.mailboxName);
+    }
     if (input.snoozed === true) where.push("m.snoozed_until IS NOT NULL AND m.snoozed_until > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')");
     else if (input.mailboxRole === 'inbox') where.push("(m.snoozed_until IS NULL OR m.snoozed_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))");
     if (input.label) { where.push('EXISTS (SELECT 1 FROM json_each(m.labels_json) WHERE value = ?)'); values.push(input.label); }
