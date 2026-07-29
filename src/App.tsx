@@ -344,7 +344,7 @@ function App() {
         <button data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => selectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
         <button data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => selectScope('archive')}><Archive size={19} /><span>归档</span></button>
       </nav>
-      <section className="workspace-section"><div className="section-label"><span>工作空间</span><button className="workspace-add" title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(null)}><FolderSimplePlus size={17} /></button></div>
+      <section className="workspace-section"><div className="section-label"><span>工作空间</span><button className="workspace-add" title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(null)}><FolderSimplePlus size={16} /></button></div>
         <nav className="nav-block groups workspace-list">
           {groups.map((group) => {
             const folders = workspaceFolders.get(group) ?? [];
