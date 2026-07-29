@@ -5,6 +5,7 @@ import { api } from './api';
 import type { Account, DeveloperToken, Draft, MailboxRole, Message } from './types';
 import type { MailNotification, Notice } from './app-model';
 import { AccountProviderMark, ProviderIcon, providerLabel } from './components/shared';
+import { AppInput } from './components/form-controls';
 import { VirtualMessageList, MessageReader } from './features/mail';
 import { AddAccountModal, AccountSettingsModal } from './features/accounts';
 import { ComposeModal, DraftWorkspace } from './features/compose';
@@ -315,7 +316,7 @@ function App() {
     <main className="workspace">
       <header className="topbar">
         <button className="sidebar-trigger" aria-label="打开侧栏" onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
-        <div className="search-box"><MagnifyingGlass size={18} /><input ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" /><kbd>Ctrl K</kbd></div>
+        <AppInput className="search-box" contentBefore={<MagnifyingGlass size={18} />} contentAfter={<kbd>Ctrl K</kbd>} ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" aria-label="搜索当前范围内的邮件" />
         <button className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '同步中' : '同步'}</span></button>
         <button className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
       </header>
