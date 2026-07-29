@@ -1,0 +1,5 @@
+export function oauthCallbackHtml(payload: { success: boolean; accountId?: string; message: string; warning?: string }) {
+  const targetOrigin = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+  const serialized = JSON.stringify({ source: 'imail-oauth', ...payload }).replace(/</g, '\\u003c');
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>iMail OAuth</title><style>body{font-family:system-ui;background:#edf3f1;color:#18302a;display:grid;place-items:center;min-height:100vh;margin:0}.box{background:white;padding:32px;border-radius:18px;box-shadow:0 20px 60px #163a3022;text-align:center;max-width:420px}h1{font-size:22px}p{color:#647b74;line-height:1.6}</style></head><body><div class="box"><h1>${payload.success ? payload.warning ? '授权已保存' : '邮箱已连接' : '连接未完成'}</h1><p>${payload.message.replace(/[<>&]/g, '')}</p><p>可以关闭此窗口并返回 iMail。</p></div><script>if(window.opener){window.opener.postMessage(${serialized},${JSON.stringify(targetOrigin)});setTimeout(()=>window.close(),900)}</script></body></html>`;
+}
