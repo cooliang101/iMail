@@ -1,5 +1,6 @@
 export type ProviderId = 'outlook' | 'gmail' | 'qq' | 'yahoo' | 'hotmail' | 'icloud' | 'custom';
 export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'trash' | 'custom';
+export type WorkspaceIconId = 'folder' | 'briefcase' | 'building' | 'home' | 'users' | 'code' | 'heart' | 'star';
 
 export type MailboxFolder = {
   path: string;
@@ -38,6 +39,7 @@ export type MailAccount = {
   email: string;
   displayName: string;
   group: string;
+  groupIcon?: WorkspaceIconId;
   color: string;
   settings: MailSettings;
   encryptedSecret: string;

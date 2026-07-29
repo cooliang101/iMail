@@ -56,7 +56,7 @@ describe('SQLiteStore', () => {
 
   it('round-trips accounts, nested messages, attachments and normalized token relations', async () => {
     const { store } = await temporaryStore();
-    const expected = { accounts: [account({ lastSyncAt: '2026-07-28T02:00:00.000Z' })], messages: [message()], tokens: [token({ lastUsedAt: '2026-07-28T03:00:00.000Z' })], drafts: [] };
+    const expected = { accounts: [account({ lastSyncAt: '2026-07-28T02:00:00.000Z', groupIcon: 'briefcase' })], messages: [message()], tokens: [token({ lastUsedAt: '2026-07-28T03:00:00.000Z' })], drafts: [] };
     await store.update((data) => { Object.assign(data, expected); });
     expect(await store.read()).toEqual(expected);
   });
