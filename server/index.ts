@@ -5,7 +5,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { encryptSecret } from './crypto.js';
-import { sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
+import { moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
 import { beginOAuth, beginOAuthReconnect, completeOAuth, oauthCallbackHtml, oauthProviderCatalog, validateStoredAccountConnection, type OAuthProviderKey } from './oauth.js';
 import { settingsFor } from './providers.js';
 import { getCachedMessage, getMessageStats, listCachedMessages, readStore, updateStore } from './store.js';
@@ -212,6 +212,18 @@ app.patch('/api/messages/:id', asyncRoute(async (req, res) => {
     Object.assign(updated, input);
   });
   res.json({ message: updated });
+}));
+
+app.post('/api/messages/:id/move', asyncRoute(async (req, res) => {
+  const { destination } = z.object({ destination: z.enum(['archive', 'trash']) }).parse(req.body);
+  const result = await moveRemoteMessage(String(req.params.id), destination);
+  let moved;
+  await updateStore((data) => {
+    moved = data.messages.find((item) => item.id === req.params.id);
+    if (!moved) throw new Error('邮件不存在');
+    data.messages = data.messages.filter((item) => item.id !== req.params.id);
+  });
+  res.json({ message: moved, destination, mailbox: result.mailbox });
 }));
 
 const sendSchema = z.object({ accountId: z.string().uuid(), to: z.array(z.string().email()).min(1), cc: z.array(z.string().email()).optional(), subject: z.string().min(1), text: z.string().min(1), html: z.string().optional() });

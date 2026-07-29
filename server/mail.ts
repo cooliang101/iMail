@@ -228,6 +228,38 @@ export async function updateRemoteMessageFlags(messageId: string, input: { unrea
   }
 }
 
+export async function moveRemoteMessage(messageId: string, destination: 'archive' | 'trash'): Promise<{ mailbox: string }> {
+  const store = await readStore();
+  const message = store.messages.find((item) => item.id === messageId);
+  if (!message) throw new Error('邮件不存在');
+  const account = store.accounts.find((item) => item.id === message.accountId);
+  if (!account) throw new Error('邮箱账户不存在');
+
+  const secret = await resolveAccountSecret(account);
+  const client = new ImapFlow({
+    host: account.settings.imapHost,
+    port: account.settings.imapPort,
+    secure: account.settings.imapSecure,
+    auth: authFor(account, secret),
+    logger: false,
+  });
+  try {
+    await client.connect();
+    const mailboxes = await client.list();
+    const specialUse = destination === 'archive' ? '\\Archive' : '\\Trash';
+    const target = mailboxes.find((mailbox) => mailbox.specialUse === specialUse);
+    if (!target) throw new Error(`服务商没有返回${destination === 'archive' ? '归档' : '垃圾箱'}文件夹`);
+    await client.mailboxOpen(message.mailbox, { readOnly: false });
+    const moved = await client.messageMove(message.uid, target.path, { uid: true });
+    if (!moved) throw new Error('服务商未确认邮件移动操作');
+    return { mailbox: target.path };
+  } catch (error) {
+    throw describeProtocolError('IMAP', error);
+  } finally {
+    await client.logout().catch(() => undefined);
+  }
+}
+
 export async function sendMessage(input: {
   accountId: string;
   to: string[];

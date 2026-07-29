@@ -85,6 +85,7 @@ function App() {
   const [messageTotal, setMessageTotal] = useState(0);
   const [messagesHasMore, setMessagesHasMore] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messageActionBusy, setMessageActionBusy] = useState(false);
   const [messageRevision, setMessageRevision] = useState(0);
   const [messageStats, setMessageStats] = useState<MessageStats>({ total: 0, unread: 0, byAccount: [], byGroup: [] });
   const messageQueryRef = useRef('');
@@ -188,13 +189,14 @@ function App() {
     }
   }
 
-  function adjustUnreadStats(accountId: string, delta: number) {
+  function adjustMessageStats(accountId: string, totalDelta: number, unreadDelta: number) {
     const account = accounts.find((item) => item.id === accountId);
     setMessageStats((current) => ({
       ...current,
-      unread: Math.max(0, current.unread + delta),
-      byAccount: current.byAccount.map((item) => item.accountId === accountId ? { ...item, unread: Math.max(0, item.unread + delta) } : item),
-      byGroup: current.byGroup.map((item) => item.group === account?.group ? { ...item, unread: Math.max(0, item.unread + delta) } : item),
+      total: Math.max(0, current.total + totalDelta),
+      unread: Math.max(0, current.unread + unreadDelta),
+      byAccount: current.byAccount.map((item) => item.accountId === accountId ? { ...item, total: Math.max(0, item.total + totalDelta), unread: Math.max(0, item.unread + unreadDelta) } : item),
+      byGroup: current.byGroup.map((item) => item.group === account?.group ? { ...item, total: Math.max(0, item.total + totalDelta), unread: Math.max(0, item.unread + unreadDelta) } : item),
     }));
   }
 
@@ -204,12 +206,40 @@ function App() {
     if (!message?.unread) return;
 
     setRealMessages((current) => current.map((item) => item.id === id ? { ...item, unread: false } : item));
-    adjustUnreadStats(message.accountId, -1);
+    adjustMessageStats(message.accountId, 0, -1);
     void api(`/api/messages/${id}`, { method: 'PATCH', body: JSON.stringify({ unread: false }) }).catch((error) => {
       setRealMessages((current) => current.map((item) => item.id === id ? { ...item, unread: true } : item));
-      adjustUnreadStats(message.accountId, 1);
+      adjustMessageStats(message.accountId, 0, 1);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件已读状态更新失败' });
     });
+  }
+
+  async function moveSelected(destination: 'archive' | 'trash') {
+    if (!selected || messageActionBusy) return;
+    const message = selected;
+    const index = messages.findIndex((item) => item.id === message.id);
+    const nextId = messages[index + 1]?.id ?? messages[index - 1]?.id ?? null;
+    const unreadDelta = message.unread ? -1 : 0;
+    setMessageActionBusy(true);
+    setRealMessages((current) => current.filter((item) => item.id !== message.id));
+    setMessageTotal((current) => Math.max(0, current - 1));
+    adjustMessageStats(message.accountId, -1, unreadDelta);
+    setSelectedId(nextId);
+    try {
+      await api(`/api/messages/${message.id}/move`, { method: 'POST', body: JSON.stringify({ destination }) });
+      setNotice({ kind: 'success', text: destination === 'archive' ? '邮件已归档' : '邮件已移至垃圾箱' });
+    } catch (error) {
+      setRealMessages((current) => {
+        if (current.some((item) => item.id === message.id)) return current;
+        const restored = [...current]; restored.splice(Math.min(index, restored.length), 0, message); return restored;
+      });
+      setMessageTotal((current) => current + 1);
+      adjustMessageStats(message.accountId, 1, -unreadDelta);
+      setSelectedId(message.id);
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件移动失败' });
+    } finally {
+      setMessageActionBusy(false);
+    }
   }
 
   function selectScope(nextView: View, nextAccount = 'all', nextGroup: string | null = null) {
@@ -277,6 +307,7 @@ function App() {
           </section>
           <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => setComposeOpen(true)}
             onToggleFlag={() => void toggleSelectedFlag()}
+            onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}
             onPrevious={() => { if (selectedIndex > 0) selectMessage(messages[selectedIndex - 1].id); }}
             onNext={() => { if (selectedIndex >= 0 && selectedIndex < messages.length - 1) selectMessage(messages[selectedIndex + 1].id); }}
             hasPrevious={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < messages.length - 1} />
@@ -339,12 +370,12 @@ function VirtualMessageList({ messages, accounts, selectedId, ready, loading, ha
   </div>;
 }
 
-function MessageReader({ message, account, onReply, onToggleFlag, onPrevious, onNext, hasPrevious, hasNext }: {
-  message?: Message; account?: Account; onReply: () => void; onToggleFlag: () => void; onPrevious: () => void; onNext: () => void; hasPrevious: boolean; hasNext: boolean;
+function MessageReader({ message, account, onReply, onToggleFlag, onArchive, onDelete, onPrevious, onNext, hasPrevious, hasNext, actionBusy }: {
+  message?: Message; account?: Account; onReply: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onPrevious: () => void; onNext: () => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
 }) {
   if (!message || !account) return <section className="reader empty-reader"><Envelope size={54} weight="duotone" /><h2>选择一封邮件开始阅读</h2><p>来自所有账户的邮件都会汇总在这里。</p></section>;
   return <article className="reader">
-    <div className="reader-actions"><div><button title="归档"><Archive size={18} /></button><button title="删除"><Trash size={18} /></button><button title="稍后处理"><Clock size={18} /></button></div><div><button title="上一封邮件" aria-label="上一封邮件" disabled={!hasPrevious} onClick={onPrevious}><ArrowLeft size={18} /></button><button title="下一封邮件" aria-label="下一封邮件" disabled={!hasNext} onClick={onNext}><ArrowRight size={18} /></button></div></div>
+    <div className="reader-actions"><div><button title="归档" aria-label="归档邮件" disabled={actionBusy} onClick={onArchive}><Archive size={18} /></button><button title="删除" aria-label="删除邮件" disabled={actionBusy} onClick={onDelete}><Trash size={18} /></button><button title="稍后处理"><Clock size={18} /></button></div><div><button title="上一封邮件" aria-label="上一封邮件" disabled={actionBusy || !hasPrevious} onClick={onPrevious}><ArrowLeft size={18} /></button><button title="下一封邮件" aria-label="下一封邮件" disabled={actionBusy || !hasNext} onClick={onNext}><ArrowRight size={18} /></button></div></div>
     <div className="reader-content">
       <div className="reader-context">
         <span className="reader-account" style={{ '--account-color': account.color } as React.CSSProperties}><AccountProviderMark provider={account.provider} className="reader-provider-mark" /><strong>{account.displayName}</strong><small>{account.email}</small></span>

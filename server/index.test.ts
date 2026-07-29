@@ -7,7 +7,11 @@ import type { MailAccount } from './types.js';
 
 vi.mock('./mail.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./mail.js')>();
-  return { ...actual, updateRemoteMessageFlags: vi.fn(async () => undefined) };
+  return {
+    ...actual,
+    updateRemoteMessageFlags: vi.fn(async () => undefined),
+    moveRemoteMessage: vi.fn(async (_messageId: string, destination: 'archive' | 'trash') => ({ mailbox: destination === 'archive' ? 'Archive' : 'Trash' })),
+  };
 });
 
 let directory: string;
@@ -133,6 +137,13 @@ describe('iMail HTTP API', () => {
     expect(markedRead.body.message).toMatchObject({ id: 'message-lazy', unread: false });
     expect((await request('/api/message-stats')).body).toMatchObject({ total: 1, unread: 0, byAccount: [{ accountId: account.id, total: 1, unread: 0 }] });
     expect((await request('/api/messages?unread=true&limit=10&offset=0')).body).toMatchObject({ total: 0, messages: [] });
+    const archived = await request('/api/messages/message-lazy/move', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ destination: 'archive' }),
+    });
+    expect(archived.response.status).toBe(200);
+    expect(archived.body).toMatchObject({ destination: 'archive', mailbox: 'Archive', message: { id: 'message-lazy' } });
+    expect((await request('/api/messages/message-lazy')).response.status).toBe(404);
+    expect((await request('/api/message-stats')).body).toMatchObject({ total: 0, unread: 0 });
   });
 
   it('lets a developer token select a mailbox by route, email or provider', async () => {

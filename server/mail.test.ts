@@ -17,6 +17,8 @@ const state = vi.hoisted(() => ({
   sendMail: vi.fn(async () => ({ messageId: '<sent@example.com>', accepted: ['recipient@example.com'] })),
   messageFlagsAdd: vi.fn(async () => true),
   messageFlagsRemove: vi.fn(async () => true),
+  list: vi.fn(async () => [{ path: 'Archive', specialUse: '\\Archive' }, { path: 'Trash', specialUse: '\\Trash' }]),
+  messageMove: vi.fn(async () => ({ uidValidity: 1n, uidMap: new Map([[42, 84]]) })),
   simpleParser: vi.fn(async () => state.parsed),
 }));
 
@@ -35,6 +37,8 @@ vi.mock('imapflow', () => ({
     logout = state.logout;
     messageFlagsAdd = state.messageFlagsAdd;
     messageFlagsRemove = state.messageFlagsRemove;
+    list = state.list;
+    messageMove = state.messageMove;
     fetch(range: unknown, query: Record<string, unknown>, options?: Record<string, unknown>) {
       const index = state.fetchCalls.length;
       state.fetchCalls.push({ range, query, options });
@@ -51,7 +55,7 @@ vi.mock('nodemailer', () => ({
   }) },
 }));
 
-import { describeProtocolError, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
+import { describeProtocolError, moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
 
 function account(overrides: Partial<MailAccount> = {}): MailAccount {
   return {
@@ -69,6 +73,8 @@ beforeEach(() => {
   state.connect.mockResolvedValue(undefined); state.mailboxOpen.mockResolvedValue({ exists: 0, uidNext: 1 }); state.logout.mockResolvedValue(undefined);
   state.verify.mockResolvedValue(true); state.sendMail.mockResolvedValue({ messageId: '<sent@example.com>', accepted: ['recipient@example.com'] });
   state.messageFlagsAdd.mockResolvedValue(true); state.messageFlagsRemove.mockResolvedValue(true);
+  state.list.mockResolvedValue([{ path: 'Archive', specialUse: '\\Archive' }, { path: 'Trash', specialUse: '\\Trash' }]);
+  state.messageMove.mockResolvedValue({ uidValidity: 1n, uidMap: new Map([[42, 84]]) });
   state.parsed = {};
 });
 
@@ -120,6 +126,23 @@ describe('message synchronization', () => {
     await updateRemoteMessageFlags('cached-43', { unread: true, flagged: false });
     expect(state.messageFlagsRemove).toHaveBeenCalledWith(43, ['\\Seen'], { uid: true });
     expect(state.messageFlagsRemove).toHaveBeenCalledWith(43, ['\\Flagged'], { uid: true });
+  });
+
+  it('moves a cached message to the provider special-use archive folder', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'cached-42', accountId: configured.id, mailbox: 'INBOX', uid: 42, from: { name: '', address: '' }, to: [], subject: 'Cached', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [] }];
+    await expect(moveRemoteMessage('cached-42', 'archive')).resolves.toEqual({ mailbox: 'Archive' });
+    expect(state.list).toHaveBeenCalledOnce();
+    expect(state.mailboxOpen).toHaveBeenCalledWith('INBOX', { readOnly: false });
+    expect(state.messageMove).toHaveBeenCalledWith(42, 'Archive', { uid: true });
+  });
+
+  it('rejects a move when the provider does not expose the requested special-use folder', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'cached-42', accountId: configured.id, mailbox: 'INBOX', uid: 42, from: { name: '', address: '' }, to: [], subject: 'Cached', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [] }];
+    state.list.mockResolvedValueOnce([{ path: 'INBOX', specialUse: '\\Inbox' }]);
+    await expect(moveRemoteMessage('cached-42', 'trash')).rejects.toThrow('服务商没有返回垃圾箱文件夹');
+    expect(state.messageMove).not.toHaveBeenCalled();
   });
 
   it('maps IMAP messages, flags and attachment metadata into the cache', async () => {
