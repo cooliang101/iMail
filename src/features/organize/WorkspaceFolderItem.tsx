@@ -1,16 +1,11 @@
 import { Folder } from '@phosphor-icons/react';
+import type { WorkspaceFolder } from '../../app-model';
 
-export type WorkspaceFolder = {
-  group: string;
-  name: string;
-  unread: number;
-  targets: Array<{ accountId: string; accountName: string; path: string }>;
-};
-
-export function WorkspaceFolderItem({ folder, active, onSelect }: {
+export function WorkspaceFolderItem({ folder, active, onSelect, onContextMenu }: {
   folder: WorkspaceFolder;
   active: boolean;
   onSelect: (folder: WorkspaceFolder) => void;
+  onContextMenu?: (folder: WorkspaceFolder, point: { x: number; y: number }) => void;
 }) {
   const accountNames = Array.from(new Set(folder.targets.map((target) => target.accountName)));
   const firstAccount = accountNames[0] ?? '邮箱';
@@ -19,6 +14,7 @@ export function WorkspaceFolderItem({ folder, active, onSelect }: {
     data-icon-tone="info"
     className={active ? 'active' : ''}
     onClick={() => onSelect(folder)}
+    onContextMenu={(event) => { event.preventDefault(); onContextMenu?.(folder, { x: event.clientX, y: event.clientY }); }}
     title={folder.targets.map((target) => `${target.accountName} · ${target.path}`).join('\n')}
   >
     <Folder size={15} />

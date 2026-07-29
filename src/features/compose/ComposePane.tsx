@@ -25,14 +25,14 @@ function fileAsAttachment(file: File) {
 export type ComposePaneHandle = { close: () => Promise<void> };
 
 export const ComposePane = forwardRef<ComposePaneHandle, {
-  accounts: Account[]; contacts: Contact[]; mode: 'new' | 'reply' | 'forward'; original?: Message; draft?: Draft;
+  accounts: Account[]; contacts: Contact[]; mode: 'new' | 'reply' | 'forward'; initialAccountId?: string; original?: Message; draft?: Draft;
   onClose: () => void | Promise<void>; onSent: () => void | Promise<void>; onDraftSaved: (draft: Draft) => void;
-}>(function ComposePane({ accounts, contacts, mode, original, draft, onClose, onSent, onDraftSaved }, ref) {
+}>(function ComposePane({ accounts, contacts, mode, initialAccountId, original, draft, onClose, onSent, onDraftSaved }, ref) {
   const isReply = mode === 'reply'; const isForward = mode === 'forward';
   const initialSubject = draft?.subject ?? (original ? subjectWithPrefix(original.subject, isReply ? 'Re' : 'Fwd') : '');
   const quoteText = original ? `\n\n----- ${isForward ? '转发邮件' : '原邮件'} -----\n发件人：${original.from.name || original.from.address} <${original.from.address}>\n${original.text ?? ''}` : '';
   const initialText = draft?.text ?? quoteText;
-  const [accountId, setAccountId] = useState(draft?.accountId ?? original?.accountId ?? accounts[0]?.id ?? '');
+  const [accountId, setAccountId] = useState(draft?.accountId ?? original?.accountId ?? initialAccountId ?? accounts[0]?.id ?? '');
   const [to, setTo] = useState(draft?.to.join(', ') ?? (isReply ? original?.from.address ?? '' : ''));
   const [cc, setCc] = useState(draft?.cc.join(', ') ?? '');
   const [subject, setSubject] = useState(initialSubject);

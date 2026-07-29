@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@fluentui/react-components';
-import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
+import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Keyboard, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
 import { api } from './api';
 import type { Account, Contact, DeveloperToken, Draft, MailboxRole, Message } from './types';
-import type { MailNotification, Notice } from './app-model';
+import type { ContextTarget, MailNotification, Notice, ShortcutBindings, WorkspaceFolder } from './app-model';
 import { AccountProviderMark, ProviderIcon, providerLabel } from './components/shared';
 import { AppInput } from './components/form-controls';
 import { VirtualMessageList, MessageReader } from './features/mail';
 import { AddAccountModal, AccountSettingsModal } from './features/accounts';
 import { ComposePane, DraftWorkspace, type ComposePaneHandle } from './features/compose';
-import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal, type WorkspaceFolder } from './features/organize';
+import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal } from './features/organize';
 import { CreateTokenModal, TokenWorkspace } from './features/developer';
+import { isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKey, ShortcutSettingsModal } from './features/shortcuts';
+import { AppContextMenu } from './features/context-menu';
 
 type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
@@ -20,7 +22,6 @@ type MessageStats = {
   byAccount: Array<{ accountId: string; total: number; unread: number }>;
   byGroup: Array<{ group: string; total: number; unread: number }>;
 };
-
 function App() {
   const [realAccounts, setRealAccounts] = useState<Account[]>([]);
   const [realMessages, setRealMessages] = useState<Message[]>([]);
@@ -39,6 +40,9 @@ function App() {
   const [composeMode, setComposeMode] = useState<'new' | 'reply' | 'forward' | null>(null);
   const [tokenOpen, setTokenOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutSettingsOpen, setShortcutSettingsOpen] = useState(false);
+  const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(() => loadShortcutBindings());
+  const [contextTarget, setContextTarget] = useState<ContextTarget | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<MailNotification[]>([]);
   const [labelOpen, setLabelOpen] = useState(false);
@@ -48,6 +52,7 @@ function App() {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(() => new Set());
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [activeDraft, setActiveDraft] = useState<Draft | undefined>();
+  const [composeAccountId, setComposeAccountId] = useState<string | undefined>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -136,14 +141,6 @@ function App() {
   const visibleMessages = mailFilter === 'unread' ? messages.filter((message) => message.unread) : messages;
 
   useEffect(() => {
-    const focusSearch = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchInputRef.current?.focus(); }
-    };
-    window.addEventListener('keydown', focusSearch);
-    return () => window.removeEventListener('keydown', focusSearch);
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
     messageQueryRef.current = messageQuery;
     const timer = window.setTimeout(() => {
@@ -229,21 +226,33 @@ function App() {
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件更新失败' }); }
   }
 
-  async function markSelectedUnread() {
-    if (!selected || selected.unread) return;
-    try { await api(`/api/messages/${selected.id}`, { method: 'PATCH', body: JSON.stringify({ unread: true }) }); setRealMessages((current) => current.map((item) => item.id === selected.id ? { ...item, unread: true } : item)); if (selected.mailboxRole === 'inbox') adjustMessageStats(selected.accountId, 0, 1); setNotice({ kind: 'success', text: '邮件已标记为未读' }); }
-    catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '未读状态更新失败' }); }
+  async function setMessageUnread(message: Message, unread: boolean) {
+    if (message.unread === unread) return;
+    setRealMessages((current) => current.map((item) => item.id === message.id ? { ...item, unread } : item));
+    if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current + (unread ? 1 : -1)));
+    if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, unread ? 1 : -1);
+    try {
+      await api(`/api/messages/${message.id}`, { method: 'PATCH', body: JSON.stringify({ unread }) });
+      setNotice({ kind: 'success', text: unread ? '邮件已标记为未读' : '邮件已标记为已读' });
+    } catch (error) {
+      setRealMessages((current) => current.map((item) => item.id === message.id ? { ...item, unread: !unread } : item));
+      if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current + (unread ? -1 : 1)));
+      if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, unread ? -1 : 1);
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '已读状态更新失败' });
+    }
   }
 
-  async function toggleSelectedFlag() {
-    if (!selected) return;
-    const flagged = !selected.flagged;
-    setRealMessages((current) => current.map((message) => message.id === selected.id ? { ...message, flagged } : message));
+  async function markSelectedUnread() { if (selected) await setMessageUnread(selected, true); }
+
+  async function toggleSelectedFlag(target = selected) {
+    if (!target) return;
+    const flagged = !target.flagged;
+    setRealMessages((current) => current.map((message) => message.id === target.id ? { ...message, flagged } : message));
     try {
-      await api(`/api/messages/${selected.id}`, { method: 'PATCH', body: JSON.stringify({ flagged }) });
+      await api(`/api/messages/${target.id}`, { method: 'PATCH', body: JSON.stringify({ flagged }) });
       if (view === 'starred' && !flagged) setMessageRevision((value) => value + 1);
     } catch (error) {
-      setRealMessages((current) => current.map((message) => message.id === selected.id ? { ...message, flagged: !flagged } : message));
+      setRealMessages((current) => current.map((message) => message.id === target.id ? { ...message, flagged: !flagged } : message));
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '星标更新失败' });
     }
   }
@@ -276,9 +285,9 @@ function App() {
     });
   }
 
-  async function moveSelected(destination: 'archive' | 'trash') {
-    if (!selected || messageActionBusy) return;
-    const message = selected;
+  async function moveSelected(destination: 'archive' | 'trash', target = selected) {
+    if (!target || messageActionBusy) return;
+    const message = target;
     const index = messages.findIndex((item) => item.id === message.id);
     const nextId = messages[index + 1]?.id ?? messages[index - 1]?.id ?? null;
     const unreadDelta = message.unread ? -1 : 0;
@@ -314,6 +323,73 @@ function App() {
 
   function selectLabel(label: string) { setView('inbox'); setAccountFilter('all'); setGroupFilter(null); setActiveLabel(label); setSidebarOpen(false); setSelectedId(null); }
 
+  function focusSearch() {
+    const input = document.querySelector<HTMLInputElement>('.search-box input') ?? searchInputRef.current;
+    input?.focus(); input?.select();
+  }
+
+  function openCompose(accountId?: string) {
+    setComposeAccountId(accountId); setActiveDraft(undefined); setComposeMode('new'); setView('inbox'); setSidebarOpen(false);
+  }
+
+  function saveShortcutBindings(bindings: ShortcutBindings) {
+    setShortcutBindings(bindings);
+    localStorage.setItem(shortcutStorageKey, JSON.stringify(bindings));
+    setNotice({ kind: 'success', text: '快捷键已保存' });
+  }
+
+  async function syncAccount(accountId: string) {
+    setSyncing(true);
+    try { await api(`/api/accounts/${accountId}/sync`, { method: 'POST' }); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: '邮箱已同步' }); }
+    catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮箱同步失败' }); }
+    finally { setSyncing(false); }
+  }
+
+  async function syncWorkspace(group: string) {
+    setSyncing(true);
+    try { await Promise.all(accounts.filter((account) => account.group === group).map((account) => api(`/api/accounts/${account.id}/sync`, { method: 'POST' }))); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: `${group} 已同步` }); }
+    catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '工作空间同步失败' }); }
+    finally { setSyncing(false); }
+  }
+
+  async function syncFolder(folder: WorkspaceFolder) {
+    setSyncing(true);
+    try { await Promise.all(folder.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) }))); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: `${folder.name} 已同步` }); }
+    catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); }
+    finally { setSyncing(false); }
+  }
+
+  async function openMessageContext(message: Message, point: { x: number; y: number }) {
+    if (composeMode) await composePaneRef.current?.close();
+    setSelectedId(message.id); setContextTarget({ kind: 'message', messageId: message.id, ...point });
+  }
+
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || addOpen || tokenOpen || settingsOpen || notificationsOpen || labelOpen || snoozeOpen || workspaceOpen !== undefined || shortcutSettingsOpen) return;
+      const definition = shortcutDefinitions.find(({ id }) => shortcutMatches(event, shortcutBindings[id]));
+      if (!definition) return;
+      if (isEditableShortcutTarget(event.target) && definition.id !== 'focusSearch' && definition.id !== 'openShortcutSettings') return;
+      event.preventDefault(); setContextTarget(null);
+      switch (definition.id) {
+        case 'focusSearch': focusSearch(); break;
+        case 'compose': openCompose(activeAccount?.id); break;
+        case 'sync': void syncAll(); break;
+        case 'nextMessage': if (selectedIndex >= 0 && selectedIndex < messages.length - 1) void selectMessage(messages[selectedIndex + 1].id); break;
+        case 'previousMessage': if (selectedIndex > 0) void selectMessage(messages[selectedIndex - 1].id); break;
+        case 'reply': if (selected) { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); } break;
+        case 'forward': if (selected) { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); } break;
+        case 'toggleStar': void toggleSelectedFlag(); break;
+        case 'markUnread': void markSelectedUnread(); break;
+        case 'archive': void moveSelected('archive'); break;
+        case 'delete': void moveSelected('trash'); break;
+        case 'openShortcutSettings': setShortcutSettingsOpen(true); break;
+      }
+    };
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  });
+
   const scopeTitle = activeMailbox?.name ?? (activeLabel ? `标签 · ${activeLabel}` : view === 'starred' ? '星标邮件' : view === 'sent' ? '已发送' : view === 'snoozed' ? '稍后处理' : view === 'archive' ? '归档' : '统一收件箱');
 
   return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -322,9 +398,9 @@ function App() {
     <aside className="account-rail" aria-label="邮箱账户">
       <button className="brand-mark" aria-label="iMail"><img src="/brand/imail-app-icon.png" alt="" /></button>
       <div className="rail-accounts">
-        <button title="聚合所有邮箱" aria-label="聚合所有邮箱" className={`rail-avatar rail-all ${accountFilter === 'all' ? 'active' : ''}`} onClick={() => selectScope('inbox')}><Tray size={20} /></button>
+        <button title="聚合所有邮箱" aria-label="聚合所有邮箱" className={`rail-avatar rail-all ${accountFilter === 'all' ? 'active' : ''}`} onClick={() => selectScope('inbox')} onContextMenu={(event) => { event.preventDefault(); setContextTarget({ kind: 'background', x: event.clientX, y: event.clientY }); }}><Tray size={20} /></button>
         {accounts.map((account) =>
-          <button key={account.id} title={`${providerLabel[account.provider]} · ${account.displayName} · ${account.email}`} aria-label={`${providerLabel[account.provider]}，${account.displayName}，${account.email}`} className={`rail-avatar rail-account provider-${account.provider} ${accountFilter === account.id ? 'active' : ''}`} style={{ '--avatar-color': account.color } as React.CSSProperties} onClick={() => selectScope('inbox', account.id)}>
+          <button key={account.id} title={`${providerLabel[account.provider]} · ${account.displayName} · ${account.email}`} aria-label={`${providerLabel[account.provider]}，${account.displayName}，${account.email}`} className={`rail-avatar rail-account provider-${account.provider} ${accountFilter === account.id ? 'active' : ''}`} style={{ '--avatar-color': account.color } as React.CSSProperties} onClick={() => selectScope('inbox', account.id)} onContextMenu={(event) => { event.preventDefault(); setContextTarget({ kind: 'account', accountId: account.id, x: event.clientX, y: event.clientY }); }}>
             <ProviderIcon provider={account.provider} /><span className={`status status-${account.status}`} />
           </button>)}
         <button title="添加邮箱" aria-label="添加邮箱" className="rail-avatar rail-add" onClick={() => setAddOpen(true)}><Plus size={19} /></button>
@@ -334,7 +410,7 @@ function App() {
 
     <aside className={`primary-sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-heading"><div><strong>iMail</strong><span>统一通信工作台</span></div><button className="mobile-close" aria-label="关闭侧栏" onClick={() => setSidebarOpen(false)}><X size={20} /></button></div>
-      <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => { setActiveDraft(undefined); setComposeMode('new'); setView('inbox'); setSidebarOpen(false); }}>写邮件</Button>
+      <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => openCompose(activeAccount?.id)}>写邮件</Button>
       <div className="mobile-account-controls" aria-label="移动端邮箱账户">
         <button className={accountFilter === 'all' ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={18} /><span><strong>全部邮箱</strong><small>{accounts.length} 个账户</small></span></button>
         {accounts.map((account) => <button key={account.id} className={accountFilter === account.id ? 'active' : ''} onClick={() => selectScope('inbox', account.id)}><AccountProviderMark provider={account.provider} /><span><strong>{account.displayName}</strong><small>{account.email}</small></span></button>)}
@@ -356,8 +432,8 @@ function App() {
             const visibleFolders = expanded ? folders : folders.slice(0, 3);
             const icon = accounts.find((account) => account.group === group)?.groupIcon ?? 'folder';
             return <div className="workspace-group" key={group}>
-              <div className="workspace-row"><button className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><WorkspaceIcon icon={icon} size={17} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button><button className="workspace-edit" title={`编辑工作空间 ${group}`} aria-label={`编辑工作空间 ${group}`} onClick={() => setWorkspaceOpen(group)}><PencilSimple size={14} /></button></div>
-              <div className="workspace-mailboxes">{visibleFolders.map((folder) => <WorkspaceFolderItem key={folder.name.toLocaleLowerCase()} folder={folder} active={view === 'folder' && activeMailbox?.group === group && activeMailbox.name.toLocaleLowerCase() === folder.name.toLocaleLowerCase()} onSelect={selectMailbox} />)}{folders.length > 3 && <button className={`workspace-folder-toggle ${expanded ? 'is-expanded' : ''}`} onClick={() => setExpandedWorkspaces((current) => { const next = new Set(current); if (expanded) next.delete(group); else next.add(group); return next; })}><CaretDown size={14} /><span>{expanded ? '收起' : `更多 ${folders.length - 3}`}</span></button>}</div>
+              <div className="workspace-row"><button className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)} onContextMenu={(event) => { event.preventDefault(); setContextTarget({ kind: 'workspace', group, x: event.clientX, y: event.clientY }); }}><WorkspaceIcon icon={icon} size={17} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button><button className="workspace-edit" title={`编辑工作空间 ${group}`} aria-label={`编辑工作空间 ${group}`} onClick={() => setWorkspaceOpen(group)}><PencilSimple size={14} /></button></div>
+              <div className="workspace-mailboxes">{visibleFolders.map((folder) => <WorkspaceFolderItem key={folder.name.toLocaleLowerCase()} folder={folder} active={view === 'folder' && activeMailbox?.group === group && activeMailbox.name.toLocaleLowerCase() === folder.name.toLocaleLowerCase()} onSelect={selectMailbox} onContextMenu={(target, point) => setContextTarget({ kind: 'folder', folder: target, ...point })} />)}{folders.length > 3 && <button className={`workspace-folder-toggle ${expanded ? 'is-expanded' : ''}`} onClick={() => setExpandedWorkspaces((current) => { const next = new Set(current); if (expanded) next.delete(group); else next.add(group); return next; })}><CaretDown size={14} /><span>{expanded ? '收起' : `更多 ${folders.length - 3}`}</span></button>}</div>
             </div>;
           })}
         </nav>
@@ -372,8 +448,9 @@ function App() {
       <header className="topbar">
         <button className="sidebar-trigger desktop-sidebar-trigger" title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((current) => !current)}><SidebarSimple size={20} /></button>
         <button className="sidebar-trigger mobile-sidebar-trigger" title="打开侧栏" aria-label="打开侧栏" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
-        <AppInput className="search-box" contentBefore={<MagnifyingGlass size={18} />} contentAfter={<kbd>Ctrl K</kbd>} ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" aria-label="搜索当前范围内的邮件" />
+        <AppInput className="search-box" contentBefore={<MagnifyingGlass size={18} />} contentAfter={<kbd>{shortcutLabel(shortcutBindings.focusSearch)}</kbd>} ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" aria-label="搜索当前范围内的邮件" />
         <button data-icon-tone="primary" className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '同步中' : '同步'}</span></button>
+        <button data-icon-tone="accent" className="icon-button" title="快捷键设置" aria-label="打开快捷键设置" onClick={() => setShortcutSettingsOpen(true)}><Keyboard size={19} /></button>
         <button data-icon-tone="info" className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
       </header>
 
@@ -391,9 +468,9 @@ function App() {
               <button data-icon-tone="info" title={selected ? '管理所选邮件标签' : '请先选择一封邮件'} aria-label="管理邮件标签" disabled={!selected} onClick={() => setLabelOpen(true)}><Tag size={18} /></button>
             </div>
             <div className="message-filters"><button className={mailFilter === 'all' ? 'active' : ''} onClick={() => setMailFilter('all')}>全部</button><button className={mailFilter === 'unread' ? 'active' : ''} onClick={() => setMailFilter('unread')}>未读</button><button className={mailFilter === 'attachments' ? 'active' : ''} onClick={() => setMailFilter('attachments')}>有附件</button></div>
-            <VirtualMessageList messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
+            <VirtualMessageList messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
           </section>}
-          {composeMode ? <ComposePane ref={composePaneRef} key={`${composeMode}-${activeDraft?.id ?? selected?.id ?? 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' ? <section className="composer-pane composer-welcome"><PencilSimple size={48} weight="duotone" /><h2>选择草稿继续编辑</h2><p>修改会自动保存，也可以直接新建一封邮件。</p><button onClick={() => { setActiveDraft(undefined); setComposeMode('new'); }}>新建邮件</button></section> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => { setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)}
+          {composeMode ? <ComposePane ref={composePaneRef} key={`${composeMode}-${activeDraft?.id ?? selected?.id ?? composeAccountId ?? 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} initialAccountId={composeAccountId} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setComposeAccountId(undefined); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setComposeAccountId(undefined); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' ? <section className="composer-pane composer-welcome"><PencilSimple size={48} weight="duotone" /><h2>选择草稿继续编辑</h2><p>修改会自动保存，也可以直接新建一封邮件。</p><button onClick={() => openCompose(activeAccount?.id)}>新建邮件</button></section> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}
@@ -406,10 +483,21 @@ function App() {
     {addOpen && <AddAccountModal accounts={accounts} onClose={() => setAddOpen(false)} onAdded={async (result) => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice(result?.warning ? { kind: 'error', text: `授权已保存，连接验证失败：${result.warning}` } : { kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} />}
     {tokenOpen && <CreateTokenModal accounts={realAccounts} onClose={() => setTokenOpen(false)} onCreated={async () => { await load(); }} />}
     {settingsOpen && <AccountSettingsModal accounts={realAccounts} onClose={() => setSettingsOpen(false)} onReload={load} setNotice={setNotice} />}
+    {shortcutSettingsOpen && <ShortcutSettingsModal bindings={shortcutBindings} onChange={saveShortcutBindings} onClose={() => setShortcutSettingsOpen(false)} />}
     {notificationsOpen && <NotificationsModal notifications={notifications} accounts={accounts} onClose={() => setNotificationsOpen(false)} onOpenMessage={(notification) => { setNotificationsOpen(false); if (notification.accountId) setAccountFilter(notification.accountId); setView('inbox'); setSelectedId(notification.messageId ?? null); }} />}
     {labelOpen && selected && <LabelModal message={selected} knownLabels={labels} onClose={() => setLabelOpen(false)} onSave={(next) => { setLabelOpen(false); void updateSelectedLocal({ labels: next }, '邮件标签已更新'); }} />}
     {snoozeOpen && selected && <SnoozeModal onClose={() => setSnoozeOpen(false)} onSave={(until) => { setSnoozeOpen(false); void updateSelectedLocal({ snoozedUntil: until }, until ? '邮件已移到稍后处理' : '邮件已返回收件箱'); }} />}
     {workspaceOpen !== undefined && <WorkspaceModal accounts={accounts} workspace={workspaceOpen ?? undefined} onClose={() => setWorkspaceOpen(undefined)} onSaved={async () => { setWorkspaceOpen(undefined); await load(); setNotice({ kind: 'success', text: '工作空间已更新' }); }} />}
+    {contextTarget && <AppContextMenu target={contextTarget} bindings={shortcutBindings} messages={messages} accounts={accounts} activeAccountId={activeAccount?.id} onClose={() => setContextTarget(null)} actions={{
+      openMessage: (id) => void selectMessage(id),
+      reply: () => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); },
+      forward: () => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); },
+      toggleStar: (message) => void toggleSelectedFlag(message), setUnread: (message, unread) => void setMessageUnread(message, unread),
+      snooze: () => setSnoozeOpen(true), labels: () => setLabelOpen(true), archive: (message) => void moveSelected('archive', message), delete: (message) => void moveSelected('trash', message),
+      openAccount: (id) => selectScope('inbox', id), compose: openCompose, syncAccount: (id) => void syncAccount(id), accountSettings: () => setSettingsOpen(true),
+      openWorkspace: (group) => selectScope('inbox', 'all', group), syncWorkspace: (group) => void syncWorkspace(group), editWorkspace: setWorkspaceOpen,
+      openFolder: selectMailbox, syncFolder: (folder) => void syncFolder(folder), syncCurrent: () => void syncAll(), shortcutSettings: () => setShortcutSettingsOpen(true),
+    }} />}
   </div>;
 }
 
