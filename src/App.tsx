@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@fluentui/react-components';
 import {
   AddressBook, Archive, ArrowClockwise, ArrowLeft, ArrowRight, Bell, CaretDown, Check,
@@ -59,8 +59,29 @@ function relativeTime(value: string) {
 }
 
 function Overlay({ children, onClose, wide = false }: { children: ReactNode; onClose: () => void; wide?: boolean }) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const titleId = useId();
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]') ?? []);
+    (focusable()[0] ?? dialog)?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onCloseRef.current(); return; }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (items.length === 0) { event.preventDefault(); dialog?.focus(); return; }
+      const first = items[0]; const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
+  }, []);
   return <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true">{children}</section>
+    <section ref={dialogRef} className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><span id={titleId} className="sr-only">iMail 对话框</span>{children}</section>
   </div>;
 }
 
@@ -76,7 +97,7 @@ function App() {
   const [mailFilter, setMailFilter] = useState<'all' | 'unread' | 'attachments'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeMode, setComposeMode] = useState<'new' | 'reply' | 'forward' | null>(null);
   const [tokenOpen, setTokenOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -89,6 +110,7 @@ function App() {
   const [messageRevision, setMessageRevision] = useState(0);
   const [messageStats, setMessageStats] = useState<MessageStats>({ total: 0, unread: 0, byAccount: [], byGroup: [] });
   const messageQueryRef = useRef('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const accounts = realAccounts;
   const messages = realMessages;
@@ -129,6 +151,15 @@ function App() {
   const selected = messages.find((message) => message.id === selectedId) ?? messages[0];
   const selectedIndex = selected ? messages.findIndex((message) => message.id === selected.id) : -1;
   const activeAccount = accountFilter === 'all' ? undefined : accounts.find((account) => account.id === accountFilter);
+  const visibleMessages = mailFilter === 'unread' ? messages.filter((message) => message.unread) : messages;
+
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchInputRef.current?.focus(); }
+    };
+    window.addEventListener('keydown', focusSearch);
+    return () => window.removeEventListener('keydown', focusSearch);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,13 +191,14 @@ function App() {
     const queryAtStart = messageQuery;
     setMessagesLoading(true);
     try {
-      const result = await api<MessagePage>(`/api/messages?${queryAtStart}&limit=60&offset=${realMessages.length}`);
+      const offset = mailFilter === 'unread' ? realMessages.filter((message) => message.unread).length : realMessages.length;
+      const result = await api<MessagePage>(`/api/messages?${queryAtStart}&limit=60&offset=${offset}`);
       if (messageQueryRef.current !== queryAtStart) return;
       setRealMessages((current) => [...current, ...result.messages.filter((message) => !current.some((item) => item.id === message.id))]);
       setMessageTotal(result.total); setMessagesHasMore(result.hasMore);
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '加载更多邮件失败' }); }
     finally { setMessagesLoading(false); }
-  }, [messageQuery, messagesHasMore, messagesLoading, realMessages.length]);
+  }, [mailFilter, messageQuery, messagesHasMore, messagesLoading, realMessages]);
 
   async function syncAll() {
     if (realAccounts.length === 0) { setAddOpen(true); return; }
@@ -206,9 +238,11 @@ function App() {
     if (!message?.unread) return;
 
     setRealMessages((current) => current.map((item) => item.id === id ? { ...item, unread: false } : item));
+    if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current - 1));
     adjustMessageStats(message.accountId, 0, -1);
     void api(`/api/messages/${id}`, { method: 'PATCH', body: JSON.stringify({ unread: false }) }).catch((error) => {
       setRealMessages((current) => current.map((item) => item.id === id ? { ...item, unread: true } : item));
+      if (mailFilter === 'unread') setMessageTotal((current) => current + 1);
       adjustMessageStats(message.accountId, 0, 1);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件已读状态更新失败' });
     });
@@ -263,16 +297,21 @@ function App() {
     </aside>
 
     <aside className={`primary-sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
-      <div className="sidebar-heading"><div><strong>iMail</strong><span>统一通信工作台</span></div><button className="mobile-close" onClick={() => setSidebarOpen(false)}><X size={20} /></button></div>
-      <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => setComposeOpen(true)}>写邮件</Button>
+      <div className="sidebar-heading"><div><strong>iMail</strong><span>统一通信工作台</span></div><button className="mobile-close" aria-label="关闭侧栏" onClick={() => setSidebarOpen(false)}><X size={20} /></button></div>
+      <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => { setComposeMode('new'); setSidebarOpen(false); }}>写邮件</Button>
+      <div className="mobile-account-controls" aria-label="移动端邮箱账户">
+        <button className={accountFilter === 'all' ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={18} /><span><strong>全部邮箱</strong><small>{accounts.length} 个账户</small></span></button>
+        {accounts.map((account) => <button key={account.id} className={accountFilter === account.id ? 'active' : ''} onClick={() => selectScope('inbox', account.id)}><AccountProviderMark provider={account.provider} /><span><strong>{account.displayName}</strong><small>{account.email}</small></span></button>)}
+        <div><button onClick={() => { setAddOpen(true); setSidebarOpen(false); }}><Plus size={16} />添加邮箱</button><button onClick={() => { setSettingsOpen(true); setSidebarOpen(false); }}><Gear size={16} />邮箱设置</button></div>
+      </div>
       <nav className="nav-block">
         <button className={view === 'inbox' && !groupFilter ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={19} /><span>统一收件箱</span><b>{messageStats.unread || ''}</b></button>
         <button className={view === 'starred' ? 'active' : ''} onClick={() => selectScope('starred')}><Star size={19} /><span>已加星标</span></button>
-        <button><PaperPlaneTilt size={19} /><span>已发送</span></button>
-        <button><Clock size={19} /><span>稍后处理</span></button>
-        <button><Archive size={19} /><span>归档</span></button>
+        <button disabled title="即将支持已发送文件夹"><PaperPlaneTilt size={19} /><span>已发送</span></button>
+        <button disabled title="即将支持稍后处理"><Clock size={19} /><span>稍后处理</span></button>
+        <button disabled title="即将支持归档文件夹"><Archive size={19} /><span>归档</span></button>
       </nav>
-      <div className="section-label"><span>工作空间</span><button><Plus size={15} /></button></div>
+      <div className="section-label"><span>工作空间</span><button disabled title="即将支持自定义工作空间" aria-label="新增工作空间（即将支持）"><Plus size={15} /></button></div>
       <nav className="nav-block groups">
         {groups.map((group, index) => <button key={group} className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><span className={`group-symbol group-${index % 4}`} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button>)}
       </nav>
@@ -283,14 +322,14 @@ function App() {
 
     <main className="workspace">
       <header className="topbar">
-        <button className="sidebar-trigger" onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
-        <div className="search-box"><MagnifyingGlass size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索所有邮箱中的邮件" /><kbd>⌘ K</kbd></div>
+        <button className="sidebar-trigger" aria-label="打开侧栏" onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
+        <div className="search-box"><MagnifyingGlass size={18} /><input ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" /><kbd>Ctrl K</kbd></div>
         <button className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '同步中' : '同步'}</span></button>
-        <button className="icon-button"><Bell size={19} /></button>
+        <button className="icon-button" disabled title="通知中心即将支持" aria-label="通知中心（即将支持）"><Bell size={19} /></button>
       </header>
 
       {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreate={() => setTokenOpen(true)} onReload={load} setNotice={setNotice} /> :
-        <div className="mail-layout">
+        <div className={`mail-layout ${selectedId ? 'mobile-reader-open' : ''}`}>
           <section className="message-pane">
             <div className="pane-title">
               <div className="pane-heading">
@@ -300,12 +339,12 @@ function App() {
                   <span>{activeAccount ? `${providerLabel[activeAccount.provider]} · ${activeAccount.email} · ` : ''}{messageTotal} 封邮件</span>
                 </div>
               </div>
-              <button aria-label="邮件标签"><Tag size={18} /></button>
+              <button disabled title="邮件标签即将支持" aria-label="邮件标签（即将支持）"><Tag size={18} /></button>
             </div>
             <div className="message-filters"><button className={mailFilter === 'all' ? 'active' : ''} onClick={() => setMailFilter('all')}>全部</button><button className={mailFilter === 'unread' ? 'active' : ''} onClick={() => setMailFilter('unread')}>未读</button><button className={mailFilter === 'attachments' ? 'active' : ''} onClick={() => setMailFilter('attachments')}>有附件</button></div>
-            <VirtualMessageList messages={messages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
+            <VirtualMessageList messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
           </section>
-          <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => setComposeOpen(true)}
+          <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => setComposeMode('reply')} onForward={() => setComposeMode('forward')} onCloseMobile={() => setSelectedId(null)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}
             onPrevious={() => { if (selectedIndex > 0) selectMessage(messages[selectedIndex - 1].id); }}
@@ -315,7 +354,7 @@ function App() {
     </main>
 
     {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} onAdded={async (result) => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice(result?.warning ? { kind: 'error', text: `授权已保存，连接验证失败：${result.warning}` } : { kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} />}
-    {composeOpen && <ComposeModal accounts={realAccounts} reply={selected} onClose={() => setComposeOpen(false)} onSent={() => { setComposeOpen(false); setNotice({ kind: 'success', text: '邮件已发送' }); }} />}
+    {composeMode && <ComposeModal accounts={realAccounts} mode={composeMode} original={composeMode === 'new' ? undefined : selected} onClose={() => setComposeMode(null)} onSent={() => { setComposeMode(null); setNotice({ kind: 'success', text: '邮件已发送' }); }} />}
     {tokenOpen && <CreateTokenModal accounts={realAccounts} onClose={() => setTokenOpen(false)} onCreated={async () => { await load(); }} />}
     {settingsOpen && <AccountSettingsModal accounts={realAccounts} onClose={() => setSettingsOpen(false)} onReload={load} setNotice={setNotice} />}
   </div>;
@@ -370,22 +409,22 @@ function VirtualMessageList({ messages, accounts, selectedId, ready, loading, ha
   </div>;
 }
 
-function MessageReader({ message, account, onReply, onToggleFlag, onArchive, onDelete, onPrevious, onNext, hasPrevious, hasNext, actionBusy }: {
-  message?: Message; account?: Account; onReply: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onPrevious: () => void; onNext: () => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
+function MessageReader({ message, account, onReply, onForward, onCloseMobile, onToggleFlag, onArchive, onDelete, onPrevious, onNext, hasPrevious, hasNext, actionBusy }: {
+  message?: Message; account?: Account; onReply: () => void; onForward: () => void; onCloseMobile: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onPrevious: () => void; onNext: () => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
 }) {
   if (!message || !account) return <section className="reader empty-reader"><Envelope size={54} weight="duotone" /><h2>选择一封邮件开始阅读</h2><p>来自所有账户的邮件都会汇总在这里。</p></section>;
   return <article className="reader">
-    <div className="reader-actions"><div><button title="归档" aria-label="归档邮件" disabled={actionBusy} onClick={onArchive}><Archive size={18} /></button><button title="删除" aria-label="删除邮件" disabled={actionBusy} onClick={onDelete}><Trash size={18} /></button><button title="稍后处理"><Clock size={18} /></button></div><div><button title="上一封邮件" aria-label="上一封邮件" disabled={actionBusy || !hasPrevious} onClick={onPrevious}><ArrowLeft size={18} /></button><button title="下一封邮件" aria-label="下一封邮件" disabled={actionBusy || !hasNext} onClick={onNext}><ArrowRight size={18} /></button></div></div>
+    <div className="reader-actions"><div><button className="mobile-reader-back" title="返回邮件列表" aria-label="返回邮件列表" onClick={onCloseMobile}><ArrowLeft size={18} /></button><button title="归档" aria-label="归档邮件" disabled={actionBusy} onClick={onArchive}><Archive size={18} /></button><button title="删除" aria-label="删除邮件" disabled={actionBusy} onClick={onDelete}><Trash size={18} /></button><button disabled title="稍后处理即将支持" aria-label="稍后处理（即将支持）"><Clock size={18} /></button></div><div><button title="上一封邮件" aria-label="上一封邮件" disabled={actionBusy || !hasPrevious} onClick={onPrevious}><ArrowLeft size={18} /></button><button title="下一封邮件" aria-label="下一封邮件" disabled={actionBusy || !hasNext} onClick={onNext}><ArrowRight size={18} /></button></div></div>
     <div className="reader-content">
       <div className="reader-context">
         <span className="reader-account" style={{ '--account-color': account.color } as React.CSSProperties}><AccountProviderMark provider={account.provider} className="reader-provider-mark" /><strong>{account.displayName}</strong><small>{account.email}</small></span>
         <span className="reader-provider-name">{providerLabel[account.provider]}</span><span>{account.group}</span>
       </div>
       <h1>{message.subject}</h1>
-      <div className="sender-line"><span className="sender-avatar large" style={{ '--avatar-color': account.color } as React.CSSProperties}>{initials(message.from.name || message.from.address)}</span><span><strong>{message.from.name || message.from.address}</strong><small>{message.from.address} 发给 {message.to[0]?.address || account.email}</small></span><time>{new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(message.date))}</time><button title={message.flagged ? '取消星标' : '添加星标'} aria-label={message.flagged ? '取消星标' : '添加星标'} onClick={onToggleFlag}><Star size={18} weight={message.flagged ? 'fill' : 'regular'} /></button><button title="更多操作"><CaretDown size={16} /></button></div>
+      <div className="sender-line"><span className="sender-avatar large" style={{ '--avatar-color': account.color } as React.CSSProperties}>{initials(message.from.name || message.from.address)}</span><span><strong>{message.from.name || message.from.address}</strong><small>{message.from.address} 发给 {message.to[0]?.address || account.email}</small></span><time>{new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(message.date))}</time><button title={message.flagged ? '取消星标' : '添加星标'} aria-label={message.flagged ? '取消星标' : '添加星标'} onClick={onToggleFlag}><Star size={18} weight={message.flagged ? 'fill' : 'regular'} /></button><button disabled title="更多操作即将支持" aria-label="更多操作（即将支持）"><CaretDown size={16} /></button></div>
       <div className={`mail-body ${message.text === undefined ? 'mail-body-loading' : ''}`}>{message.text === undefined ? <p>正在从本地缓存加载正文…</p> : message.text.split('\n').map((line, index) => <p key={index}>{line || <br />}</p>)}</div>
-      {message.attachments.length > 0 && <div className="attachments"><p>{message.attachments.length} 个附件</p>{message.attachments.map((attachment) => <button key={attachment.filename}><File size={23} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{(attachment.size / 1024 / 1024).toFixed(1)} MB</small></span></button>)}</div>}
-      <div className="reply-actions"><Button appearance="primary" icon={<ArrowLeft size={17} />} onClick={onReply}>回复</Button><Button appearance="outline" icon={<ArrowRight size={17} />}>转发</Button></div>
+      {message.attachments.length > 0 && <div className="attachments"><p>{message.attachments.length} 个附件</p>{message.attachments.map((attachment) => <button key={attachment.filename} disabled title="附件下载即将支持"><File size={23} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{(attachment.size / 1024 / 1024).toFixed(1)} MB</small></span></button>)}</div>}
+      <div className="reply-actions"><Button appearance="primary" icon={<ArrowLeft size={17} />} onClick={onReply}>回复</Button><Button appearance="outline" icon={<ArrowRight size={17} />} onClick={onForward}>转发</Button></div>
     </div>
   </article>;
 }
@@ -498,7 +537,7 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
     finally { setBusy(false); }
   }
   return <Overlay onClose={onClose} wide><form className="account-modal" onSubmit={submit}>
-    <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>优先使用服务商安全登录，iMail 不会接触你的网页登录密码。</p></div><button type="button" onClick={onClose}><X size={21} /></button></div>
+    <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>优先使用服务商安全登录，iMail 不会接触你的网页登录密码。</p></div><button type="button" aria-label="关闭添加邮箱窗口" onClick={onClose}><X size={21} /></button></div>
     <div className="provider-grid">{providers.map((item) => <button type="button" key={item.id} disabled={busy} className={provider === item.id ? 'selected' : ''} onClick={() => { const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(item.id); setManualMode(item.id === 'yahoo' && status?.configured === false); setError(''); }}><i className={`provider-mark provider-${item.id}`}><ProviderIcon provider={item.id} /></i><span>{item.name}</span>{item.oauthKey && <small className="oauth-chip">OAuth</small>}{provider === item.id && <Check size={15} weight="bold" />}</button>)}</div>
     {usesOAuth ? <>
       <div className="oauth-panel">
@@ -546,7 +585,7 @@ function AccountSettingsModal({ accounts, onClose, onReload, setNotice }: { acco
     };
     window.addEventListener('message', receive);
     const timer = window.setInterval(() => {
-      if (popupRef.current?.closed) { popupRef.current = null; setBusyId(null); }
+      if (popupRef.current?.closed) { popupRef.current = null; setBusyId(null); setError('授权窗口已关闭；如果已经完成授权，请点击“重试连接”确认状态。'); }
     }, 700);
     return () => { window.removeEventListener('message', receive); window.clearInterval(timer); };
   }, [onReload, setNotice]);
@@ -604,11 +643,11 @@ function AccountSettingsModal({ accounts, onClose, onReload, setNotice }: { acco
   }
 
   return <Overlay onClose={onClose}><section className="account-settings-modal">
-    <div className="modal-header"><div><span>连接与授权</span><h2>邮箱设置</h2><p>查看连接状态，更新 OAuth 授权或移除本地账户。</p></div><button type="button" onClick={onClose}><X size={21} /></button></div>
+    <div className="modal-header"><div><span>连接与授权</span><h2>邮箱设置</h2><p>查看连接状态，更新 OAuth 授权或移除本地账户。</p></div><button type="button" aria-label="关闭邮箱设置" onClick={onClose}><X size={21} /></button></div>
     {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>关闭设置后，点击左侧的加号接入第一个邮箱。</p></div> : <div className="settings-account-list">
       {accounts.map((account) => <div key={account.id} className="settings-account-block"><article className="settings-account">
-        <i style={{ background: account.color }}>{initials(account.displayName)}</i>
-        <span><strong>{account.displayName}</strong><small>{account.email}</small><em className={`connection-${account.status}`}>{account.status === 'connected' ? '连接正常' : account.status === 'syncing' ? '正在同步' : account.lastError || '连接异常'}</em></span>
+        <i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i>
+        <span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email}</small><em className={`connection-${account.status}`}>{account.status === 'connected' ? '连接正常' : account.status === 'syncing' ? '正在同步' : account.lastError || '连接异常'}</em></span>
         <div><small>{account.authMethod === 'oauth2' ? 'OAuth 2.0' : '授权码 / 专用密码'}</small><button type="button" className="retry-account" disabled={busyId === account.id} onClick={() => void retryConnection(account)}><ArrowClockwise size={15} />{busyId === account.id ? '正在检查' : '重试连接'}</button>{account.authMethod === 'oauth2' ? <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => void reconnect(account)}><Key size={15} />重新授权</button> : <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => setCredentialId((current) => current === account.id ? null : account.id)}><Key size={15} />更新凭据</button>}<button type="button" className="remove-account" disabled={busyId === account.id} onClick={() => void remove(account)}><Trash size={15} />移除</button></div>
       </article>{credentialId === account.id && <form className="credential-renewal" onSubmit={(event) => void updateCredential(event, account)}><label><span>{credentialGuideFor(account.provider)?.secretLabel || '新的授权码 / 应用专用密码'}</span><input name="password" type="password" placeholder={credentialGuideFor(account.provider)?.secretPlaceholder || '输入新的专用凭据'} autoFocus required /></label><button type="button" onClick={() => setCredentialId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '正在验证…' : '验证并更新'}</Button></form>}</div>)}
     </div>}
@@ -617,15 +656,23 @@ function AccountSettingsModal({ accounts, onClose, onReload, setNotice }: { acco
   </section></Overlay>;
 }
 
-function ComposeModal({ accounts, reply, onClose, onSent }: { accounts: Account[]; reply?: Message; onClose: () => void; onSent: () => void }) {
+function subjectWithPrefix(subject: string, prefix: 'Re' | 'Fwd') {
+  return new RegExp(`^${prefix}:`, 'i').test(subject) ? subject : `${prefix}: ${subject}`;
+}
+
+function ComposeModal({ accounts, mode, original, onClose, onSent }: { accounts: Account[]; mode: 'new' | 'reply' | 'forward'; original?: Message; onClose: () => void; onSent: () => void }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const isReply = mode === 'reply'; const isForward = mode === 'forward';
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget); setBusy(true); setError('');
-    try { await api('/api/send', { method: 'POST', body: JSON.stringify({ accountId: form.get('accountId'), to: String(form.get('to')).split(',').map((item) => item.trim()), subject: form.get('subject'), text: form.get('text') }) }); onSent(); }
+    try { await api('/api/send', { method: 'POST', body: JSON.stringify({ accountId: form.get('accountId'), to: String(form.get('to')).split(',').map((item) => item.trim()).filter(Boolean), subject: form.get('subject'), text: form.get('text') }) }); onSent(); }
     catch (value) { setError(value instanceof Error ? value.message : '发送失败'); } finally { setBusy(false); }
   }
-  return <Overlay onClose={onClose}><form className="compose-modal" onSubmit={submit}><div className="modal-header compact"><div><span>新邮件</span><h2>{reply ? '回复邮件' : '写邮件'}</h2></div><button type="button" onClick={onClose}><X size={21} /></button></div>
-    {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={30} /><h3>先接入一个真实邮箱</h3><p>接入邮箱后即可发送邮件。</p></div> : <><label className="compose-row"><span>发件人</span><select name="accountId" defaultValue={reply?.accountId}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.displayName} · {account.email}</option>)}</select></label><label className="compose-row"><span>收件人</span><input name="to" type="email" defaultValue={reply?.from.address} required /></label><label className="compose-row"><span>主题</span><input name="subject" defaultValue={reply ? `Re: ${reply.subject}` : ''} required /></label><textarea name="text" className="compose-body" defaultValue={reply ? `\n\n----- 原邮件 -----\n${reply.text ?? ''}` : ''} placeholder="写下邮件内容…" required />{error && <div className="inline-error">{error}</div>}<div className="modal-footer"><button type="button" onClick={onClose}>存为草稿</button><Button appearance="primary" icon={<PaperPlaneTilt size={17} />} type="submit" disabled={busy}>{busy ? '发送中…' : '发送邮件'}</Button></div></>}
+  const heading = isReply ? '回复邮件' : isForward ? '转发邮件' : '写邮件';
+  const subject = original ? subjectWithPrefix(original.subject, isReply ? 'Re' : 'Fwd') : '';
+  const quoted = original ? `\n\n----- ${isForward ? '转发邮件' : '原邮件'} -----\n发件人：${original.from.name || original.from.address} <${original.from.address}>\n${original.text ?? ''}` : '';
+  return <Overlay onClose={onClose}><form className="compose-modal" onSubmit={submit}><div className="modal-header compact"><div><span>{mode === 'new' ? '新邮件' : '邮件操作'}</span><h2>{heading}</h2></div><button type="button" aria-label="关闭写信窗口" onClick={onClose}><X size={21} /></button></div>
+    {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={30} /><h3>先接入一个真实邮箱</h3><p>接入邮箱后即可发送邮件。</p></div> : <><label className="compose-row"><span>发件人</span><select name="accountId" defaultValue={original?.accountId}>{accounts.map((account) => <option key={account.id} value={account.id}>{providerLabel[account.provider]} · {account.displayName} · {account.email}</option>)}</select></label><label className="compose-row"><span>收件人</span><input name="to" type="email" multiple defaultValue={isReply ? original?.from.address : ''} placeholder="多个地址用英文逗号分隔" required /></label><label className="compose-row"><span>主题</span><input name="subject" defaultValue={subject} required /></label><textarea name="text" className="compose-body" defaultValue={quoted} placeholder="写下邮件内容…" required />{error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}<div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" icon={<PaperPlaneTilt size={17} />} type="submit" disabled={busy}>{busy ? '发送中…' : '发送邮件'}</Button></div></>}
   </form></Overlay>;
 }
 
@@ -634,7 +681,10 @@ function TokenWorkspace({ accounts, tokens, onCreate, onReload, setNotice }: { a
   useEffect(() => {
     if (!accounts.some((account) => account.id === gatewayAccount)) setGatewayAccount(accounts[0]?.id ?? '');
   }, [accounts, gatewayAccount]);
-  async function revoke(id: string) { await api(`/api/developer-tokens/${id}`, { method: 'DELETE' }); await onReload(); setNotice({ kind: 'success', text: 'Token 已撤销' }); }
+  async function revoke(id: string) {
+    try { await api(`/api/developer-tokens/${id}`, { method: 'DELETE' }); await onReload(); setNotice({ kind: 'success', text: 'Token 已撤销' }); }
+    catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Token 撤销失败' }); }
+  }
   return <section className="token-workspace"><header><div><span>本地开发能力</span><h1>邮件网关</h1><p>让本地项目用一个短期 Token 安全读取或发送邮件，无需重复配置每个邮箱的 IMAP。</p></div><Button appearance="primary" icon={<Plus size={17} />} onClick={onCreate} disabled={accounts.length === 0}>创建临时 Token</Button></header>
     <div className="endpoint-strip"><Code size={21} /><span><small>开发 API 地址</small><code>http://127.0.0.1:8787/api/dev/v1</code></span><button onClick={() => void navigator.clipboard.writeText('http://127.0.0.1:8787/api/dev/v1')}><Copy size={17} />复制</button></div>
     <div className="token-columns"><div className="token-list"><div className="token-title"><h2>有效 Token</h2><span>{tokens.filter((token) => token.expiresAt > new Date().toISOString()).length} 个正在生效</span></div>{accounts.length === 0 ? <div className="token-empty"><Key size={38} weight="duotone" /><h3>接入邮箱后即可创建</h3><p>Token 只会访问你明确选择的邮箱和权限。</p></div> : tokens.length === 0 ? <div className="token-empty"><Key size={38} weight="duotone" /><h3>还没有临时 Token</h3><p>创建一个给本地应用使用，原始值只显示一次。</p><button onClick={onCreate}>创建第一个 Token</button></div> : tokens.map((token) => <article className="token-item" key={token.id}><div className="token-icon"><Key size={20} /></div><div><strong>{token.name}</strong><code>{token.prefix}••••••••••••</code><span>{token.scopes.map((scope) => scope.replace('messages:', '')).join(' · ')} · {token.accountIds.length} 个邮箱</span></div><div className="token-time"><small>到期时间</small><span>{new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(token.expiresAt))}</span></div><button className="revoke" onClick={() => void revoke(token.id)}>撤销</button></article>)}</div>
@@ -643,9 +693,17 @@ function TokenWorkspace({ accounts, tokens, onCreate, onReload, setNotice }: { a
 }
 
 function CreateTokenModal({ accounts, onClose, onCreated }: { accounts: Account[]; onClose: () => void; onCreated: () => Promise<void> }) {
-  const [raw, setRaw] = useState(''); const [busy, setBusy] = useState(false); const [copied, setCopied] = useState(false);
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); const form = new FormData(event.currentTarget); const accountIds = form.getAll('accountIds'); const scopes = form.getAll('scopes'); try { const result = await api<{ token: string }>('/api/developer-tokens', { method: 'POST', body: JSON.stringify({ name: form.get('name'), accountIds, scopes, ttlSeconds: Number(form.get('ttlSeconds')) }) }); setRaw(result.token); await onCreated(); } finally { setBusy(false); } }
-  return <Overlay onClose={onClose}>{raw ? <div className="token-created"><div className="success-orbit"><Check size={28} weight="bold" /></div><h2>Token 已创建</h2><p>请现在复制并保存，关闭后无法再次查看完整值。</p><div className="raw-token"><code>{raw}</code><button onClick={async () => { await navigator.clipboard.writeText(raw); setCopied(true); }}><Copy size={17} />{copied ? '已复制' : '复制'}</button></div><Button appearance="primary" onClick={onClose}>完成</Button></div> : <form className="token-modal" onSubmit={submit}><div className="modal-header"><div><span>开发者网关</span><h2>创建临时 Token</h2><p>控制可访问邮箱、能力和有效时间。</p></div><button type="button" onClick={onClose}><X size={21} /></button></div><label><span>用途名称</span><input name="name" defaultValue="本地开发测试" required /></label><fieldset><legend>允许访问的邮箱</legend>{accounts.map((account) => <label className="check-row" key={account.id}><input name="accountIds" type="checkbox" value={account.id} defaultChecked /><i style={{ background: account.color }}>{initials(account.displayName)}</i><span><strong>{account.displayName}</strong><small>{account.email}</small></span><Check size={15} /></label>)}</fieldset><fieldset><legend>权限范围</legend><label className="scope-row"><input name="scopes" type="checkbox" value="messages:read" defaultChecked /><span><strong>读取邮件</strong><small>获取正文、发件人与附件元数据</small></span></label><label className="scope-row"><input name="scopes" type="checkbox" value="messages:send" /><span><strong>发送邮件</strong><small>通过选定邮箱发送新邮件</small></span></label><label className="scope-row"><input name="scopes" type="checkbox" value="accounts:read" /><span><strong>读取账户</strong><small>获取邮箱列表和连接状态</small></span></label></fieldset><label><span>有效时间</span><select name="ttlSeconds" defaultValue="3600"><option value="1800">30 分钟</option><option value="3600">1 小时</option><option value="21600">6 小时</option><option value="86400">24 小时</option><option value="604800">7 天</option></select></label><div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy}>{busy ? '创建中…' : '创建 Token'}</Button></div></form>}</Overlay>;
+  const [raw, setRaw] = useState(''); const [busy, setBusy] = useState(false); const [copied, setCopied] = useState(false); const [error, setError] = useState('');
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError('');
+    const form = new FormData(event.currentTarget); const accountIds = form.getAll('accountIds'); const scopes = form.getAll('scopes');
+    if (accountIds.length === 0) { setError('请至少选择一个允许访问的邮箱'); setBusy(false); return; }
+    if (scopes.length === 0) { setError('请至少选择一项权限'); setBusy(false); return; }
+    try { const result = await api<{ token: string }>('/api/developer-tokens', { method: 'POST', body: JSON.stringify({ name: form.get('name'), accountIds, scopes, ttlSeconds: Number(form.get('ttlSeconds')) }) }); setRaw(result.token); await onCreated(); }
+    catch (value) { setError(value instanceof Error ? value.message : 'Token 创建失败'); }
+    finally { setBusy(false); }
+  }
+  return <Overlay onClose={onClose}>{raw ? <div className="token-created"><div className="success-orbit"><Check size={28} weight="bold" /></div><h2>Token 已创建</h2><p>请现在复制并保存，关闭后无法再次查看完整值。</p><div className="raw-token"><code>{raw}</code><button onClick={async () => { try { await navigator.clipboard.writeText(raw); setCopied(true); } catch { setError('复制失败，请手动选择 Token'); } }}><Copy size={17} />{copied ? '已复制' : '复制'}</button></div>{error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}<Button appearance="primary" onClick={onClose}>完成</Button></div> : <form className="token-modal" onSubmit={submit}><div className="modal-header"><div><span>开发者网关</span><h2>创建临时 Token</h2><p>控制可访问邮箱、能力和有效时间。</p></div><button type="button" aria-label="关闭 Token 创建窗口" onClick={onClose}><X size={21} /></button></div><label><span>用途名称</span><input name="name" defaultValue="本地开发测试" required /></label><fieldset><legend>允许访问的邮箱</legend>{accounts.map((account) => <label className="check-row" key={account.id}><input name="accountIds" type="checkbox" value={account.id} defaultChecked /><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email}</small></span><Check size={15} /></label>)}</fieldset><fieldset><legend>权限范围</legend><label className="scope-row"><input name="scopes" type="checkbox" value="messages:read" defaultChecked /><span><strong>读取邮件</strong><small>获取正文、发件人与附件元数据</small></span></label><label className="scope-row"><input name="scopes" type="checkbox" value="messages:send" /><span><strong>发送邮件</strong><small>通过选定邮箱发送新邮件</small></span></label><label className="scope-row"><input name="scopes" type="checkbox" value="accounts:read" /><span><strong>读取账户</strong><small>获取邮箱列表和连接状态</small></span></label></fieldset><label><span>有效时间</span><select name="ttlSeconds" defaultValue="3600"><option value="1800">30 分钟</option><option value="3600">1 小时</option><option value="21600">6 小时</option><option value="86400">24 小时</option><option value="604800">7 天</option></select></label>{error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}<div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy}>{busy ? '创建中…' : '创建 Token'}</Button></div></form>}</Overlay>;
 }
 
 export default App;
