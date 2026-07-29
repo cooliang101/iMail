@@ -304,7 +304,7 @@ function App() {
         <button data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => selectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
         <button data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => selectScope('archive')}><Archive size={19} /><span>归档</span></button>
       </nav>
-      <div className="section-label"><span>工作空间</span><button className="workspace-add" title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(true)}><FolderSimplePlus size={17} /></button></div>
+      <div className="section-label"><span>工作空间</span><button className="workspace-add" title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(true)}><FolderSimplePlus size={16} /></button></div>
       <nav className="nav-block groups">
         {groups.map((group, index) => <button key={group} className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><span className={`group-symbol group-${index % 4}`} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button>)}
       </nav>
