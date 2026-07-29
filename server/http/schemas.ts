@@ -43,8 +43,8 @@ const draftAttachmentSchema = z.object({
 
 export const draftSchema = z.object({
   accountId: z.string().uuid(),
-  to: z.array(z.string().email()).default([]),
-  cc: z.array(z.string().email()).default([]),
+  to: z.array(z.string().trim().min(1).max(320)).default([]),
+  cc: z.array(z.string().trim().min(1).max(320)).default([]),
   subject: z.string().max(500).default(''),
   text: z.string().max(2_000_000).default(''),
   html: z.string().max(8_000_000).default(''),

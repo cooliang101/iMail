@@ -48,6 +48,13 @@ export type Message = {
   snoozedUntil?: string;
 };
 
+export type Contact = {
+  address: string;
+  name: string;
+  messageCount: number;
+  lastContactAt: string;
+};
+
 export type Draft = {
   id: string;
   accountId: string;
