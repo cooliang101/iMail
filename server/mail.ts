@@ -4,7 +4,7 @@ import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { resolveAccountSecret } from './oauth.js';
 import { readStore, updateStore } from './store.js';
-import type { CachedMessage, MailAccount } from './types.js';
+import type { CachedMessage, MailAccount, MailboxRole } from './types.js';
 
 function authFor(account: MailAccount, secret: Awaited<ReturnType<typeof resolveAccountSecret>>) {
   return secret.accessToken
@@ -93,7 +93,9 @@ export async function testAccount(account: MailAccount): Promise<void> {
   } finally { transport.close(); }
 }
 
-export async function syncAccount(accountId: string): Promise<{ synced: number }> {
+const specialUseForRole: Partial<Record<MailboxRole, string[]>> = { sent: ['\\Sent'], archive: ['\\Archive', '\\All'], trash: ['\\Trash'] };
+
+export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 'inbox'): Promise<{ synced: number }> {
   const store = await readStore();
   const account = store.accounts.find((item) => item.id === accountId);
   if (!account) throw new Error('邮箱账户不存在');
@@ -113,23 +115,36 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
 
   try {
     await client.connect();
-    const mailbox = await client.mailboxOpen('INBOX', { readOnly: true });
-    const cached = store.messages.filter((message) => message.accountId === accountId && message.mailbox === 'INBOX');
+    let mailboxPath = 'INBOX';
+    let allMailArchive = false;
+    if (mailboxRole !== 'inbox') {
+      const mailboxes = await client.list();
+      const specialUses = specialUseForRole[mailboxRole] ?? [];
+      const target = mailboxes.find((item) => specialUses.includes(item.specialUse ?? ''));
+      if (!target) throw new Error(`服务商没有返回${mailboxRole === 'sent' ? '已发送' : mailboxRole === 'archive' ? '归档' : '垃圾箱'}文件夹`);
+      mailboxPath = target.path;
+      allMailArchive = mailboxRole === 'archive' && target.specialUse === '\\All';
+    }
+    const mailbox = await client.mailboxOpen(mailboxPath, { readOnly: true });
+    const cached = store.messages.filter((message) => message.accountId === accountId && message.mailbox === mailboxPath);
     const maxCachedUid = cached.reduce((max, message) => Math.max(max, message.uid), 0);
     const incoming: CachedMessage[] = [];
     const flagUpdates = new Map<number, { unread: boolean; flagged: boolean }>();
     const parseIncoming = async (items: AsyncIterable<FetchMessageObject>) => {
       for await (const item of items) {
         if (!item.source) continue;
+        const labels = (item as FetchMessageObject & { labels?: Set<string> }).labels;
+        if (allMailArchive && labels && ['\\Inbox', '\\Sent', '\\Drafts', '\\Trash'].some((label) => labels.has(label))) continue;
         const parsed = await simpleParser(item.source);
         const fromValue = parsed.from?.value[0];
         const toValue = parsed.to && !Array.isArray(parsed.to) ? parsed.to.value : Array.isArray(parsed.to) ? parsed.to.flatMap((entry) => entry.value) : [];
         const text = parsed.text?.trim() ?? '';
         const html = typeof parsed.html === 'string' ? parsed.html : undefined;
         incoming.push({
-          id: createHash('sha256').update(`${accountId}:${item.uid}`).digest('hex').slice(0, 24),
+          id: createHash('sha256').update(mailboxRole === 'inbox' ? `${accountId}:${item.uid}` : `${accountId}:${mailboxRole}:${item.uid}`).digest('hex').slice(0, 24),
           accountId,
-          mailbox: 'INBOX',
+          mailbox: mailboxPath,
+          mailboxRole,
           uid: item.uid,
           messageId: parsed.messageId,
           from: address(fromValue),
@@ -142,20 +157,22 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
           unread: !item.flags?.has('\\Seen'),
           flagged: Boolean(item.flags?.has('\\Flagged')),
           hasAttachments: parsed.attachments.length > 0,
-          attachments: parsed.attachments.map((attachment) => ({
+          attachments: parsed.attachments.map((attachment, index) => ({
             filename: attachment.filename ?? 'attachment',
             contentType: attachment.contentType,
             size: attachment.size,
+            index,
           })),
+          labels: [],
         });
       }
     };
 
     if (mailbox.exists > 0 && maxCachedUid === 0) {
       const start = Math.max(1, mailbox.exists - 79);
-      await parseIncoming(client.fetch(`${start}:*`, { uid: true, flags: true, source: true, envelope: true, internalDate: true }));
+      await parseIncoming(client.fetch(`${start}:*`, { uid: true, flags: true, labels: true, source: true, envelope: true, internalDate: true }));
     } else if (maxCachedUid > 0 && mailbox.uidNext > maxCachedUid + 1) {
-      await parseIncoming(client.fetch(`${maxCachedUid + 1}:*`, { uid: true, flags: true, source: true, envelope: true, internalDate: true }, { uid: true }));
+      await parseIncoming(client.fetch(`${maxCachedUid + 1}:*`, { uid: true, flags: true, labels: true, source: true, envelope: true, internalDate: true }, { uid: true }));
     }
 
     const recentCachedUids = cached.sort((a, b) => b.uid - a.uid).slice(0, 100).map((message) => message.uid);
@@ -167,11 +184,16 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
 
     await updateStore((data) => {
       const ids = new Set(incoming.map((message) => message.id));
-      data.messages = [...data.messages.filter((message) => message.accountId !== accountId || !ids.has(message.id)), ...incoming]
+      for (const message of incoming) {
+        const previous = data.messages.find((item) => item.id === message.id);
+        if (previous) { message.labels = previous.labels ?? []; message.snoozedUntil = previous.snoozedUntil; }
+      }
+      const incomingMessageIds = new Set(incoming.map((message) => message.messageId).filter(Boolean));
+      data.messages = [...data.messages.filter((message) => message.accountId !== accountId || (!ids.has(message.id) && !((message.mailboxRole ?? 'inbox') === mailboxRole && message.messageId && incomingMessageIds.has(message.messageId)))), ...incoming]
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 5000);
       for (const message of data.messages) {
-        if (message.accountId !== accountId || message.mailbox !== 'INBOX') continue;
+        if (message.accountId !== accountId || message.mailbox !== mailboxPath) continue;
         const flags = flagUpdates.get(message.uid);
         if (flags) Object.assign(message, flags);
       }
@@ -190,6 +212,38 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
       if (current) { current.status = 'error'; current.lastError = message; }
     });
     throw error;
+  } finally {
+    await client.logout().catch(() => undefined);
+  }
+}
+
+export async function downloadAttachment(messageId: string, attachmentIndex: number): Promise<{ content: Buffer; filename: string; contentType: string }> {
+  const store = await readStore();
+  const message = store.messages.find((item) => item.id === messageId);
+  if (!message) throw new Error('邮件不存在');
+  const metadata = message.attachments[attachmentIndex];
+  if (!metadata) throw new Error('附件不存在');
+  const account = store.accounts.find((item) => item.id === message.accountId);
+  if (!account) throw new Error('邮箱账户不存在');
+  const secret = await resolveAccountSecret(account);
+  const client = new ImapFlow({
+    host: account.settings.imapHost, port: account.settings.imapPort, secure: account.settings.imapSecure,
+    auth: authFor(account, secret), logger: false,
+  });
+  try {
+    await client.connect();
+    await client.mailboxOpen(message.mailbox, { readOnly: true });
+    for await (const item of client.fetch(message.uid, { uid: true, source: true }, { uid: true })) {
+      if (!item.source) continue;
+      const parsed = await simpleParser(item.source);
+      const attachment = parsed.attachments[attachmentIndex];
+      if (!attachment) break;
+      return { content: Buffer.from(attachment.content), filename: attachment.filename ?? metadata.filename, contentType: attachment.contentType || metadata.contentType };
+    }
+    throw new Error('无法从邮箱服务器读取附件');
+  } catch (error) {
+    if (error instanceof Error && (error.message === '附件不存在' || error.message.startsWith('无法从'))) throw error;
+    throw describeProtocolError('IMAP', error);
   } finally {
     await client.logout().catch(() => undefined);
   }
@@ -228,7 +282,7 @@ export async function updateRemoteMessageFlags(messageId: string, input: { unrea
   }
 }
 
-export async function moveRemoteMessage(messageId: string, destination: 'archive' | 'trash'): Promise<{ mailbox: string }> {
+export async function moveRemoteMessage(messageId: string, destination: 'archive' | 'trash'): Promise<{ mailbox: string; uid?: number }> {
   const store = await readStore();
   const message = store.messages.find((item) => item.id === messageId);
   if (!message) throw new Error('邮件不存在');
@@ -246,13 +300,14 @@ export async function moveRemoteMessage(messageId: string, destination: 'archive
   try {
     await client.connect();
     const mailboxes = await client.list();
-    const specialUse = destination === 'archive' ? '\\Archive' : '\\Trash';
-    const target = mailboxes.find((mailbox) => mailbox.specialUse === specialUse);
+    const specialUses = destination === 'archive' ? ['\\Archive', '\\All'] : ['\\Trash'];
+    const target = mailboxes.find((mailbox) => specialUses.includes(mailbox.specialUse ?? ''));
     if (!target) throw new Error(`服务商没有返回${destination === 'archive' ? '归档' : '垃圾箱'}文件夹`);
     await client.mailboxOpen(message.mailbox, { readOnly: false });
     const moved = await client.messageMove(message.uid, target.path, { uid: true });
     if (!moved) throw new Error('服务商未确认邮件移动操作');
-    return { mailbox: target.path };
+    const uid = (moved as { uidMap?: Map<number, number> }).uidMap?.get(message.uid);
+    return { mailbox: target.path, ...(uid ? { uid } : {}) };
   } catch (error) {
     throw describeProtocolError('IMAP', error);
   } finally {

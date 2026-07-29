@@ -5,7 +5,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { encryptSecret } from './crypto.js';
-import { moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
+import { downloadAttachment, moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
 import { beginOAuth, beginOAuthReconnect, completeOAuth, oauthCallbackHtml, oauthProviderCatalog, validateStoredAccountConnection, type OAuthProviderKey } from './oauth.js';
 import { settingsFor } from './providers.js';
 import { getCachedMessage, getMessageStats, listCachedMessages, readStore, updateStore } from './store.js';
@@ -171,7 +171,24 @@ app.delete('/api/accounts/:id', asyncRoute(async (req, res) => {
   res.status(204).end();
 }));
 
+app.patch('/api/accounts/:id', asyncRoute(async (req, res) => {
+  const input = z.object({ displayName: z.string().trim().min(1).max(80).optional(), group: z.string().trim().min(1).max(40).optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional() }).parse(req.body);
+  let updated;
+  await updateStore((data) => { updated = data.accounts.find((item) => item.id === req.params.id); if (!updated) throw new Error('邮箱账户不存在'); Object.assign(updated, input); });
+  res.json({ account: publicAccount(updated!) });
+}));
+
 app.post('/api/accounts/:id/sync', asyncRoute(async (req, res) => res.json(await syncAccount(String(req.params.id)))));
+app.post('/api/accounts/:id/mailboxes/:role/sync', asyncRoute(async (req, res) => {
+  const role = z.enum(['inbox', 'sent', 'archive', 'trash']).parse(req.params.role);
+  res.json(await syncAccount(String(req.params.id), role));
+}));
+app.post('/api/mailboxes/:role/sync', asyncRoute(async (req, res) => {
+  const role = z.enum(['inbox', 'sent', 'archive', 'trash']).parse(req.params.role);
+  const { accounts } = await readStore();
+  const results = await Promise.allSettled(accounts.map((account) => syncAccount(account.id, role)));
+  res.json({ results: results.map((result, index) => ({ accountId: accounts[index].id, status: result.status, ...(result.status === 'fulfilled' ? result.value : { error: result.reason instanceof Error ? result.reason.message : '同步失败' }) })) });
+}));
 app.post('/api/sync', asyncRoute(async (_req, res) => {
   const { accounts } = await readStore();
   const results = await Promise.allSettled(accounts.map((account) => syncAccount(account.id)));
@@ -182,11 +199,13 @@ app.get('/api/messages', asyncRoute(async (req, res) => {
   const input = z.object({
     accountId: z.string().optional(), group: z.string().optional(), q: z.string().max(200).optional(),
     unread: z.enum(['true', 'false']).optional(), flagged: z.enum(['true', 'false']).optional(), hasAttachments: z.enum(['true', 'false']).optional(),
+    mailboxRole: z.enum(['inbox', 'sent', 'archive', 'trash']).default('inbox'), snoozed: z.enum(['true', 'false']).optional(), label: z.string().max(80).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(60), offset: z.coerce.number().int().min(0).default(0),
   }).parse(req.query);
   const result = await listCachedMessages({
     accountId: input.accountId, group: input.group, query: input.q,
-    unread: input.unread === 'true', flagged: input.flagged === 'true', hasAttachments: input.hasAttachments === 'true', limit: input.limit, offset: input.offset,
+    unread: input.unread === 'true', flagged: input.flagged === 'true', hasAttachments: input.hasAttachments === 'true', mailboxRole: input.mailboxRole,
+    snoozed: input.snoozed === 'true', label: input.label, limit: input.limit, offset: input.offset,
   });
   const messages = result.messages.map(({ text: _text, html: _html, ...summary }) => summary);
   res.json({ messages, total: result.total, nextOffset: input.offset + messages.length, hasMore: input.offset + messages.length < result.total });
@@ -203,13 +222,13 @@ app.get('/api/messages/:id', asyncRoute(async (req, res) => {
 }));
 
 app.patch('/api/messages/:id', asyncRoute(async (req, res) => {
-  const input = z.object({ unread: z.boolean().optional(), flagged: z.boolean().optional() }).parse(req.body);
-  await updateRemoteMessageFlags(String(req.params.id), input);
+  const input = z.object({ unread: z.boolean().optional(), flagged: z.boolean().optional(), labels: z.array(z.string().trim().min(1).max(40)).max(12).optional(), snoozedUntil: z.string().datetime().nullable().optional() }).parse(req.body);
+  if (input.unread !== undefined || input.flagged !== undefined) await updateRemoteMessageFlags(String(req.params.id), { unread: input.unread, flagged: input.flagged });
   let updated;
   await updateStore((data) => {
     updated = data.messages.find((item) => item.id === req.params.id);
     if (!updated) throw new Error('邮件不存在');
-    Object.assign(updated, input);
+    Object.assign(updated, input, { snoozedUntil: input.snoozedUntil ?? undefined });
   });
   res.json({ message: updated });
 }));
@@ -221,13 +240,54 @@ app.post('/api/messages/:id/move', asyncRoute(async (req, res) => {
   await updateStore((data) => {
     moved = data.messages.find((item) => item.id === req.params.id);
     if (!moved) throw new Error('邮件不存在');
-    data.messages = data.messages.filter((item) => item.id !== req.params.id);
+    if (moved) { moved.mailbox = result.mailbox; moved.mailboxRole = destination; if (result.uid) moved.uid = result.uid; moved.snoozedUntil = undefined; }
   });
   res.json({ message: moved, destination, mailbox: result.mailbox });
 }));
 
-const sendSchema = z.object({ accountId: z.string().uuid(), to: z.array(z.string().email()).min(1), cc: z.array(z.string().email()).optional(), subject: z.string().min(1), text: z.string().min(1), html: z.string().optional() });
-app.post('/api/send', asyncRoute(async (req, res) => res.status(201).json(await sendMessage(sendSchema.parse(req.body)))));
+app.get('/api/messages/:id/attachments/:index', asyncRoute(async (req, res) => {
+  const index = z.coerce.number().int().min(0).parse(req.params.index);
+  const attachment = await downloadAttachment(String(req.params.id), index);
+  const filename = attachment.filename.replace(/[\r\n"\\]/g, '_');
+  res.setHeader('Content-Type', attachment.contentType || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  res.send(attachment.content);
+}));
+
+app.get('/api/labels', asyncRoute(async (_req, res) => {
+  const data = await readStore();
+  const labels = Array.from(new Set(data.messages.flatMap((message) => message.labels ?? []))).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  res.json({ labels });
+}));
+
+const draftSchema = z.object({ accountId: z.string().uuid(), to: z.array(z.string().email()).default([]), cc: z.array(z.string().email()).default([]), subject: z.string().max(500).default(''), text: z.string().max(2_000_000).default('') });
+app.get('/api/drafts', asyncRoute(async (_req, res) => {
+  const data = await readStore();
+  res.json({ drafts: (data.drafts ?? []).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) });
+}));
+app.post('/api/drafts', asyncRoute(async (req, res) => {
+  const input = draftSchema.parse(req.body); const now = new Date().toISOString();
+  const draft = { id: crypto.randomUUID(), ...input, createdAt: now, updatedAt: now };
+  await updateStore((data) => { if (!data.accounts.some((item) => item.id === input.accountId)) throw new Error('发件邮箱不存在'); (data.drafts ??= []).push(draft); });
+  res.status(201).json({ draft });
+}));
+app.put('/api/drafts/:id', asyncRoute(async (req, res) => {
+  const input = draftSchema.parse(req.body); let draft;
+  await updateStore((data) => { draft = (data.drafts ?? []).find((item) => item.id === req.params.id); if (!draft) throw new Error('草稿不存在'); Object.assign(draft, input, { updatedAt: new Date().toISOString() }); });
+  res.json({ draft });
+}));
+app.delete('/api/drafts/:id', asyncRoute(async (req, res) => { await updateStore((data) => { data.drafts = (data.drafts ?? []).filter((item) => item.id !== req.params.id); }); res.status(204).end(); }));
+
+app.get('/api/notifications', asyncRoute(async (_req, res) => {
+  const data = await readStore(); const now = new Date().toISOString();
+  const connection = data.accounts.filter((item) => item.status === 'error').map((account) => ({ id: `account-${account.id}`, kind: 'error', title: `${account.displayName} 连接异常`, detail: account.lastError || account.email, date: account.lastSyncAt || account.createdAt, accountId: account.id }));
+  const returned = data.messages.filter((item) => item.snoozedUntil && item.snoozedUntil <= now).slice(0, 20).map((message) => ({ id: `snooze-${message.id}`, kind: 'snooze', title: message.subject, detail: '稍后处理的邮件已返回收件箱', date: message.snoozedUntil!, messageId: message.id, accountId: message.accountId }));
+  const unread = data.messages.filter((item) => (item.mailboxRole ?? 'inbox') === 'inbox' && item.unread && (!item.snoozedUntil || item.snoozedUntil <= now)).slice(0, 20).map((message) => ({ id: `unread-${message.id}`, kind: 'unread', title: message.subject, detail: message.from.name || message.from.address, date: message.date, messageId: message.id, accountId: message.accountId }));
+  res.json({ notifications: [...connection, ...returned, ...unread].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30) });
+}));
+
+const sendSchema = z.object({ accountId: z.string().uuid(), to: z.array(z.string().email()).min(1), cc: z.array(z.string().email()).optional(), subject: z.string().min(1), text: z.string().min(1), html: z.string().optional(), draftId: z.string().uuid().optional() });
+app.post('/api/send', asyncRoute(async (req, res) => { const input = sendSchema.parse(req.body); const result = await sendMessage(input); if (input.draftId) await updateStore((data) => { data.drafts = (data.drafts ?? []).filter((item) => item.id !== input.draftId); }); res.status(201).json(result); }));
 
 const tokenSchema = z.object({
   name: z.string().min(1).max(80),

@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { CachedMessage, DeveloperToken, MailAccount, StoreData, TokenScope } from './types.js';
+import type { CachedMessage, DeveloperToken, Draft, MailAccount, MailboxRole, StoreData, TokenScope } from './types.js';
 
-const initial: StoreData = { accounts: [], messages: [], tokens: [] };
+const initial: StoreData = { accounts: [], messages: [], tokens: [], drafts: [] };
 
 type SqlValue = string | number | bigint | null | Uint8Array;
 type Row = Record<string, SqlValue>;
@@ -15,6 +15,9 @@ export type MessageQuery = {
   unread?: boolean;
   flagged?: boolean;
   hasAttachments?: boolean;
+  mailboxRole?: MailboxRole;
+  snoozed?: boolean;
+  label?: string;
   limit: number;
   offset: number;
 };
@@ -32,13 +35,16 @@ function json<T>(row: Row, key: string): T { return JSON.parse(text(row, key)) a
 function integer(row: Row, key: string) { return Number(row[key]); }
 
 function messageFromRow(row: Row): CachedMessage {
-  return {
-    id: text(row, 'id'), accountId: text(row, 'account_id'), mailbox: text(row, 'mailbox'), uid: integer(row, 'uid'),
+  const message: CachedMessage = {
+    id: text(row, 'id'), accountId: text(row, 'account_id'), mailbox: text(row, 'mailbox'), mailboxRole: text(row, 'mailbox_role') as MailboxRole, uid: integer(row, 'uid'),
     messageId: optionalText(row, 'message_id'), from: json(row, 'from_json'), to: json(row, 'to_json'),
     subject: text(row, 'subject'), preview: text(row, 'preview'), text: text(row, 'text_body'), html: optionalText(row, 'html_body'),
     date: text(row, 'received_at'), unread: Boolean(integer(row, 'unread')), flagged: Boolean(integer(row, 'flagged')),
-    hasAttachments: Boolean(integer(row, 'has_attachments')), attachments: json(row, 'attachments_json'),
+    hasAttachments: Boolean(integer(row, 'has_attachments')), attachments: json<Array<{ filename: string; contentType: string; size: number; index?: number }>>(row, 'attachments_json').map((item, index) => ({ ...item, index: item.index ?? index })),
+    labels: json(row, 'labels_json'),
   };
+  const snoozedUntil = optionalText(row, 'snoozed_until'); if (snoozedUntil) message.snoozedUntil = snoozedUntil;
+  return message;
 }
 
 export class SQLiteStore {
@@ -81,6 +87,7 @@ export class SQLiteStore {
         id TEXT PRIMARY KEY,
         account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
         mailbox TEXT NOT NULL,
+        mailbox_role TEXT NOT NULL DEFAULT 'inbox',
         uid INTEGER NOT NULL,
         message_id TEXT,
         from_json TEXT NOT NULL,
@@ -94,10 +101,23 @@ export class SQLiteStore {
         flagged INTEGER NOT NULL CHECK (flagged IN (0, 1)),
         has_attachments INTEGER NOT NULL CHECK (has_attachments IN (0, 1)),
         attachments_json TEXT NOT NULL,
+        labels_json TEXT NOT NULL DEFAULT '[]',
+        snoozed_until TEXT,
         UNIQUE(account_id, mailbox, uid)
       ) STRICT;
       CREATE INDEX IF NOT EXISTS messages_account_date ON messages(account_id, received_at DESC);
       CREATE INDEX IF NOT EXISTS messages_date ON messages(received_at DESC);
+
+      CREATE TABLE IF NOT EXISTS drafts (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        to_json TEXT NOT NULL,
+        cc_json TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        text_body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
 
       CREATE TABLE IF NOT EXISTS developer_tokens (
         id TEXT PRIMARY KEY,
@@ -121,6 +141,10 @@ export class SQLiteStore {
         PRIMARY KEY (token_id, account_id)
       ) STRICT;
     `);
+    const columns = new Set(this.all(this.db.prepare('PRAGMA table_info(messages)')).map((row) => text(row, 'name')));
+    if (!columns.has('mailbox_role')) this.db.exec("ALTER TABLE messages ADD COLUMN mailbox_role TEXT NOT NULL DEFAULT 'inbox'");
+    if (!columns.has('labels_json')) this.db.exec("ALTER TABLE messages ADD COLUMN labels_json TEXT NOT NULL DEFAULT '[]'");
+    if (!columns.has('snoozed_until')) this.db.exec('ALTER TABLE messages ADD COLUMN snoozed_until TEXT');
   }
 
   private migrateLegacyJson() {
@@ -135,6 +159,7 @@ export class SQLiteStore {
       accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
       messages: Array.isArray(parsed.messages) ? parsed.messages : [],
       tokens: Array.isArray(parsed.tokens) ? parsed.tokens : [],
+      drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
     };
     this.replaceData(data, new Date().toISOString());
     const migratedPath = `${this.legacyJsonPath}.migrated`;
@@ -144,23 +169,32 @@ export class SQLiteStore {
   private all(statement: StatementSync): Row[] { return statement.all() as Row[]; }
 
   private snapshot(): StoreData {
-    const accounts = this.all(this.db.prepare('SELECT * FROM accounts ORDER BY created_at')).map((row): MailAccount => ({
-      id: text(row, 'id'), provider: text(row, 'provider') as MailAccount['provider'], email: text(row, 'email'),
+    const accounts = this.all(this.db.prepare('SELECT * FROM accounts ORDER BY created_at')).map((row): MailAccount => {
+      const account: MailAccount = { id: text(row, 'id'), provider: text(row, 'provider') as MailAccount['provider'], email: text(row, 'email'),
       displayName: text(row, 'display_name'), group: text(row, 'group_name'), color: text(row, 'color'),
       settings: json(row, 'settings_json'), encryptedSecret: text(row, 'encrypted_secret'),
       authMethod: optionalText(row, 'auth_method') as MailAccount['authMethod'], createdAt: text(row, 'created_at'),
-      lastSyncAt: optionalText(row, 'last_sync_at'), status: text(row, 'status') as MailAccount['status'], lastError: optionalText(row, 'last_error'),
-    }));
+      status: text(row, 'status') as MailAccount['status'] };
+      const lastSyncAt = optionalText(row, 'last_sync_at'); if (lastSyncAt) account.lastSyncAt = lastSyncAt;
+      const lastError = optionalText(row, 'last_error'); if (lastError) account.lastError = lastError;
+      return account;
+    });
     const messages = this.all(this.db.prepare('SELECT * FROM messages ORDER BY received_at DESC')).map(messageFromRow);
+    const drafts = this.all(this.db.prepare('SELECT * FROM drafts ORDER BY updated_at DESC')).map((row): Draft => ({
+      id: text(row, 'id'), accountId: text(row, 'account_id'), to: json(row, 'to_json'), cc: json(row, 'cc_json'),
+      subject: text(row, 'subject'), text: text(row, 'text_body'), createdAt: text(row, 'created_at'), updatedAt: text(row, 'updated_at'),
+    }));
     const scopeRows = this.all(this.db.prepare('SELECT token_id, scope FROM developer_token_scopes ORDER BY scope'));
     const accountRows = this.all(this.db.prepare('SELECT token_id, account_id FROM developer_token_accounts ORDER BY account_id'));
-    const tokens = this.all(this.db.prepare('SELECT * FROM developer_tokens ORDER BY created_at DESC')).map((row): DeveloperToken => ({
-      id: text(row, 'id'), name: text(row, 'name'), tokenHash: text(row, 'token_hash'), prefix: text(row, 'prefix'),
+    const tokens = this.all(this.db.prepare('SELECT * FROM developer_tokens ORDER BY created_at DESC')).map((row): DeveloperToken => {
+      const token: DeveloperToken = { id: text(row, 'id'), name: text(row, 'name'), tokenHash: text(row, 'token_hash'), prefix: text(row, 'prefix'),
       scopes: scopeRows.filter((item) => text(item, 'token_id') === text(row, 'id')).map((item) => text(item, 'scope') as TokenScope),
       accountIds: accountRows.filter((item) => text(item, 'token_id') === text(row, 'id')).map((item) => text(item, 'account_id')),
-      createdAt: text(row, 'created_at'), expiresAt: text(row, 'expires_at'), lastUsedAt: optionalText(row, 'last_used_at'),
-    }));
-    return { accounts, messages, tokens };
+      createdAt: text(row, 'created_at'), expiresAt: text(row, 'expires_at') };
+      const lastUsedAt = optionalText(row, 'last_used_at'); if (lastUsedAt) token.lastUsedAt = lastUsedAt;
+      return token;
+    });
+    return { accounts, messages, tokens, drafts };
   }
 
   async read(): Promise<StoreData> {
@@ -177,6 +211,10 @@ export class SQLiteStore {
     if (input.unread) where.push('m.unread = 1');
     if (input.flagged) where.push('m.flagged = 1');
     if (input.hasAttachments) where.push('m.has_attachments = 1');
+    if (input.mailboxRole) { where.push('m.mailbox_role = ?'); values.push(input.mailboxRole); }
+    if (input.snoozed === true) where.push("m.snoozed_until IS NOT NULL AND m.snoozed_until > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')");
+    else if (input.mailboxRole === 'inbox') where.push("(m.snoozed_until IS NULL OR m.snoozed_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))");
+    if (input.label) { where.push('EXISTS (SELECT 1 FROM json_each(m.labels_json) WHERE value = ?)'); values.push(input.label); }
     if (input.query?.trim()) {
       where.push('(m.subject LIKE ? OR m.preview LIKE ? OR m.from_json LIKE ? OR m.to_json LIKE ?)');
       const pattern = `%${input.query.trim()}%`;
@@ -198,13 +236,14 @@ export class SQLiteStore {
 
   async messageStats(): Promise<MessageStats> {
     await this.queue;
-    const overall = this.db.prepare('SELECT count(*) AS total, coalesce(sum(unread), 0) AS unread FROM messages').get() as Row;
+    const activeInbox = "mailbox_role = 'inbox' AND (snoozed_until IS NULL OR snoozed_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))";
+    const overall = this.db.prepare(`SELECT count(*) AS total, coalesce(sum(unread), 0) AS unread FROM messages WHERE ${activeInbox}`).get() as Row;
     const byAccount = this.all(this.db.prepare(`SELECT account_id, count(*) AS total, coalesce(sum(unread), 0) AS unread
-      FROM messages GROUP BY account_id ORDER BY account_id`)).map((row) => ({
+      FROM messages WHERE ${activeInbox} GROUP BY account_id ORDER BY account_id`)).map((row) => ({
       accountId: text(row, 'account_id'), total: integer(row, 'total'), unread: integer(row, 'unread'),
     }));
     const byGroup = this.all(this.db.prepare(`SELECT a.group_name, count(*) AS total, coalesce(sum(m.unread), 0) AS unread
-      FROM messages m JOIN accounts a ON a.id = m.account_id GROUP BY a.group_name ORDER BY a.group_name`)).map((row) => ({
+      FROM messages m JOIN accounts a ON a.id = m.account_id WHERE m.mailbox_role = 'inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) GROUP BY a.group_name ORDER BY a.group_name`)).map((row) => ({
       group: text(row, 'group_name'), total: integer(row, 'total'), unread: integer(row, 'unread'),
     }));
     return { total: integer(overall, 'total'), unread: integer(overall, 'unread'), byAccount, byGroup };
@@ -228,16 +267,18 @@ export class SQLiteStore {
       (id, provider, email, display_name, group_name, color, settings_json, encrypted_secret, auth_method, created_at, last_sync_at, status, last_error)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const insertMessage = this.db.prepare(`INSERT INTO messages
-      (id, account_id, mailbox, uid, message_id, from_json, to_json, subject, preview, text_body, html_body, received_at, unread, flagged, has_attachments, attachments_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      (id, account_id, mailbox, mailbox_role, uid, message_id, from_json, to_json, subject, preview, text_body, html_body, received_at, unread, flagged, has_attachments, attachments_json, labels_json, snoozed_until)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertDraft = this.db.prepare('INSERT INTO drafts (id, account_id, to_json, cc_json, subject, text_body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     const insertToken = this.db.prepare('INSERT INTO developer_tokens (id, name, token_hash, prefix, created_at, expires_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
     const insertScope = this.db.prepare('INSERT INTO developer_token_scopes (token_id, scope) VALUES (?, ?)');
     const insertTokenAccount = this.db.prepare('INSERT INTO developer_token_accounts (token_id, account_id) VALUES (?, ?)');
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      this.db.exec('DELETE FROM developer_token_accounts; DELETE FROM developer_token_scopes; DELETE FROM developer_tokens; DELETE FROM messages; DELETE FROM accounts;');
+      this.db.exec('DELETE FROM developer_token_accounts; DELETE FROM developer_token_scopes; DELETE FROM developer_tokens; DELETE FROM drafts; DELETE FROM messages; DELETE FROM accounts;');
       for (const account of data.accounts) insertAccount.run(account.id, account.provider, account.email, account.displayName, account.group, account.color, JSON.stringify(account.settings), account.encryptedSecret, account.authMethod ?? null, account.createdAt, account.lastSyncAt ?? null, account.status, account.lastError ?? null);
-      for (const message of data.messages) insertMessage.run(message.id, message.accountId, message.mailbox, message.uid, message.messageId ?? null, JSON.stringify(message.from), JSON.stringify(message.to), message.subject, message.preview, message.text, message.html ?? null, message.date, Number(message.unread), Number(message.flagged), Number(message.hasAttachments), JSON.stringify(message.attachments));
+      for (const message of data.messages) insertMessage.run(message.id, message.accountId, message.mailbox, message.mailboxRole ?? 'inbox', message.uid, message.messageId ?? null, JSON.stringify(message.from), JSON.stringify(message.to), message.subject, message.preview, message.text, message.html ?? null, message.date, Number(message.unread), Number(message.flagged), Number(message.hasAttachments), JSON.stringify(message.attachments), JSON.stringify(message.labels ?? []), message.snoozedUntil ?? null);
+      for (const draft of data.drafts ?? []) insertDraft.run(draft.id, draft.accountId, JSON.stringify(draft.to), JSON.stringify(draft.cc), draft.subject, draft.text, draft.createdAt, draft.updatedAt);
       for (const token of data.tokens) {
         insertToken.run(token.id, token.name, token.tokenHash, token.prefix, token.createdAt, token.expiresAt, token.lastUsedAt ?? null);
         for (const scope of token.scopes) insertScope.run(token.id, scope);

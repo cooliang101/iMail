@@ -1,4 +1,5 @@
 export type ProviderId = 'outlook' | 'gmail' | 'qq' | 'yahoo' | 'hotmail' | 'icloud' | 'custom';
+export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'trash';
 
 export type Account = {
   id: string;
@@ -16,6 +17,7 @@ export type Account = {
 export type Message = {
   id: string;
   accountId: string;
+  mailboxRole: MailboxRole;
   from: { name: string; address: string };
   to: Array<{ name: string; address: string }>;
   subject: string;
@@ -25,7 +27,20 @@ export type Message = {
   unread: boolean;
   flagged: boolean;
   hasAttachments: boolean;
-  attachments: Array<{ filename: string; contentType: string; size: number }>;
+  attachments: Array<{ filename: string; contentType: string; size: number; index: number }>;
+  labels: string[];
+  snoozedUntil?: string;
+};
+
+export type Draft = {
+  id: string;
+  accountId: string;
+  to: string[];
+  cc: string[];
+  subject: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type DeveloperToken = {

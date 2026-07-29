@@ -11,6 +11,7 @@ vi.mock('./mail.js', async (importOriginal) => {
     ...actual,
     updateRemoteMessageFlags: vi.fn(async () => undefined),
     moveRemoteMessage: vi.fn(async (_messageId: string, destination: 'archive' | 'trash') => ({ mailbox: destination === 'archive' ? 'Archive' : 'Trash' })),
+    downloadAttachment: vi.fn(async () => ({ content: Buffer.from('hello'), filename: 'report.txt', contentType: 'text/plain' })),
   };
 });
 
@@ -49,7 +50,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await updateStore((data) => { data.accounts = [account]; data.messages = []; data.tokens = []; });
+  await updateStore((data) => { data.accounts = [account]; data.messages = []; data.tokens = []; data.drafts = []; });
 });
 
 async function request(route: string, init?: RequestInit) {
@@ -75,6 +76,13 @@ describe('iMail HTTP API', () => {
     expect(result.body.accounts[0]).toMatchObject({ id: account.id, email: account.email, authMethod: 'oauth2' });
     expect(JSON.stringify(result.body)).not.toContain('must-never-leak');
     expect(result.body.accounts[0]).not.toHaveProperty('encryptedSecret');
+  });
+
+  it('updates account workspace metadata without exposing credentials', async () => {
+    const result = await request(`/api/accounts/${account.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group: '客户支持', displayName: 'Support' }) });
+    expect(result.response.status).toBe(200);
+    expect(result.body.account).toMatchObject({ group: '客户支持', displayName: 'Support' });
+    expect(result.body.account).not.toHaveProperty('encryptedSecret');
   });
 
   it('issues a scoped developer token and authorizes its permitted API', async () => {
@@ -142,8 +150,38 @@ describe('iMail HTTP API', () => {
     });
     expect(archived.response.status).toBe(200);
     expect(archived.body).toMatchObject({ destination: 'archive', mailbox: 'Archive', message: { id: 'message-lazy' } });
-    expect((await request('/api/messages/message-lazy')).response.status).toBe(404);
+    expect((await request('/api/messages/message-lazy')).body.message).toMatchObject({ mailbox: 'Archive', mailboxRole: 'archive' });
+    expect((await request('/api/messages?mailboxRole=archive')).body).toMatchObject({ total: 1, messages: [{ id: 'message-lazy', mailboxRole: 'archive' }] });
     expect((await request('/api/message-stats')).body).toMatchObject({ total: 0, unread: 0 });
+  });
+
+  it('persists drafts and exposes labels, snooze state and notifications', async () => {
+    const createdDraft = await request('/api/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: account.id, to: ['friend@example.com'], subject: 'Draft subject', text: 'Draft body' }) });
+    expect(createdDraft.response.status).toBe(201);
+    expect((await request('/api/drafts')).body.drafts[0]).toMatchObject({ subject: 'Draft subject', to: ['friend@example.com'] });
+    const draftId = createdDraft.body.draft.id;
+    const updatedDraft = await request(`/api/drafts/${draftId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: account.id, to: [], cc: [], subject: 'Updated draft', text: '' }) });
+    expect(updatedDraft.body.draft.subject).toBe('Updated draft');
+
+    await updateStore((data) => { data.messages = [{ id: 'organize-me', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 10, from: { name: 'Sender', address: 'sender@example.com' }, to: [], subject: 'Organize', preview: '', text: 'Body', date: '2026-07-29T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [], labels: [] }]; });
+    const organized = await request('/api/messages/organize-me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ labels: ['客户'], snoozedUntil: '2999-01-01T09:00:00.000Z' }) });
+    expect(organized.body.message).toMatchObject({ labels: ['客户'], snoozedUntil: '2999-01-01T09:00:00.000Z' });
+    expect((await request('/api/labels')).body.labels).toEqual(['客户']);
+    expect((await request('/api/messages?mailboxRole=inbox')).body.total).toBe(0);
+    expect((await request('/api/messages?mailboxRole=inbox&snoozed=true')).body.messages[0].id).toBe('organize-me');
+    const notifications = await request('/api/notifications');
+    expect(notifications.response.status).toBe(200);
+    expect(Array.isArray(notifications.body.notifications)).toBe(true);
+    expect((await request(`/api/drafts/${draftId}`, { method: 'DELETE' })).response.status).toBe(204);
+    expect((await request('/api/drafts')).body.drafts).toEqual([]);
+  });
+
+  it('streams attachment downloads with safe response headers', async () => {
+    const response = await fetch(`${baseUrl}/api/messages/message-file/attachments/0`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/plain');
+    expect(response.headers.get('content-disposition')).toContain("filename*=UTF-8''report.txt");
+    expect(await response.text()).toBe('hello');
   });
 
   it('lets a developer token select a mailbox by route, email or provider', async () => {

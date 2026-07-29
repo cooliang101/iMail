@@ -17,7 +17,7 @@ const state = vi.hoisted(() => ({
   sendMail: vi.fn(async () => ({ messageId: '<sent@example.com>', accepted: ['recipient@example.com'] })),
   messageFlagsAdd: vi.fn(async () => true),
   messageFlagsRemove: vi.fn(async () => true),
-  list: vi.fn(async () => [{ path: 'Archive', specialUse: '\\Archive' }, { path: 'Trash', specialUse: '\\Trash' }]),
+  list: vi.fn(async () => [{ path: 'Sent', specialUse: '\\Sent' }, { path: 'Archive', specialUse: '\\Archive' }, { path: 'Trash', specialUse: '\\Trash' }]),
   messageMove: vi.fn(async () => ({ uidValidity: 1n, uidMap: new Map([[42, 84]]) })),
   simpleParser: vi.fn(async () => state.parsed),
 }));
@@ -55,7 +55,7 @@ vi.mock('nodemailer', () => ({
   }) },
 }));
 
-import { describeProtocolError, moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
+import { describeProtocolError, downloadAttachment, moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
 
 function account(overrides: Partial<MailAccount> = {}): MailAccount {
   return {
@@ -73,7 +73,7 @@ beforeEach(() => {
   state.connect.mockResolvedValue(undefined); state.mailboxOpen.mockResolvedValue({ exists: 0, uidNext: 1 }); state.logout.mockResolvedValue(undefined);
   state.verify.mockResolvedValue(true); state.sendMail.mockResolvedValue({ messageId: '<sent@example.com>', accepted: ['recipient@example.com'] });
   state.messageFlagsAdd.mockResolvedValue(true); state.messageFlagsRemove.mockResolvedValue(true);
-  state.list.mockResolvedValue([{ path: 'Archive', specialUse: '\\Archive' }, { path: 'Trash', specialUse: '\\Trash' }]);
+  state.list.mockResolvedValue([{ path: 'Sent', specialUse: '\\Sent' }, { path: 'Archive', specialUse: '\\Archive' }, { path: 'Trash', specialUse: '\\Trash' }]);
   state.messageMove.mockResolvedValue({ uidValidity: 1n, uidMap: new Map([[42, 84]]) });
   state.parsed = {};
 });
@@ -131,7 +131,7 @@ describe('message synchronization', () => {
   it('moves a cached message to the provider special-use archive folder', async () => {
     const configured = account(); state.store.accounts = [configured];
     state.store.messages = [{ id: 'cached-42', accountId: configured.id, mailbox: 'INBOX', uid: 42, from: { name: '', address: '' }, to: [], subject: 'Cached', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [] }];
-    await expect(moveRemoteMessage('cached-42', 'archive')).resolves.toEqual({ mailbox: 'Archive' });
+    await expect(moveRemoteMessage('cached-42', 'archive')).resolves.toEqual({ mailbox: 'Archive', uid: 84 });
     expect(state.list).toHaveBeenCalledOnce();
     expect(state.mailboxOpen).toHaveBeenCalledWith('INBOX', { readOnly: false });
     expect(state.messageMove).toHaveBeenCalledWith(42, 'Archive', { uid: true });
@@ -145,6 +145,14 @@ describe('message synchronization', () => {
     expect(state.messageMove).not.toHaveBeenCalled();
   });
 
+  it('uses Gmail All Mail as the archive destination when no standard archive folder exists', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'gmail-archive', accountId: configured.id, mailbox: 'INBOX', uid: 42, from: { name: '', address: '' }, to: [], subject: 'Cached', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [] }];
+    state.list.mockResolvedValueOnce([{ path: '[Gmail]/All Mail', specialUse: '\\All' }]);
+    await expect(moveRemoteMessage('gmail-archive', 'archive')).resolves.toEqual({ mailbox: '[Gmail]/All Mail', uid: 84 });
+    expect(state.messageMove).toHaveBeenCalledWith(42, '[Gmail]/All Mail', { uid: true });
+  });
+
   it('maps IMAP messages, flags and attachment metadata into the cache', async () => {
     const configured = account(); state.store.accounts = [configured];
     state.mailboxOpen.mockResolvedValue({ exists: 1, uidNext: 43 });
@@ -156,7 +164,7 @@ describe('message synchronization', () => {
     };
     await expect(syncAccount(configured.id)).resolves.toEqual({ synced: 1 });
     expect(state.store.messages[0]).toMatchObject({ uid: 42, subject: 'Hello', text: 'Body text', unread: true, flagged: true, hasAttachments: true });
-    expect(state.store.messages[0].attachments).toEqual([{ filename: 'note.txt', contentType: 'text/plain', size: 12 }]);
+    expect(state.store.messages[0].attachments).toEqual([{ filename: 'note.txt', contentType: 'text/plain', size: 12, index: 0 }]);
     expect(state.store.accounts[0].status).toBe('connected');
     expect(state.store.accounts[0].lastSyncAt).toBeTruthy();
   });
@@ -205,6 +213,27 @@ describe('message synchronization', () => {
   it('rejects unknown accounts before opening a connection', async () => {
     await expect(syncAccount('missing')).rejects.toThrow('邮箱账户不存在');
     expect(state.connect).not.toHaveBeenCalled();
+  });
+
+  it('discovers and caches the provider sent folder separately from inbox', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.mailboxOpen.mockResolvedValue({ exists: 1, uidNext: 8 });
+    state.fetchBatches = [[{ uid: 7, source: Buffer.from('sent-mail'), flags: new Set(['\\Seen']), internalDate: new Date('2026-07-29T02:00:00.000Z') }]];
+    state.parsed = { from: { value: [{ name: 'Owner', address: configured.email }] }, to: { value: [{ name: '', address: 'friend@example.com' }] }, subject: 'Sent subject', text: 'Sent body', attachments: [] };
+    await expect(syncAccount(configured.id, 'sent')).resolves.toEqual({ synced: 1 });
+    expect(state.list).toHaveBeenCalledOnce();
+    expect(state.mailboxOpen).toHaveBeenCalledWith('Sent', { readOnly: true });
+    expect(state.store.messages[0]).toMatchObject({ mailbox: 'Sent', mailboxRole: 'sent', uid: 7, unread: false });
+  });
+
+  it('downloads attachment bytes from the cached message mailbox only on demand', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'with-attachment', accountId: configured.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 44, from: { name: '', address: '' }, to: [], subject: 'File', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: false, flagged: false, hasAttachments: true, attachments: [{ filename: 'report.txt', contentType: 'text/plain', size: 5, index: 0 }], labels: [] }];
+    state.fetchBatches = [[{ uid: 44, source: Buffer.from('mail-source') }]];
+    state.parsed = { attachments: [{ filename: 'report.txt', contentType: 'text/plain', size: 5, content: Buffer.from('hello') }] };
+    await expect(downloadAttachment('with-attachment', 0)).resolves.toEqual({ content: Buffer.from('hello'), filename: 'report.txt', contentType: 'text/plain' });
+    expect(state.mailboxOpen).toHaveBeenCalledWith('INBOX', { readOnly: true });
+    expect(state.fetchCalls[0]).toMatchObject({ range: 44, options: { uid: true }, query: { source: true } });
   });
 });
 

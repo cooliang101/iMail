@@ -28,10 +28,10 @@ function account(overrides: Partial<MailAccount> = {}): MailAccount {
 
 function message(overrides: Partial<CachedMessage> = {}): CachedMessage {
   return {
-    id: 'message-1', accountId: account().id, mailbox: 'INBOX', uid: 42, messageId: '<42@example.com>',
+    id: 'message-1', accountId: account().id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 42, messageId: '<42@example.com>',
     from: { name: 'Sender', address: 'sender@example.com' }, to: [{ name: 'Owner', address: 'owner@example.com' }],
     subject: 'Hello', preview: 'Preview', text: 'Body', html: '<p>Body</p>', date: '2026-07-28T01:00:00.000Z',
-    unread: true, flagged: false, hasAttachments: true, attachments: [{ filename: 'note.txt', contentType: 'text/plain', size: 12 }], ...overrides,
+    unread: true, flagged: false, hasAttachments: true, attachments: [{ filename: 'note.txt', contentType: 'text/plain', size: 12, index: 0 }], labels: [], ...overrides,
   };
 }
 
@@ -51,12 +51,12 @@ afterEach(async () => {
 describe('SQLiteStore', () => {
   it('initializes an empty database', async () => {
     const { store } = await temporaryStore();
-    expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [] });
+    expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [], drafts: [] });
   });
 
   it('round-trips accounts, nested messages, attachments and normalized token relations', async () => {
     const { store } = await temporaryStore();
-    const expected = { accounts: [account({ lastSyncAt: '2026-07-28T02:00:00.000Z' })], messages: [message()], tokens: [token({ lastUsedAt: '2026-07-28T03:00:00.000Z' })] };
+    const expected = { accounts: [account({ lastSyncAt: '2026-07-28T02:00:00.000Z' })], messages: [message()], tokens: [token({ lastUsedAt: '2026-07-28T03:00:00.000Z' })], drafts: [] };
     await store.update((data) => { Object.assign(data, expected); });
     expect(await store.read()).toEqual(expected);
   });
@@ -110,6 +110,25 @@ describe('SQLiteStore', () => {
     expect((await store.read()).accounts).toHaveLength(20);
   });
 
+  it('persists drafts and filters mailbox roles, labels and snoozed messages', async () => {
+    const { store } = await temporaryStore();
+    await store.update((data) => {
+      data.accounts = [account()];
+      data.messages = [
+        message({ id: 'inbox', uid: 1, labels: ['客户'] }),
+        message({ id: 'snoozed', uid: 2, snoozedUntil: '2999-01-01T09:00:00.000Z' }),
+        message({ id: 'archived', uid: 3, mailbox: 'Archive', mailboxRole: 'archive' }),
+      ];
+      data.drafts = [{ id: 'draft-1', accountId: account().id, to: ['friend@example.com'], cc: [], subject: 'Draft', text: 'Body', createdAt: '2026-07-28T00:00:00.000Z', updatedAt: '2026-07-28T01:00:00.000Z' }];
+    });
+    expect((await store.read()).drafts).toHaveLength(1);
+    expect((await store.listMessages({ mailboxRole: 'inbox', limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['inbox']);
+    expect((await store.listMessages({ mailboxRole: 'inbox', snoozed: true, limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['snoozed']);
+    expect((await store.listMessages({ mailboxRole: 'archive', limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['archived']);
+    expect((await store.listMessages({ label: '客户', limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['inbox']);
+    expect(await store.messageStats()).toMatchObject({ total: 1, unread: 1 });
+  });
+
   it('rolls back the complete transaction when a database constraint fails', async () => {
     const { store } = await temporaryStore();
     await store.update((data) => { data.accounts.push(account()); });
@@ -121,11 +140,11 @@ describe('SQLiteStore', () => {
     const { store } = await temporaryStore();
     await expect(store.update((data) => { data.messages.push(message({ accountId: 'missing' })); })).rejects.toThrow();
     await expect(store.update((data) => { data.tokens.push(token({ accountIds: ['missing'] })); })).rejects.toThrow();
-    expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [] });
+    expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [], drafts: [] });
   });
 
   it('migrates legacy JSON once and preserves it as a migrated backup', async () => {
-    const legacy = { accounts: [account()], messages: [message()], tokens: [token()] };
+    const legacy = { accounts: [account()], messages: [message()], tokens: [token()], drafts: [] };
     const { store, directory, legacyPath } = await temporaryStore(legacy);
     expect(await store.read()).toEqual(legacy);
     await expect(readFile(`${legacyPath}.migrated`, 'utf8')).resolves.toContain('owner@example.com');

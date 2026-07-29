@@ -1,4 +1,5 @@
 export type ProviderId = 'outlook' | 'gmail' | 'qq' | 'yahoo' | 'hotmail' | 'icloud' | 'custom';
+export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'trash';
 
 export type MailSettings = {
   imapHost: string;
@@ -40,6 +41,7 @@ export type CachedMessage = {
   id: string;
   accountId: string;
   mailbox: string;
+  mailboxRole?: MailboxRole;
   uid: number;
   messageId?: string;
   from: { name: string; address: string };
@@ -52,7 +54,20 @@ export type CachedMessage = {
   unread: boolean;
   flagged: boolean;
   hasAttachments: boolean;
-  attachments: Array<{ filename: string; contentType: string; size: number }>;
+  attachments: Array<{ filename: string; contentType: string; size: number; index?: number }>;
+  labels?: string[];
+  snoozedUntil?: string;
+};
+
+export type Draft = {
+  id: string;
+  accountId: string;
+  to: string[];
+  cc: string[];
+  subject: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type TokenScope = 'messages:read' | 'messages:send' | 'accounts:read';
@@ -73,4 +88,5 @@ export type StoreData = {
   accounts: MailAccount[];
   messages: CachedMessage[];
   tokens: DeveloperToken[];
+  drafts?: Draft[];
 };

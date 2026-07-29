@@ -8,11 +8,12 @@ import {
 import { siGmail, siIcloud, siQq } from 'simple-icons';
 import { api } from './api';
 import { credentialGuideFor, oauthCallbackOrigins } from './provider-guides';
-import type { Account, DeveloperToken, Message, ProviderId } from './types';
+import type { Account, DeveloperToken, Draft, MailboxRole, Message, ProviderId } from './types';
 import { virtualRange } from './virtual';
 
-type View = 'inbox' | 'starred' | 'tokens';
+type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'drafts' | 'tokens';
 type Notice = { kind: 'success' | 'error'; text: string } | null;
+type MailNotification = { id: string; kind: 'error' | 'snooze' | 'unread'; title: string; detail: string; date: string; messageId?: string; accountId: string };
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
 type MessageStats = {
   total: number;
@@ -89,6 +90,8 @@ function App() {
   const [realAccounts, setRealAccounts] = useState<Account[]>([]);
   const [realMessages, setRealMessages] = useState<Message[]>([]);
   const [tokens, setTokens] = useState<DeveloperToken[]>([]);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [labels, setLabels] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<View>('inbox');
   const [accountFilter, setAccountFilter] = useState('all');
@@ -100,6 +103,13 @@ function App() {
   const [composeMode, setComposeMode] = useState<'new' | 'reply' | 'forward' | null>(null);
   const [tokenOpen, setTokenOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<MailNotification[]>([]);
+  const [labelOpen, setLabelOpen] = useState(false);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  const [activeDraft, setActiveDraft] = useState<Draft | undefined>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [syncing, setSyncing] = useState(false);
@@ -117,14 +127,18 @@ function App() {
 
   async function load() {
     try {
-      const [accountData, tokenData, statsData] = await Promise.all([
+      const [accountData, tokenData, statsData, draftData, labelData] = await Promise.all([
         api<{ accounts: Account[] }>('/api/accounts'),
         api<{ tokens: DeveloperToken[] }>('/api/developer-tokens'),
         api<MessageStats>('/api/message-stats'),
+        api<{ drafts: Draft[] }>('/api/drafts'),
+        api<{ labels: string[] }>('/api/labels'),
       ]);
       setRealAccounts(accountData.accounts);
       setTokens(tokenData.tokens);
       setMessageStats(statsData);
+      setDrafts(draftData.drafts);
+      setLabels(labelData.labels);
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '服务连接失败' });
     }
@@ -144,10 +158,14 @@ function App() {
     if (groupFilter) params.set('group', groupFilter);
     if (search.trim()) params.set('q', search.trim());
     if (view === 'starred') params.set('flagged', 'true');
+    const mailboxRole: MailboxRole = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : 'inbox';
+    params.set('mailboxRole', mailboxRole);
+    if (view === 'snoozed') params.set('snoozed', 'true');
+    if (activeLabel) params.set('label', activeLabel);
     if (mailFilter === 'unread') params.set('unread', 'true');
     if (mailFilter === 'attachments') params.set('hasAttachments', 'true');
     return params.toString();
-  }, [accountFilter, groupFilter, search, view, mailFilter]);
+  }, [accountFilter, groupFilter, search, view, mailFilter, activeLabel]);
   const selected = messages.find((message) => message.id === selectedId) ?? messages[0];
   const selectedIndex = selected ? messages.findIndex((message) => message.id === selected.id) : -1;
   const activeAccount = accountFilter === 'all' ? undefined : accounts.find((account) => account.id === accountFilter);
@@ -174,6 +192,16 @@ function App() {
     }, search.trim() ? 220 : 0);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [messageQuery, messageRevision]);
+
+  useEffect(() => {
+    if ((view !== 'sent' && view !== 'archive') || accounts.length === 0) return;
+    let cancelled = false; setSyncing(true);
+    void api(`/api/mailboxes/${view}/sync`, { method: 'POST' }).then(() => {
+      if (!cancelled) { void load(); setMessageRevision((value) => value + 1); }
+    }).catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
+      .finally(() => { if (!cancelled) setSyncing(false); });
+    return () => { cancelled = true; };
+  }, [view]);
 
   useEffect(() => {
     if (!selected || selected.text !== undefined) return;
@@ -203,9 +231,33 @@ function App() {
   async function syncAll() {
     if (realAccounts.length === 0) { setAddOpen(true); return; }
     setSyncing(true);
-    try { await api('/api/sync', { method: 'POST' }); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: '缓存已更新' }); }
+    try {
+      const role = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : view === 'inbox' || view === 'starred' || view === 'snoozed' ? 'inbox' : null;
+      if (role) await api(role === 'inbox' ? '/api/sync' : `/api/mailboxes/${role}/sync`, { method: 'POST' });
+      await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: '缓存已更新' });
+    }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '同步失败' }); }
     finally { setSyncing(false); }
+  }
+
+  async function openNotifications() {
+    try { const result = await api<{ notifications: MailNotification[] }>('/api/notifications'); setNotifications(result.notifications); setNotificationsOpen(true); }
+    catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '通知加载失败' }); }
+  }
+
+  async function updateSelectedLocal(input: { labels?: string[]; snoozedUntil?: string | null }, success: string) {
+    if (!selected) return;
+    try {
+      const result = await api<{ message: Message }>(`/api/messages/${selected.id}`, { method: 'PATCH', body: JSON.stringify(input) });
+      setRealMessages((current) => current.map((item) => item.id === selected.id ? { ...item, ...result.message } : item));
+      await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: success });
+    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件更新失败' }); }
+  }
+
+  async function markSelectedUnread() {
+    if (!selected || selected.unread) return;
+    try { await api(`/api/messages/${selected.id}`, { method: 'PATCH', body: JSON.stringify({ unread: true }) }); setRealMessages((current) => current.map((item) => item.id === selected.id ? { ...item, unread: true } : item)); if (selected.mailboxRole === 'inbox') adjustMessageStats(selected.accountId, 0, 1); setNotice({ kind: 'success', text: '邮件已标记为未读' }); }
+    catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '未读状态更新失败' }); }
   }
 
   async function toggleSelectedFlag() {
@@ -239,11 +291,11 @@ function App() {
 
     setRealMessages((current) => current.map((item) => item.id === id ? { ...item, unread: false } : item));
     if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current - 1));
-    adjustMessageStats(message.accountId, 0, -1);
+    if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, -1);
     void api(`/api/messages/${id}`, { method: 'PATCH', body: JSON.stringify({ unread: false }) }).catch((error) => {
       setRealMessages((current) => current.map((item) => item.id === id ? { ...item, unread: true } : item));
       if (mailFilter === 'unread') setMessageTotal((current) => current + 1);
-      adjustMessageStats(message.accountId, 0, 1);
+      if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, 1);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件已读状态更新失败' });
     });
   }
@@ -257,7 +309,7 @@ function App() {
     setMessageActionBusy(true);
     setRealMessages((current) => current.filter((item) => item.id !== message.id));
     setMessageTotal((current) => Math.max(0, current - 1));
-    adjustMessageStats(message.accountId, -1, unreadDelta);
+    if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, -1, unreadDelta);
     setSelectedId(nextId);
     try {
       await api(`/api/messages/${message.id}/move`, { method: 'POST', body: JSON.stringify({ destination }) });
@@ -268,7 +320,7 @@ function App() {
         const restored = [...current]; restored.splice(Math.min(index, restored.length), 0, message); return restored;
       });
       setMessageTotal((current) => current + 1);
-      adjustMessageStats(message.accountId, 1, -unreadDelta);
+      if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 1, -unreadDelta);
       setSelectedId(message.id);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件移动失败' });
     } finally {
@@ -277,8 +329,12 @@ function App() {
   }
 
   function selectScope(nextView: View, nextAccount = 'all', nextGroup: string | null = null) {
-    setView(nextView); setAccountFilter(nextAccount); setGroupFilter(nextGroup); setSidebarOpen(false); setSelectedId(null);
+    setView(nextView); setAccountFilter(nextAccount); setGroupFilter(nextGroup); setActiveLabel(null); setSidebarOpen(false); setSelectedId(null);
   }
+
+  function selectLabel(label: string) { setView('inbox'); setAccountFilter('all'); setGroupFilter(null); setActiveLabel(label); setSidebarOpen(false); setSelectedId(null); }
+
+  const scopeTitle = activeLabel ? `标签 · ${activeLabel}` : view === 'starred' ? '星标邮件' : view === 'sent' ? '已发送' : view === 'snoozed' ? '稍后处理' : view === 'archive' ? '归档' : '统一收件箱';
 
   return <div className="app-shell">
     {notice && <div className={`toast toast-${notice.kind}`}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
@@ -298,7 +354,7 @@ function App() {
 
     <aside className={`primary-sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-heading"><div><strong>iMail</strong><span>统一通信工作台</span></div><button className="mobile-close" aria-label="关闭侧栏" onClick={() => setSidebarOpen(false)}><X size={20} /></button></div>
-      <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => { setComposeMode('new'); setSidebarOpen(false); }}>写邮件</Button>
+      <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => { setActiveDraft(undefined); setComposeMode('new'); setSidebarOpen(false); }}>写邮件</Button>
       <div className="mobile-account-controls" aria-label="移动端邮箱账户">
         <button className={accountFilter === 'all' ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={18} /><span><strong>全部邮箱</strong><small>{accounts.length} 个账户</small></span></button>
         {accounts.map((account) => <button key={account.id} className={accountFilter === account.id ? 'active' : ''} onClick={() => selectScope('inbox', account.id)}><AccountProviderMark provider={account.provider} /><span><strong>{account.displayName}</strong><small>{account.email}</small></span></button>)}
@@ -307,14 +363,16 @@ function App() {
       <nav className="nav-block">
         <button className={view === 'inbox' && !groupFilter ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={19} /><span>统一收件箱</span><b>{messageStats.unread || ''}</b></button>
         <button className={view === 'starred' ? 'active' : ''} onClick={() => selectScope('starred')}><Star size={19} /><span>已加星标</span></button>
-        <button disabled title="即将支持已发送文件夹"><PaperPlaneTilt size={19} /><span>已发送</span></button>
-        <button disabled title="即将支持稍后处理"><Clock size={19} /><span>稍后处理</span></button>
-        <button disabled title="即将支持归档文件夹"><Archive size={19} /><span>归档</span></button>
+        <button className={view === 'sent' ? 'active' : ''} onClick={() => selectScope('sent')}><PaperPlaneTilt size={19} /><span>已发送</span></button>
+        <button className={view === 'drafts' ? 'active' : ''} onClick={() => selectScope('drafts')}><PencilSimple size={19} /><span>草稿</span><b>{drafts.length || ''}</b></button>
+        <button className={view === 'snoozed' ? 'active' : ''} onClick={() => selectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
+        <button className={view === 'archive' ? 'active' : ''} onClick={() => selectScope('archive')}><Archive size={19} /><span>归档</span></button>
       </nav>
-      <div className="section-label"><span>工作空间</span><button disabled title="即将支持自定义工作空间" aria-label="新增工作空间（即将支持）"><Plus size={15} /></button></div>
+      <div className="section-label"><span>工作空间</span><button title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(true)}><Plus size={15} /></button></div>
       <nav className="nav-block groups">
         {groups.map((group, index) => <button key={group} className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><span className={`group-symbol group-${index % 4}`} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button>)}
       </nav>
+      {labels.length > 0 && <><div className="section-label"><span>邮件标签</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} className={activeLabel === label ? 'active' : ''} onClick={() => selectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
       <div className="sidebar-spacer" />
       <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => selectScope('tokens')}><Code size={19} /><span><strong>开发者网关</strong><small>Token 与邮件 API</small></span><ArrowRight size={16} /></button>
       <div className="user-strip"><UserCircle size={32} weight="duotone" /><span><strong>本地工作区</strong><small>数据仅存储在本机</small></span><CaretDown size={15} /></div>
@@ -325,27 +383,28 @@ function App() {
         <button className="sidebar-trigger" aria-label="打开侧栏" onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
         <div className="search-box"><MagnifyingGlass size={18} /><input ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" /><kbd>Ctrl K</kbd></div>
         <button className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '同步中' : '同步'}</span></button>
-        <button className="icon-button" disabled title="通知中心即将支持" aria-label="通知中心（即将支持）"><Bell size={19} /></button>
+        <button className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
       </header>
 
-      {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreate={() => setTokenOpen(true)} onReload={load} setNotice={setNotice} /> :
+      {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreate={() => setTokenOpen(true)} onReload={load} setNotice={setNotice} /> : view === 'drafts' ? <DraftWorkspace drafts={drafts} accounts={accounts} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); await load(); setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> :
         <div className={`mail-layout ${selectedId ? 'mobile-reader-open' : ''}`}>
           <section className="message-pane">
             <div className="pane-title">
               <div className="pane-heading">
                 {activeAccount && <AccountProviderMark provider={activeAccount.provider} className="pane-provider-mark" />}
                 <div>
-                  <p>{groupFilter ?? (accountFilter === 'all' ? (view === 'starred' ? '星标邮件' : '统一收件箱') : activeAccount?.displayName)}</p>
+                  <p>{groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName)}</p>
                   <span>{activeAccount ? `${providerLabel[activeAccount.provider]} · ${activeAccount.email} · ` : ''}{messageTotal} 封邮件</span>
                 </div>
               </div>
-              <button disabled title="邮件标签即将支持" aria-label="邮件标签（即将支持）"><Tag size={18} /></button>
+              <button title={selected ? '管理所选邮件标签' : '请先选择一封邮件'} aria-label="管理邮件标签" disabled={!selected} onClick={() => setLabelOpen(true)}><Tag size={18} /></button>
             </div>
             <div className="message-filters"><button className={mailFilter === 'all' ? 'active' : ''} onClick={() => setMailFilter('all')}>全部</button><button className={mailFilter === 'unread' ? 'active' : ''} onClick={() => setMailFilter('unread')}>未读</button><button className={mailFilter === 'attachments' ? 'active' : ''} onClick={() => setMailFilter('attachments')}>有附件</button></div>
             <VirtualMessageList messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
           </section>
           <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => setComposeMode('reply')} onForward={() => setComposeMode('forward')} onCloseMobile={() => setSelectedId(null)}
             onToggleFlag={() => void toggleSelectedFlag()}
+            onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}
             onPrevious={() => { if (selectedIndex > 0) selectMessage(messages[selectedIndex - 1].id); }}
             onNext={() => { if (selectedIndex >= 0 && selectedIndex < messages.length - 1) selectMessage(messages[selectedIndex + 1].id); }}
@@ -354,9 +413,13 @@ function App() {
     </main>
 
     {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} onAdded={async (result) => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice(result?.warning ? { kind: 'error', text: `授权已保存，连接验证失败：${result.warning}` } : { kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} />}
-    {composeMode && <ComposeModal accounts={realAccounts} mode={composeMode} original={composeMode === 'new' ? undefined : selected} onClose={() => setComposeMode(null)} onSent={() => { setComposeMode(null); setNotice({ kind: 'success', text: '邮件已发送' }); }} />}
+    {composeMode && <ComposeModal accounts={realAccounts} mode={composeMode} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setActiveDraft(undefined); }} onSaved={async () => { setComposeMode(null); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '草稿已保存到本机' }); }} onSent={async () => { setComposeMode(null); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} />}
     {tokenOpen && <CreateTokenModal accounts={realAccounts} onClose={() => setTokenOpen(false)} onCreated={async () => { await load(); }} />}
     {settingsOpen && <AccountSettingsModal accounts={realAccounts} onClose={() => setSettingsOpen(false)} onReload={load} setNotice={setNotice} />}
+    {notificationsOpen && <NotificationsModal notifications={notifications} accounts={accounts} onClose={() => setNotificationsOpen(false)} onOpenMessage={(notification) => { setNotificationsOpen(false); if (notification.accountId) setAccountFilter(notification.accountId); setView('inbox'); setSelectedId(notification.messageId ?? null); }} />}
+    {labelOpen && selected && <LabelModal message={selected} knownLabels={labels} onClose={() => setLabelOpen(false)} onSave={(next) => { setLabelOpen(false); void updateSelectedLocal({ labels: next }, '邮件标签已更新'); }} />}
+    {snoozeOpen && selected && <SnoozeModal onClose={() => setSnoozeOpen(false)} onSave={(until) => { setSnoozeOpen(false); void updateSelectedLocal({ snoozedUntil: until }, until ? '邮件已移到稍后处理' : '邮件已返回收件箱'); }} />}
+    {workspaceOpen && <WorkspaceModal accounts={accounts} onClose={() => setWorkspaceOpen(false)} onSaved={async () => { setWorkspaceOpen(false); await load(); setNotice({ kind: 'success', text: '工作空间已更新' }); }} />}
   </div>;
 }
 
@@ -409,21 +472,22 @@ function VirtualMessageList({ messages, accounts, selectedId, ready, loading, ha
   </div>;
 }
 
-function MessageReader({ message, account, onReply, onForward, onCloseMobile, onToggleFlag, onArchive, onDelete, onPrevious, onNext, hasPrevious, hasNext, actionBusy }: {
-  message?: Message; account?: Account; onReply: () => void; onForward: () => void; onCloseMobile: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onPrevious: () => void; onNext: () => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
+function MessageReader({ message, account, onReply, onForward, onCloseMobile, onToggleFlag, onArchive, onDelete, onSnooze, onManageLabels, onMarkUnread, onPrevious, onNext, hasPrevious, hasNext, actionBusy }: {
+  message?: Message; account?: Account; onReply: () => void; onForward: () => void; onCloseMobile: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onSnooze: () => void; onManageLabels: () => void; onMarkUnread: () => void; onPrevious: () => void; onNext: () => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
   if (!message || !account) return <section className="reader empty-reader"><Envelope size={54} weight="duotone" /><h2>选择一封邮件开始阅读</h2><p>来自所有账户的邮件都会汇总在这里。</p></section>;
   return <article className="reader">
-    <div className="reader-actions"><div><button className="mobile-reader-back" title="返回邮件列表" aria-label="返回邮件列表" onClick={onCloseMobile}><ArrowLeft size={18} /></button><button title="归档" aria-label="归档邮件" disabled={actionBusy} onClick={onArchive}><Archive size={18} /></button><button title="删除" aria-label="删除邮件" disabled={actionBusy} onClick={onDelete}><Trash size={18} /></button><button disabled title="稍后处理即将支持" aria-label="稍后处理（即将支持）"><Clock size={18} /></button></div><div><button title="上一封邮件" aria-label="上一封邮件" disabled={actionBusy || !hasPrevious} onClick={onPrevious}><ArrowLeft size={18} /></button><button title="下一封邮件" aria-label="下一封邮件" disabled={actionBusy || !hasNext} onClick={onNext}><ArrowRight size={18} /></button></div></div>
+    <div className="reader-actions"><div><button className="mobile-reader-back" title="返回邮件列表" aria-label="返回邮件列表" onClick={onCloseMobile}><ArrowLeft size={18} /></button><button title="归档" aria-label="归档邮件" disabled={actionBusy || message.mailboxRole !== 'inbox'} onClick={onArchive}><Archive size={18} /></button><button title="删除" aria-label="删除邮件" disabled={actionBusy} onClick={onDelete}><Trash size={18} /></button><button title="稍后处理" aria-label="稍后处理" onClick={onSnooze}><Clock size={18} /></button><button title="管理标签" aria-label="管理邮件标签" onClick={onManageLabels}><Tag size={18} /></button></div><div><button title="上一封邮件" aria-label="上一封邮件" disabled={actionBusy || !hasPrevious} onClick={onPrevious}><ArrowLeft size={18} /></button><button title="下一封邮件" aria-label="下一封邮件" disabled={actionBusy || !hasNext} onClick={onNext}><ArrowRight size={18} /></button></div></div>
     <div className="reader-content">
       <div className="reader-context">
         <span className="reader-account" style={{ '--account-color': account.color } as React.CSSProperties}><AccountProviderMark provider={account.provider} className="reader-provider-mark" /><strong>{account.displayName}</strong><small>{account.email}</small></span>
         <span className="reader-provider-name">{providerLabel[account.provider]}</span><span>{account.group}</span>
       </div>
-      <h1>{message.subject}</h1>
-      <div className="sender-line"><span className="sender-avatar large" style={{ '--avatar-color': account.color } as React.CSSProperties}>{initials(message.from.name || message.from.address)}</span><span><strong>{message.from.name || message.from.address}</strong><small>{message.from.address} 发给 {message.to[0]?.address || account.email}</small></span><time>{new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(message.date))}</time><button title={message.flagged ? '取消星标' : '添加星标'} aria-label={message.flagged ? '取消星标' : '添加星标'} onClick={onToggleFlag}><Star size={18} weight={message.flagged ? 'fill' : 'regular'} /></button><button disabled title="更多操作即将支持" aria-label="更多操作（即将支持）"><CaretDown size={16} /></button></div>
+      <h1>{message.subject}</h1>{message.labels.length > 0 && <div className="reader-labels">{message.labels.map((label) => <span key={label}><Tag size={12} />{label}</span>)}</div>}
+      <div className="sender-line"><span className="sender-avatar large" style={{ '--avatar-color': account.color } as React.CSSProperties}>{initials(message.from.name || message.from.address)}</span><span><strong>{message.from.name || message.from.address}</strong><small>{message.from.address} 发给 {message.to[0]?.address || account.email}</small></span><time>{new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(message.date))}</time><button title={message.flagged ? '取消星标' : '添加星标'} aria-label={message.flagged ? '取消星标' : '添加星标'} onClick={onToggleFlag}><Star size={18} weight={message.flagged ? 'fill' : 'regular'} /></button><span className="more-wrap"><button title="更多操作" aria-label="打开更多邮件操作" aria-expanded={moreOpen} onClick={() => setMoreOpen((current) => !current)}><CaretDown size={16} /></button>{moreOpen && <span className="more-menu"><button disabled={message.unread} onClick={() => { setMoreOpen(false); onMarkUnread(); }}><Envelope size={15} />标记未读</button><button onClick={() => { setMoreOpen(false); onSnooze(); }}><Clock size={15} />稍后处理</button><button onClick={() => { setMoreOpen(false); onManageLabels(); }}><Tag size={15} />管理标签</button>{message.mailboxRole === 'inbox' && <button onClick={() => { setMoreOpen(false); onArchive(); }}><Archive size={15} />归档邮件</button>}</span>}</span></div>
       <div className={`mail-body ${message.text === undefined ? 'mail-body-loading' : ''}`}>{message.text === undefined ? <p>正在从本地缓存加载正文…</p> : message.text.split('\n').map((line, index) => <p key={index}>{line || <br />}</p>)}</div>
-      {message.attachments.length > 0 && <div className="attachments"><p>{message.attachments.length} 个附件</p>{message.attachments.map((attachment) => <button key={attachment.filename} disabled title="附件下载即将支持"><File size={23} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{(attachment.size / 1024 / 1024).toFixed(1)} MB</small></span></button>)}</div>}
+      {message.attachments.length > 0 && <div className="attachments"><p>{message.attachments.length} 个附件 · 点击即可按需从邮箱服务器下载</p>{message.attachments.map((attachment, index) => <a key={`${attachment.filename}-${index}`} href={`/api/messages/${message.id}/attachments/${attachment.index ?? index}`} download={attachment.filename}><File size={23} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{attachment.size < 1024 * 1024 ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : `${(attachment.size / 1024 / 1024).toFixed(1)} MB`}</small></span></a>)}</div>}
       <div className="reply-actions"><Button appearance="primary" icon={<ArrowLeft size={17} />} onClick={onReply}>回复</Button><Button appearance="outline" icon={<ArrowRight size={17} />} onClick={onForward}>转发</Button></div>
     </div>
   </article>;
@@ -660,20 +724,64 @@ function subjectWithPrefix(subject: string, prefix: 'Re' | 'Fwd') {
   return new RegExp(`^${prefix}:`, 'i').test(subject) ? subject : `${prefix}: ${subject}`;
 }
 
-function ComposeModal({ accounts, mode, original, onClose, onSent }: { accounts: Account[]; mode: 'new' | 'reply' | 'forward'; original?: Message; onClose: () => void; onSent: () => void }) {
+function ComposeModal({ accounts, mode, original, draft, onClose, onSent, onSaved }: { accounts: Account[]; mode: 'new' | 'reply' | 'forward'; original?: Message; draft?: Draft; onClose: () => void; onSent: () => void | Promise<void>; onSaved: () => void | Promise<void> }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const formRef = useRef<HTMLFormElement | null>(null);
   const isReply = mode === 'reply'; const isForward = mode === 'forward';
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget); setBusy(true); setError('');
-    try { await api('/api/send', { method: 'POST', body: JSON.stringify({ accountId: form.get('accountId'), to: String(form.get('to')).split(',').map((item) => item.trim()).filter(Boolean), subject: form.get('subject'), text: form.get('text') }) }); onSent(); }
+    try { await api('/api/send', { method: 'POST', body: JSON.stringify({ accountId: form.get('accountId'), to: String(form.get('to')).split(',').map((item) => item.trim()).filter(Boolean), subject: form.get('subject'), text: form.get('text'), draftId: draft?.id }) }); await onSent(); }
     catch (value) { setError(value instanceof Error ? value.message : '发送失败'); } finally { setBusy(false); }
+  }
+  async function saveDraft() {
+    if (!formRef.current || accounts.length === 0) return;
+    const form = new FormData(formRef.current); setBusy(true); setError('');
+    const body = { accountId: form.get('accountId'), to: String(form.get('to')).split(',').map((item) => item.trim()).filter(Boolean), cc: [], subject: String(form.get('subject') ?? ''), text: String(form.get('text') ?? '') };
+    try { await api(draft ? `/api/drafts/${draft.id}` : '/api/drafts', { method: draft ? 'PUT' : 'POST', body: JSON.stringify(body) }); await onSaved(); }
+    catch (value) { setError(value instanceof Error ? value.message : '草稿保存失败'); } finally { setBusy(false); }
   }
   const heading = isReply ? '回复邮件' : isForward ? '转发邮件' : '写邮件';
   const subject = original ? subjectWithPrefix(original.subject, isReply ? 'Re' : 'Fwd') : '';
   const quoted = original ? `\n\n----- ${isForward ? '转发邮件' : '原邮件'} -----\n发件人：${original.from.name || original.from.address} <${original.from.address}>\n${original.text ?? ''}` : '';
-  return <Overlay onClose={onClose}><form className="compose-modal" onSubmit={submit}><div className="modal-header compact"><div><span>{mode === 'new' ? '新邮件' : '邮件操作'}</span><h2>{heading}</h2></div><button type="button" aria-label="关闭写信窗口" onClick={onClose}><X size={21} /></button></div>
-    {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={30} /><h3>先接入一个真实邮箱</h3><p>接入邮箱后即可发送邮件。</p></div> : <><label className="compose-row"><span>发件人</span><select name="accountId" defaultValue={original?.accountId}>{accounts.map((account) => <option key={account.id} value={account.id}>{providerLabel[account.provider]} · {account.displayName} · {account.email}</option>)}</select></label><label className="compose-row"><span>收件人</span><input name="to" type="email" multiple defaultValue={isReply ? original?.from.address : ''} placeholder="多个地址用英文逗号分隔" required /></label><label className="compose-row"><span>主题</span><input name="subject" defaultValue={subject} required /></label><textarea name="text" className="compose-body" defaultValue={quoted} placeholder="写下邮件内容…" required />{error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}<div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" icon={<PaperPlaneTilt size={17} />} type="submit" disabled={busy}>{busy ? '发送中…' : '发送邮件'}</Button></div></>}
+  return <Overlay onClose={onClose}><form ref={formRef} className="compose-modal" onSubmit={submit}><div className="modal-header compact"><div><span>{draft ? '本地草稿' : mode === 'new' ? '新邮件' : '邮件操作'}</span><h2>{draft ? '编辑草稿' : heading}</h2></div><button type="button" aria-label="关闭写信窗口" onClick={onClose}><X size={21} /></button></div>
+    {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={30} /><h3>先接入一个真实邮箱</h3><p>接入邮箱后即可发送邮件。</p></div> : <><label className="compose-row"><span>发件人</span><select name="accountId" defaultValue={draft?.accountId ?? original?.accountId}>{accounts.map((account) => <option key={account.id} value={account.id}>{providerLabel[account.provider]} · {account.displayName} · {account.email}</option>)}</select></label><label className="compose-row"><span>收件人</span><input name="to" type="email" multiple defaultValue={draft?.to.join(', ') ?? (isReply ? original?.from.address : '')} placeholder="多个地址用英文逗号分隔" required /></label><label className="compose-row"><span>主题</span><input name="subject" defaultValue={draft?.subject ?? subject} required /></label><textarea name="text" className="compose-body" defaultValue={draft?.text ?? quoted} placeholder="写下邮件内容…" required />{error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}<div className="modal-footer"><button type="button" onClick={onClose}>取消</button><button type="button" disabled={busy} onClick={() => void saveDraft()}>{busy ? '保存中…' : '存为草稿'}</button><Button appearance="primary" icon={<PaperPlaneTilt size={17} />} type="submit" disabled={busy}>{busy ? '处理中…' : '发送邮件'}</Button></div></>}
   </form></Overlay>;
+}
+
+function DraftWorkspace({ drafts, accounts, onOpen, onDelete, onCreate }: { drafts: Draft[]; accounts: Account[]; onOpen: (draft: Draft) => void; onDelete: (id: string) => void | Promise<void>; onCreate: () => void }) {
+  return <section className="draft-workspace"><header><div><span>本地 SQLite 草稿</span><h1>草稿</h1><p>未完成的邮件保存在本机，发送成功后会自动移除。</p></div><Button appearance="primary" icon={<PencilSimple size={17} />} onClick={onCreate}>新建邮件</Button></header>
+    {drafts.length === 0 ? <div className="draft-empty"><PencilSimple size={44} weight="duotone" /><h2>没有未完成的邮件</h2><p>写信时选择“存为草稿”，之后可以继续编辑。</p><button onClick={onCreate}>开始写邮件</button></div> : <div className="draft-list">{drafts.map((draft) => { const account = accounts.find((item) => item.id === draft.accountId); return <article key={draft.id}><button className="draft-main" onClick={() => onOpen(draft)}><span className="draft-account">{account && <AccountProviderMark provider={account.provider} />}{account?.displayName ?? '未知邮箱'}</span><strong>{draft.subject || '（无主题）'}</strong><p>{draft.text || '还没有正文内容'}</p><small>收件人：{draft.to.join(', ') || '未填写'} · {relativeTime(draft.updatedAt)}</small></button><button className="draft-delete" title="删除草稿" aria-label="删除草稿" onClick={() => void onDelete(draft.id)}><Trash size={17} /></button></article>; })}</div>}
+  </section>;
+}
+
+function LabelModal({ message, knownLabels, onClose, onSave }: { message: Message; knownLabels: string[]; onClose: () => void; onSave: (labels: string[]) => void }) {
+  const [selected, setSelected] = useState(message.labels);
+  const [custom, setCustom] = useState('');
+  const toggle = (label: string) => setSelected((current) => current.includes(label) ? current.filter((item) => item !== label) : [...current, label]);
+  const add = () => { const label = custom.trim(); if (!label) return; setSelected((current) => current.includes(label) ? current : [...current, label]); setCustom(''); };
+  return <Overlay onClose={onClose}><section className="utility-modal"><div className="modal-header"><div><span>整理邮件</span><h2>管理标签</h2><p>{message.subject}</p></div><button onClick={onClose} aria-label="关闭标签窗口"><X size={21} /></button></div><div className="label-options">{knownLabels.map((label) => <button key={label} className={selected.includes(label) ? 'selected' : ''} onClick={() => toggle(label)}><Tag size={15} />{label}{selected.includes(label) && <Check size={14} />}</button>)}</div><div className="label-create"><input value={custom} onChange={(event) => setCustom(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); add(); } }} placeholder="输入新标签名称" maxLength={40} /><button onClick={add}>添加</button></div>{selected.length > 0 && <div className="selected-labels">{selected.map((label) => <button key={label} onClick={() => toggle(label)}>{label}<X size={12} /></button>)}</div>}<div className="modal-footer"><button onClick={onClose}>取消</button><Button appearance="primary" onClick={() => onSave(selected)}>保存标签</Button></div></section></Overlay>;
+}
+
+function SnoozeModal({ onClose, onSave }: { onClose: () => void; onSave: (until: string | null) => void }) {
+  const at = (days: number, hour: number) => { const value = new Date(); value.setDate(value.getDate() + days); value.setHours(hour, 0, 0, 0); return value.toISOString(); };
+  const tomorrow = at(1, 9); const nextWeek = (() => { const value = new Date(); const days = ((8 - value.getDay()) % 7) || 7; value.setDate(value.getDate() + days); value.setHours(9, 0, 0, 0); return value.toISOString(); })();
+  return <Overlay onClose={onClose}><section className="utility-modal snooze-modal"><div className="modal-header"><div><span>专注处理</span><h2>稍后提醒我</h2><p>到期前邮件会从收件箱隐藏，并保留在稍后处理。</p></div><button onClick={onClose} aria-label="关闭稍后处理窗口"><X size={21} /></button></div><div className="snooze-options"><button onClick={() => onSave(tomorrow)}><Clock size={19} /><span><strong>明天上午</strong><small>明天 09:00</small></span></button><button onClick={() => onSave(nextWeek)}><Clock size={19} /><span><strong>下周一</strong><small>下周一 09:00</small></span></button><label><Clock size={19} /><span><strong>自定义时间</strong><input type="datetime-local" min={new Date().toISOString().slice(0, 16)} onChange={(event) => { if (event.target.value) onSave(new Date(event.target.value).toISOString()); }} /></span></label></div><button className="snooze-clear" onClick={() => onSave(null)}>取消稍后处理并返回收件箱</button></section></Overlay>;
+}
+
+function NotificationsModal({ notifications, accounts, onClose, onOpenMessage }: { notifications: MailNotification[]; accounts: Account[]; onClose: () => void; onOpenMessage: (notification: MailNotification) => void }) {
+  return <Overlay onClose={onClose}><section className="utility-modal notification-modal"><div className="modal-header"><div><span>账户与邮件动态</span><h2>通知中心</h2><p>连接异常、返回收件箱的稍后邮件和最近未读邮件。</p></div><button onClick={onClose} aria-label="关闭通知中心"><X size={21} /></button></div>{notifications.length === 0 ? <div className="utility-empty"><Bell size={38} weight="duotone" /><h3>暂无新通知</h3><p>邮箱连接和稍后处理状态都正常。</p></div> : <div className="notification-list">{notifications.map((notification) => { const account = accounts.find((item) => item.id === notification.accountId); return <button key={notification.id} disabled={!notification.messageId} onClick={() => onOpenMessage(notification)}><i className={`notification-kind notification-${notification.kind}`}>{notification.kind === 'error' ? <WarningCircle size={18} /> : notification.kind === 'snooze' ? <Clock size={18} /> : <Envelope size={18} />}</i><span><strong>{notification.title}</strong><small>{notification.detail}</small><em>{account ? `${providerLabel[account.provider]} · ${account.displayName}` : '邮箱'} · {relativeTime(notification.date)}</em></span>{notification.messageId && <ArrowRight size={16} />}</button>; })}</div>}</section></Overlay>;
+}
+
+function WorkspaceModal({ accounts, onClose, onSaved }: { accounts: Account[]; onClose: () => void; onSaved: () => void | Promise<void> }) {
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget); const group = String(form.get('group')).trim(); const accountIds = form.getAll('accountIds').map(String);
+    if (accountIds.length === 0) { setError('请至少选择一个邮箱'); return; }
+    setBusy(true); setError('');
+    try { await Promise.all(accountIds.map((id) => api(`/api/accounts/${id}`, { method: 'PATCH', body: JSON.stringify({ group }) }))); await onSaved(); }
+    catch (value) { setError(value instanceof Error ? value.message : '工作空间保存失败'); } finally { setBusy(false); }
+  }
+  return <Overlay onClose={onClose}><form className="utility-modal workspace-modal" onSubmit={submit}><div className="modal-header"><div><span>集中整理</span><h2>新增工作空间</h2><p>给一组邮箱设置相同的工作空间名称。</p></div><button type="button" aria-label="关闭工作空间窗口" onClick={onClose}><X size={21} /></button></div><label className="workspace-name"><span>工作空间名称</span><input name="group" placeholder="例如：客户支持、开发测试" maxLength={40} required autoFocus /></label><fieldset><legend>包含的邮箱</legend>{accounts.map((account) => <label className="check-row" key={account.id}><input name="accountIds" type="checkbox" value={account.id} /><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · 当前：{account.group}</small></span><Check size={15} /></label>)}</fieldset>{error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}<div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy}>{busy ? '保存中…' : '保存工作空间'}</Button></div></form></Overlay>;
 }
 
 function TokenWorkspace({ accounts, tokens, onCreate, onReload, setNotice }: { accounts: Account[]; tokens: DeveloperToken[]; onCreate: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
