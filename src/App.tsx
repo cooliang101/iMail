@@ -296,18 +296,18 @@ function App() {
         <div><button onClick={() => { setAddOpen(true); setSidebarOpen(false); }}><Plus size={16} />添加邮箱</button><button onClick={() => { setSettingsOpen(true); setSidebarOpen(false); }}><Gear size={16} />邮箱设置</button></div>
       </div>
       <nav className="nav-block">
-        <button className={view === 'inbox' && !groupFilter ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={19} /><span>统一收件箱</span><b>{messageStats.unread || ''}</b></button>
-        <button className={view === 'starred' ? 'active' : ''} onClick={() => selectScope('starred')}><Star size={19} /><span>已加星标</span></button>
-        <button className={view === 'sent' ? 'active' : ''} onClick={() => selectScope('sent')}><PaperPlaneTilt size={19} /><span>已发送</span></button>
-        <button className={view === 'drafts' ? 'active' : ''} onClick={() => selectScope('drafts')}><PencilSimple size={19} /><span>草稿</span><b>{drafts.length || ''}</b></button>
-        <button className={view === 'snoozed' ? 'active' : ''} onClick={() => selectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
-        <button className={view === 'archive' ? 'active' : ''} onClick={() => selectScope('archive')}><Archive size={19} /><span>归档</span></button>
+        <button data-icon-tone="primary" className={view === 'inbox' && !groupFilter ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={19} /><span>统一收件箱</span><b>{messageStats.unread || ''}</b></button>
+        <button data-icon-tone="warning" className={view === 'starred' ? 'active' : ''} onClick={() => selectScope('starred')}><Star size={19} /><span>已加星标</span></button>
+        <button data-icon-tone="info" className={view === 'sent' ? 'active' : ''} onClick={() => selectScope('sent')}><PaperPlaneTilt size={19} /><span>已发送</span></button>
+        <button data-icon-tone="accent" className={view === 'drafts' ? 'active' : ''} onClick={() => selectScope('drafts')}><PencilSimple size={19} /><span>草稿</span><b>{drafts.length || ''}</b></button>
+        <button data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => selectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
+        <button data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => selectScope('archive')}><Archive size={19} /><span>归档</span></button>
       </nav>
       <div className="section-label"><span>工作空间</span><button title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(true)}><Plus size={15} /></button></div>
       <nav className="nav-block groups">
         {groups.map((group, index) => <button key={group} className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><span className={`group-symbol group-${index % 4}`} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button>)}
       </nav>
-      {labels.length > 0 && <><div className="section-label"><span>邮件标签</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} className={activeLabel === label ? 'active' : ''} onClick={() => selectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
+      {labels.length > 0 && <><div className="section-label"><span>邮件标签</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} data-icon-tone="info" className={activeLabel === label ? 'active' : ''} onClick={() => selectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
       <div className="sidebar-spacer" />
       <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => selectScope('tokens')}><Code size={19} /><span><strong>开发者网关</strong><small>Token 与邮件 API</small></span><ArrowRight size={16} /></button>
       <div className="user-strip"><UserCircle size={32} weight="duotone" /><span><strong>本地工作区</strong><small>数据仅存储在本机</small></span><CaretDown size={15} /></div>
@@ -317,8 +317,8 @@ function App() {
       <header className="topbar">
         <button className="sidebar-trigger" aria-label="打开侧栏" onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
         <AppInput className="search-box" contentBefore={<MagnifyingGlass size={18} />} contentAfter={<kbd>Ctrl K</kbd>} ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" aria-label="搜索当前范围内的邮件" />
-        <button className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '同步中' : '同步'}</span></button>
-        <button className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
+        <button data-icon-tone="primary" className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '同步中' : '同步'}</span></button>
+        <button data-icon-tone="info" className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
       </header>
 
       {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreate={() => setTokenOpen(true)} onReload={load} setNotice={setNotice} /> : view === 'drafts' ? <DraftWorkspace drafts={drafts} accounts={accounts} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); await load(); setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> :
@@ -332,7 +332,7 @@ function App() {
                   <span>{activeAccount ? `${providerLabel[activeAccount.provider]} · ${activeAccount.email} · ` : ''}{messageTotal} 封邮件</span>
                 </div>
               </div>
-              <button title={selected ? '管理所选邮件标签' : '请先选择一封邮件'} aria-label="管理邮件标签" disabled={!selected} onClick={() => setLabelOpen(true)}><Tag size={18} /></button>
+              <button data-icon-tone="info" title={selected ? '管理所选邮件标签' : '请先选择一封邮件'} aria-label="管理邮件标签" disabled={!selected} onClick={() => setLabelOpen(true)}><Tag size={18} /></button>
             </div>
             <div className="message-filters"><button className={mailFilter === 'all' ? 'active' : ''} onClick={() => setMailFilter('all')}>全部</button><button className={mailFilter === 'unread' ? 'active' : ''} onClick={() => setMailFilter('unread')}>未读</button><button className={mailFilter === 'attachments' ? 'active' : ''} onClick={() => setMailFilter('attachments')}>有附件</button></div>
             <VirtualMessageList messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
