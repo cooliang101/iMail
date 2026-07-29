@@ -83,8 +83,8 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .groups { margin-top: 8px; }
 .workspace-section { flex: 1 1 auto; min-height: 120px; display: flex; flex-direction: column; overflow: hidden; }
 .workspace-section > .section-label { flex: 0 0 auto; }
-.workspace-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin-right: -7px; padding-right: 7px; scrollbar-width: thin; scrollbar-color: #b9c8c3 transparent; }
-.workspace-group { display: grid; gap: 2px; }
+.workspace-list { flex: 1 1 auto; min-height: 0; align-content: start; overflow-y: auto; margin-right: -7px; padding-right: 7px; scrollbar-width: thin; scrollbar-color: #b9c8c3 transparent; }
+.workspace-group { display: grid; align-content: start; gap: 2px; }
 .workspace-row { position: relative; }
 .workspace-row > button:first-child { padding-right: 38px; }
 .workspace-row > .workspace-edit { position: absolute; top: 5px; right: 5px; width: 29px; min-height: 29px; display: grid; grid-template-columns: 1fr; place-items: center; padding: 0; opacity: 0; }
