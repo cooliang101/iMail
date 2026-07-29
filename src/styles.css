@@ -235,6 +235,12 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .settings-account > div { display: grid; justify-items: end; gap: 5px; }.settings-account > div > small { color: #879691; font-size: 8px; }
 .settings-account > div button { min-height: 25px; display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 7px; background: transparent; padding: 4px 7px; font-size: 8px; cursor: pointer; }.settings-account > div button:disabled { opacity: .5; cursor: wait; }
 .retry-account { color: #176f5f; background: #e9f5f1 !important; }.reconnect-account { color: #526f68; }.remove-account { color: #a85b50; }
+.edit-account { color: #456f86; background: #eef5f8 !important; }
+.account-profile-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; align-items: end; gap: 8px; border: 1px solid #dce8e4; border-radius: 11px; padding: 11px; background: #f5f9f7; }
+.account-profile-editor label { min-width: 0; display: grid; gap: 5px; }
+.account-profile-editor label > span { color: #627770; font-size: 11px; font-weight: 600; }
+.account-profile-editor .app-input, .account-profile-editor .app-select { height: 38px; min-height: 38px; font-size: 12px; }
+.account-profile-editor > button { height: 38px; border: 0; border-radius: 9px; padding: 0 11px; background: transparent; color: #6b7c77; cursor: pointer; }
 .credential-renewal { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 8px; border: 1px solid #dce8e4; border-radius: 11px; padding: 11px; background: #f5f9f7; }.credential-renewal label { display: grid; gap: 5px; }.credential-renewal label span { color: #627770; font-size: 11px; font-weight: 600; }.credential-renewal .app-input { height: 38px; font-size: 12px; }.credential-renewal > button { height: 38px; border: 0; border-radius: 9px; padding: 0 11px; background: transparent; color: #6b7c77; cursor: pointer; }
 .settings-empty { padding: 35px 20px; display: flex; flex-direction: column; align-items: center; color: #83938e; text-align: center; }.settings-empty h3 { margin: 13px 0 4px; color: #42554f; font-size: 14px; }.settings-empty p { margin: 0; font-size: 10px; }
 .compose-row { min-height: 48px; border-bottom: 1px solid #e7eeec; display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; font-size: 11px; }.compose-row > span { color: #83928e; }.compose-row .app-input, .compose-row .app-select { border: 0 !important; background: transparent !important; box-shadow: none !important; }.compose-body { width: 100%; min-height: 250px; resize: vertical; border: 0 !important; outline: 0; padding: 18px 4px; line-height: 1.7; font-size: 12px; color: #354742; }.compose-empty { text-align: center; padding: 35px; color: #83928e; }.compose-empty h3 { color: #42554f; }.compose-empty p { font-size: 11px; }
@@ -316,6 +322,6 @@ body { font-size: 14px; }
 @media (max-width: 650px) {
   .credential-guide ol { grid-template-columns: 1fr; }
   .credential-guide-heading { flex-wrap: wrap; }
-  .credential-renewal { grid-template-columns: 1fr 1fr; }.credential-renewal label { grid-column: 1 / -1; }
+  .credential-renewal, .account-profile-editor { grid-template-columns: 1fr 1fr; }.credential-renewal label, .account-profile-editor label { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

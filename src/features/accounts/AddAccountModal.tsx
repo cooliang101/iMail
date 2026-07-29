@@ -8,9 +8,9 @@ import type { Notice } from '../../app-model';
 import { AccountProviderMark, Overlay, ProviderIcon, providerLabel, providers } from '../../components/shared';
 import { AppInput, AppSelect, type AppSelectOption } from '../../components/form-controls';
 
-const groupOptions: AppSelectOption[] = ['工作', '个人', '对外支持', '开发测试', '同学联系'].map((value) => ({ value, label: value }));
+const defaultWorkspaceNames = ['工作', '个人', '对外支持', '开发测试', '同学联系'];
 
-export function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (result?: { warning?: string }) => void | Promise<void> }) {
+export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Account[]; onClose: () => void; onAdded: (result?: { warning?: string }) => void | Promise<void> }) {
   const [provider, setProvider] = useState<ProviderId>('outlook');
   const [advanced, setAdvanced] = useState(false);
   const [manualMode, setManualMode] = useState(false);
@@ -27,6 +27,7 @@ export function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onA
   const oauthStatus = selectedProvider.oauthKey ? oauthCatalog.find((item) => item.id === selectedProvider.oauthKey) : undefined;
   const credentialGuide = credentialGuideFor(provider);
   const usesOAuth = Boolean(selectedProvider.oauthKey && !manualMode);
+  const workspaceOptions: AppSelectOption[] = Array.from(new Set([...accounts.map((account) => account.group), ...defaultWorkspaceNames])).map((value) => ({ value, label: value }));
 
   useEffect(() => { onAddedRef.current = onAdded; }, [onAdded]);
 
@@ -123,7 +124,7 @@ export function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onA
     {usesOAuth ? <>
       <div className="oauth-panel">
         <div className={`oauth-status ${oauthStatus?.configured ? 'ready' : 'setup'}`}><Key size={21} weight="duotone" /><span><strong>{providerLabel[provider]} 安全登录</strong><small>{oauthStatus?.configured ? 'OAuth 已配置。登录将在服务商官方页面完成，并自动安全刷新授权。' : oauthStatus?.configurationHint || '正在读取 OAuth 配置…'}</small></span></div>
-        <div className="form-grid oauth-profile"><label><span>显示名称（可选）</span><AppInput name="displayName" placeholder="默认使用账户名称" /></label><label><span>加入分组</span><AppSelect name="group" defaultValue="工作" options={groupOptions} /></label></div>
+        <div className="form-grid oauth-profile"><label><span>显示名称（可选）</span><AppInput name="displayName" placeholder="默认使用账户名称" /></label><label><span>加入工作空间</span><AppSelect name="group" defaultValue="工作" options={workspaceOptions} /></label></div>
         {provider === 'yahoo' && <div className="oauth-review"><WarningCircle size={17} /><span>Yahoo 的 mail-r/mail-w 权限只对审核通过的应用开放。</span></div>}
         {busy && <div className="oauth-waiting"><span><strong>正在等待 {providerLabel[provider]} 授权</strong><small>如果服务商页面显示配置错误，请关闭授权窗口或结束等待，修正后可以直接重试。</small></span><button type="button" onClick={cancelOAuth}>结束等待</button></div>}
       </div>
@@ -133,7 +134,7 @@ export function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onA
         <div className="credential-guide-heading"><Key size={21} weight="duotone" /><span><strong>{credentialGuide.title}</strong><small>{credentialGuide.description}</small></span><a href={credentialGuide.helpUrl} target="_blank" rel="noreferrer">{credentialGuide.actionLabel}<ArrowRight size={14} /></a></div>
         <ol>{credentialGuide.steps.map((step, index) => <li key={step}><b>{index + 1}</b><span>{step}</span></li>)}</ol>
       </section>}
-      <div className="form-grid"><label><span>邮箱地址</span><AppInput name="email" type="email" placeholder="name@example.com" required /></label><label><span>显示名称</span><AppInput name="displayName" placeholder="例如：工作邮箱" required /></label><label><span>分组</span><AppSelect name="group" defaultValue="工作" options={groupOptions} /></label><label><span>{credentialGuide?.secretLabel || '应用专用密码 / 授权码'}</span><AppInput name="password" type="password" placeholder={credentialGuide?.secretPlaceholder || '不会以明文保存'} required /></label></div>
+      <div className="form-grid"><label><span>邮箱地址</span><AppInput name="email" type="email" placeholder="name@example.com" required /></label><label><span>显示名称</span><AppInput name="displayName" placeholder="例如：工作邮箱" required /></label><label><span>工作空间</span><AppSelect name="group" defaultValue="工作" options={workspaceOptions} /></label><label><span>{credentialGuide?.secretLabel || '应用专用密码 / 授权码'}</span><AppInput name="password" type="password" placeholder={credentialGuide?.secretPlaceholder || '不会以明文保存'} required /></label></div>
       {provider !== 'custom' && !credentialGuide && <div className="provider-tip"><Key size={19} /><span><strong>{providerLabel[provider]} 安全提示</strong><small>请使用服务商提供的专用凭据，不要填写网页登录密码。</small></span></div>}
       {selectedProvider.oauthKey && oauthStatus?.configured && <button type="button" className="manual-switch" onClick={() => setManualMode(false)}>返回 {providerLabel[provider]} OAuth 安全登录</button>}
     </>}
@@ -142,4 +143,3 @@ export function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onA
     <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy || (usesOAuth && !oauthStatus?.configured)}>{busy ? (usesOAuth ? '等待授权…' : '正在验证连接…') : error && usesOAuth ? `重新使用 ${providerLabel[provider]} 登录` : usesOAuth ? `使用 ${providerLabel[provider]} 登录` : '验证并添加'}</Button></div>
   </form></Overlay>;
 }
-
