@@ -48,7 +48,7 @@ export type DeveloperToken = {
   name: string;
   prefix: string;
   scopes: string[];
-  accountIds: string[];
+  mailboxes: string[];
   createdAt: string;
   expiresAt: string;
   lastUsedAt?: string;

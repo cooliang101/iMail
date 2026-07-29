@@ -117,20 +117,20 @@ curl "http://127.0.0.1:8787/api/dev/v1/messages?limit=10" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
-指定邮箱可使用账户级路由，或在聚合路由上传入 `accountId`、`accountEmail`、`account`（UUID 或邮箱地址）或 `provider`：
+指定邮箱可使用邮箱级路由，或在聚合路由上传入 `mailbox`：
 
 ```bash
-curl "http://127.0.0.1:8787/api/dev/v1/accounts/账户UUID/messages?limit=10" \
+curl "http://127.0.0.1:8787/api/dev/v1/mailboxes/user@example.com/messages?limit=10" \
   -H "Authorization: Bearer imail_your_token"
 
-curl "http://127.0.0.1:8787/api/dev/v1/messages?accountEmail=user@example.com" \
+curl "http://127.0.0.1:8787/api/dev/v1/messages?mailbox=user@example.com" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 读取可用账户：
 
 ```bash
-curl "http://127.0.0.1:8787/api/dev/v1/accounts" \
+curl "http://127.0.0.1:8787/api/dev/v1/mailboxes" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
@@ -141,7 +141,7 @@ curl -X POST "http://127.0.0.1:8787/api/dev/v1/send" \
   -H "Authorization: Bearer imail_your_token" \
   -H "Content-Type: application/json" \
   -d '{
-    "accountEmail": "sender@example.com",
+    "mailbox": "sender@example.com",
     "to": ["recipient@example.com"],
     "subject": "iMail test",
     "text": "Hello from a local app"
@@ -179,14 +179,19 @@ src/features/compose/  写信与草稿工作区
 src/features/organize/ 标签、稍后处理、通知和工作空间
 src/features/developer/ 开发者网关与临时 Token UI
 src/app-model.ts     跨 feature 的客户端类型
-server/index.ts      管理 API 与开发者 API
-server/mail.ts       IMAP 同步和 SMTP 发送
-server/oauth.ts      OAuth PKCE、回调、身份校验与 Token 刷新
+server/index.ts      服务进程启动入口
+server/app.ts        Express 应用与路由装配
+server/routes/       管理 API 与开发者网关路由
+server/http/         校验、鉴权、响应转换与错误处理
+server/mail/         IMAP/SMTP 连接、同步、远程操作与发送
+server/oauth/        OAuth 配置、授权流程、身份校验与 Token 刷新
+server/storage/      SQLite schema、数据映射与事务写入
 server/crypto.ts     本地凭据加密
-server/store.ts      SQLite schema、事务存储与 JSON 迁移
 server/providers.ts  服务商预设
 .data/               本地数据与密钥，不进入 Git
 ```
+
+详细的服务端模块边界见 [`server/README.md`](server/README.md)。
 
 ## 品牌素材
 
