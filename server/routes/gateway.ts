@@ -1,59 +1,57 @@
-import { Router, type Request, type Response } from 'express';
+import { Router } from 'express';
 import { z } from 'zod';
+import { gatewayMessageQuerySchema, gatewaySendSchema } from '../gateway/contracts.js';
+import { requireGatewayToken } from '../gateway/auth.js';
+import { gatewayErrorHandler, gatewayNotFound, gatewayRequestContext } from '../gateway/errors.js';
+import { assertGatewayAttachment, getGatewayMessage, getGatewaySendingAccount, listGatewayMailboxes, listGatewayMessages } from '../gateway/service.js';
 import { asyncRoute } from '../http/async-route.js';
-import { requireDevToken } from '../http/dev-token.js';
-import { gatewayNotFound } from '../http/errors.js';
-import { publicGatewayMailbox } from '../http/presenters.js';
-import { sendSchema } from '../http/schemas.js';
-import { sendMessage } from '../mail.js';
+import { downloadAttachment, sendMessage } from '../mail.js';
 import { readStore } from '../store.js';
 
 export const gatewayRouter = Router();
 
-gatewayRouter.get('/mailboxes', requireDevToken('accounts:read'), asyncRoute(async (_req, res) => {
-  const token = res.locals.devToken;
-  const data = await readStore();
-  res.json({ mailboxes: data.accounts.filter((account) => token.accountIds.includes(account.id)).map(publicGatewayMailbox) });
+gatewayRouter.use(gatewayRequestContext);
+gatewayRouter.get('/health', (_req, res) => res.json({ service: 'imail-gateway', version: 'v1', ok: true }));
+
+gatewayRouter.get('/mailboxes', requireGatewayToken('accounts:read'), asyncRoute(async (_req, res) => {
+  res.json({ mailboxes: listGatewayMailboxes(await readStore(), res.locals.devToken) });
 }));
 
-function messageQuery(req: Request) {
-  const query = z.object({
-    mailbox: z.string().email().optional(),
-    limit: z.coerce.number().int().min(1).max(100).default(50),
-    offset: z.coerce.number().int().min(0).default(0),
-  }).strict().parse(req.query);
-  const mailbox = req.params.mailbox ? z.string().email().parse(req.params.mailbox) : query.mailbox;
-  return { ...query, mailbox: mailbox?.toLowerCase() };
-}
+gatewayRouter.get('/messages', requireGatewayToken('messages:read'), asyncRoute(async (req, res) => {
+  const query = gatewayMessageQuerySchema.parse(req.query);
+  res.json(listGatewayMessages(await readStore(), res.locals.devToken, query));
+}));
 
-async function listGatewayMessages(req: Request, res: Response) {
-  const token = res.locals.devToken;
+gatewayRouter.get('/mailboxes/:mailbox/messages', requireGatewayToken('messages:read'), asyncRoute(async (req, res) => {
+  const mailbox = z.string().email().parse(req.params.mailbox);
+  const query = gatewayMessageQuerySchema.parse({ ...req.query, mailbox });
+  res.json(listGatewayMessages(await readStore(), res.locals.devToken, query));
+}));
+
+gatewayRouter.get('/messages/:messageId', requireGatewayToken('messages:read'), asyncRoute(async (req, res) => {
+  const messageId = z.string().min(1).max(200).parse(req.params.messageId);
+  res.json({ message: getGatewayMessage(await readStore(), res.locals.devToken, messageId).response });
+}));
+
+gatewayRouter.get('/messages/:messageId/attachments/:index', requireGatewayToken('messages:read'), asyncRoute(async (req, res) => {
+  const messageId = z.string().min(1).max(200).parse(req.params.messageId);
+  const index = z.coerce.number().int().min(0).parse(req.params.index);
+  assertGatewayAttachment(await readStore(), res.locals.devToken, messageId, index);
+  const attachment = await downloadAttachment(messageId, index);
+  const filename = attachment.filename.replace(/[\r\n"\\]/g, '_');
+  res.setHeader('Content-Type', attachment.contentType || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  res.send(attachment.content);
+}));
+
+gatewayRouter.post('/send', requireGatewayToken('messages:send'), asyncRoute(async (req, res) => {
+  const input = gatewaySendSchema.parse(req.body);
   const data = await readStore();
-  const { mailbox, limit, offset } = messageQuery(req);
-  const matchingAccount = mailbox ? data.accounts.find((account) => account.email.toLowerCase() === mailbox) : undefined;
-  if (mailbox && !matchingAccount) { res.status(404).json({ error: '指定的邮箱不存在' }); return; }
-  if (matchingAccount && !token.accountIds.includes(matchingAccount.id)) { res.status(403).json({ error: 'Token 无权访问这个邮箱' }); return; }
-  const permittedIds = new Set(matchingAccount ? [matchingAccount.id] : token.accountIds);
-  const accountsById = new Map(data.accounts.map((account) => [account.id, account.email]));
-  const filtered = data.messages.filter((message) => permittedIds.has(message.accountId));
-  const messages = filtered.slice(offset, offset + limit).map(({ accountId, mailbox: folder, uid: _uid, ...message }) => ({
-    ...message, accountEmail: accountsById.get(accountId), folder,
-  }));
-  res.json({ messages, total: filtered.length, nextOffset: Math.min(offset + limit, filtered.length) });
-}
-
-gatewayRouter.get('/messages', requireDevToken('messages:read'), asyncRoute(listGatewayMessages));
-gatewayRouter.get('/mailboxes/:mailbox/messages', requireDevToken('messages:read'), asyncRoute(listGatewayMessages));
-
-gatewayRouter.post('/send', requireDevToken('messages:send'), asyncRoute(async (req, res) => {
-  const token = res.locals.devToken;
-  const input = sendSchema.omit({ accountId: true }).extend({ mailbox: z.string().email() }).parse(req.body);
-  const data = await readStore();
-  const account = data.accounts.find((item) => item.email.toLowerCase() === input.mailbox.toLowerCase());
-  if (!account) { res.status(404).json({ error: '指定的发件邮箱不存在' }); return; }
-  if (!token.accountIds.includes(account.id)) { res.status(403).json({ error: 'Token 无权使用这个发件箱' }); return; }
+  const account = getGatewaySendingAccount(data, res.locals.devToken, input.mailbox);
   const { mailbox: _mailbox, ...message } = input;
-  res.status(201).json(await sendMessage({ ...message, accountId: account.id }));
+  const delivery = await sendMessage({ ...message, accountId: account.id });
+  res.status(201).json({ delivery });
 }));
 
+gatewayRouter.use(gatewayErrorHandler);
 gatewayRouter.use(gatewayNotFound);

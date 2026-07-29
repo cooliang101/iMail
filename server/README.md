@@ -7,6 +7,7 @@ index.ts                 进程启动与监听
 app.ts                   Express 应用装配、中间件和路由挂载
 routes/                  按资源拆分的 HTTP 路由
 http/                    参数模型、鉴权、响应转换和错误处理
+gateway/                 开发者网关契约、服务、错误模型与轻量文档页
 mail/                    IMAP/SMTP 连接、同步、远程操作和发送
 oauth/                   服务商配置、OAuth 客户端、授权流程和密钥刷新
 storage/                 SQLite schema、行转换、快照和事务写入
@@ -20,6 +21,7 @@ mail.ts / oauth.ts       稳定的公共导出入口
 - `app.ts` 只负责挂载 `routes/` 和全局中间件。
 - `routes/` 可以调用邮件、OAuth、Token 和存储能力，但业务模块不反向依赖路由。
 - `http/` 不保存业务状态；共享的请求校验和响应裁剪统一放在这里。
+- `gateway/` 维护公开 API 契约，不向外暴露内部账户 ID 或存储结构。
 - `mail/`、`oauth/` 通过 `store.ts` 访问持久化，不直接操作 HTTP 请求或响应。
 - `storage/` 只关心 SQLite 与领域数据之间的转换。
 

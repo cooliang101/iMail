@@ -1,9 +1,5 @@
-import type { ErrorRequestHandler, RequestHandler } from 'express';
+import type { ErrorRequestHandler } from 'express';
 import { z } from 'zod';
-
-export const gatewayNotFound: RequestHandler = (_req, res) => {
-  res.status(404).json({ error: '开发者网关接口不存在' });
-};
 
 export const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _next) => {
   if (error instanceof z.ZodError) {
