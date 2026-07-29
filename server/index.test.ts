@@ -161,9 +161,9 @@ describe('iMail HTTP API', () => {
   });
 
   it('persists drafts and exposes labels, snooze state and notifications', async () => {
-    const createdDraft = await request('/api/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: account.id, to: ['friend@example.com'], subject: 'Draft subject', text: 'Draft body' }) });
+    const createdDraft = await request('/api/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: account.id, to: ['friend@example.com'], subject: 'Draft subject', text: 'Draft body', html: '<p><strong>Draft body</strong></p>', attachments: [{ id: 'attachment-1', filename: 'note.txt', contentType: 'text/plain', size: 5, data: 'aGVsbG8=' }] }) });
     expect(createdDraft.response.status).toBe(201);
-    expect((await request('/api/drafts')).body.drafts[0]).toMatchObject({ subject: 'Draft subject', to: ['friend@example.com'] });
+    expect((await request('/api/drafts')).body.drafts[0]).toMatchObject({ subject: 'Draft subject', to: ['friend@example.com'], html: '<p><strong>Draft body</strong></p>', attachments: [{ filename: 'note.txt', size: 5 }] });
     const draftId = createdDraft.body.draft.id;
     const updatedDraft = await request(`/api/drafts/${draftId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: account.id, to: [], cc: [], subject: 'Updated draft', text: '' }) });
     expect(updatedDraft.body.draft.subject).toBe('Updated draft');

@@ -265,6 +265,17 @@ describe('message sending', () => {
     expect(state.sendMail).toHaveBeenCalledWith(expect.objectContaining({ from: { name: 'Owner', address: 'owner@example.com' }, to: ['recipient@example.com'] }));
   });
 
+  it('passes rich HTML and in-memory attachments to Nodemailer', async () => {
+    const configured = account();
+    state.store.accounts = [configured];
+    await sendMessage({ accountId: configured.id, to: ['recipient@example.com'], subject: 'Rich mail', text: 'Body', html: '<p><strong>Body</strong></p>', attachments: [{ filename: 'note.txt', contentType: 'text/plain', data: 'aGVsbG8=' }] });
+    expect(state.sendMail).toHaveBeenCalledWith(expect.objectContaining({
+      html: '<p><strong>Body</strong></p>',
+      attachDataUrls: true,
+      attachments: [expect.objectContaining({ filename: 'note.txt', contentType: 'text/plain', content: Buffer.from('hello') })],
+    }));
+  });
+
   it('constructs Yahoo OAUTHBEARER framing and validates the SMTP response', async () => {
     const configured = account({ provider: 'yahoo', settings: { imapHost: 'imap.mail.yahoo.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.mail.yahoo.com', smtpPort: 465, smtpSecure: true }, authMethod: 'oauth2' });
     state.store.accounts = [configured]; state.secret = { authType: 'oauth2', oauthProvider: 'yahoo', accessToken: 'yahoo-access' };

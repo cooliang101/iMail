@@ -16,6 +16,13 @@
   "dependencies": {
     "@fluentui/react-components": "^9.69.0",
     "@phosphor-icons/react": "^2.1.10",
+    "@tiptap/extension-image": "^3.29.2",
+    "@tiptap/extension-link": "^3.29.2",
+    "@tiptap/extension-placeholder": "^3.29.2",
+    "@tiptap/extension-text-align": "^3.29.2",
+    "@tiptap/pm": "^3.29.2",
+    "@tiptap/react": "^3.29.2",
+    "@tiptap/starter-kit": "^3.29.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "imapflow": "^1.0.195",
