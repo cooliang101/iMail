@@ -226,6 +226,25 @@ describe('message synchronization', () => {
     expect(state.store.messages[0]).toMatchObject({ mailbox: 'Sent', mailboxRole: 'sent', uid: 7, unread: false });
   });
 
+  it('persists provider folders and syncs a selectable custom folder by path', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.list.mockResolvedValueOnce([
+      { path: 'INBOX', name: 'INBOX', delimiter: '/', flags: new Set(), listed: true, subscribed: true, specialUse: '\\Inbox', status: { messages: 12, unseen: 3 } },
+      { path: 'Projects/Alpha', name: 'Alpha', delimiter: '/', flags: new Set(), listed: true, subscribed: true, status: { messages: 1, unseen: 1 } },
+    ] as any);
+    state.mailboxOpen.mockResolvedValue({ exists: 1, uidNext: 10 });
+    state.fetchBatches = [[{ uid: 9, source: Buffer.from('project-mail'), flags: new Set(), internalDate: new Date('2026-07-29T03:00:00.000Z') }]];
+    state.parsed = { from: { value: [{ name: 'Teammate', address: 'team@example.com' }] }, to: { value: [] }, subject: 'Project update', text: 'Custom folder body', attachments: [] };
+
+    await expect(syncAccount(configured.id, 'custom', 'Projects/Alpha')).resolves.toEqual({ synced: 1 });
+
+    expect(state.mailboxOpen).toHaveBeenCalledWith('Projects/Alpha', { readOnly: true });
+    expect(state.store.messages[0]).toMatchObject({ mailbox: 'Projects/Alpha', mailboxRole: 'custom', uid: 9 });
+    expect(state.store.accounts[0].mailboxes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'Projects/Alpha', name: 'Alpha', selectable: true, total: 1, unread: 1 }),
+    ]));
+  });
+
   it('downloads attachment bytes from the cached message mailbox only on demand', async () => {
     const configured = account(); state.store.accounts = [configured];
     state.store.messages = [{ id: 'with-attachment', accountId: configured.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 44, from: { name: '', address: '' }, to: [], subject: 'File', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: false, flagged: false, hasAttachments: true, attachments: [{ filename: 'report.txt', contentType: 'text/plain', size: 5, index: 0 }], labels: [] }];

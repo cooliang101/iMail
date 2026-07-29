@@ -29,7 +29,7 @@ export const oauthStartSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#168f78'),
 });
 
-export const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash']);
+export const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash', 'custom']);
 
 export const draftSchema = z.object({
   accountId: z.string().uuid(),

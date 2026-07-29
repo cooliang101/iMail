@@ -1,5 +1,16 @@
 export type ProviderId = 'outlook' | 'gmail' | 'qq' | 'yahoo' | 'hotmail' | 'icloud' | 'custom';
-export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'trash';
+export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'trash' | 'custom';
+
+export type MailboxFolder = {
+  path: string;
+  name: string;
+  delimiter: string;
+  specialUse?: string;
+  selectable: boolean;
+  subscribed: boolean;
+  total?: number;
+  unread?: number;
+};
 
 export type Account = {
   id: string;
@@ -12,11 +23,13 @@ export type Account = {
   authMethod?: 'app-password' | 'oauth2';
   lastSyncAt?: string;
   lastError?: string;
+  mailboxes: MailboxFolder[];
 };
 
 export type Message = {
   id: string;
   accountId: string;
+  mailbox: string;
   mailboxRole: MailboxRole;
   from: { name: string; address: string };
   to: Array<{ name: string; address: string }>;

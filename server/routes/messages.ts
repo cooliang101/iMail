@@ -11,12 +11,12 @@ messagesRouter.get('/messages', asyncRoute(async (req, res) => {
   const input = z.object({
     accountId: z.string().optional(), group: z.string().optional(), q: z.string().max(200).optional(),
     unread: z.enum(['true', 'false']).optional(), flagged: z.enum(['true', 'false']).optional(), hasAttachments: z.enum(['true', 'false']).optional(),
-    mailboxRole: mailboxRoleSchema.default('inbox'), snoozed: z.enum(['true', 'false']).optional(), label: z.string().max(80).optional(),
+    mailboxRole: mailboxRoleSchema.optional(), mailbox: z.string().min(1).max(500).optional(), snoozed: z.enum(['true', 'false']).optional(), label: z.string().max(80).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(60), offset: z.coerce.number().int().min(0).default(0),
   }).parse(req.query);
   const result = await listCachedMessages({
-    accountId: input.accountId, group: input.group, query: input.q,
-    unread: input.unread === 'true', flagged: input.flagged === 'true', hasAttachments: input.hasAttachments === 'true', mailboxRole: input.mailboxRole,
+    accountId: input.accountId, group: input.group, query: input.q, mailbox: input.mailbox,
+    unread: input.unread === 'true', flagged: input.flagged === 'true', hasAttachments: input.hasAttachments === 'true', mailboxRole: input.mailbox ? undefined : (input.mailboxRole ?? 'inbox'),
     snoozed: input.snoozed === 'true', label: input.label, limit: input.limit, offset: input.offset,
   });
   const messages = result.messages.map(({ text: _text, html: _html, ...summary }) => summary);

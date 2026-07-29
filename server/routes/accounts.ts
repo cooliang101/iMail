@@ -100,6 +100,11 @@ accountsRouter.post('/accounts/:id/mailboxes/:role/sync', asyncRoute(async (req,
   res.json(await syncAccount(String(req.params.id), role));
 }));
 
+accountsRouter.post('/accounts/:id/mailboxes/sync', asyncRoute(async (req, res) => {
+  const input = z.object({ mailbox: z.string().trim().min(1).max(500) }).parse(req.body);
+  res.json(await syncAccount(String(req.params.id), 'custom', input.mailbox));
+}));
+
 accountsRouter.post('/mailboxes/:role/sync', asyncRoute(async (req, res) => {
   const role = mailboxRoleSchema.parse(req.params.role);
   const { accounts } = await readStore();
