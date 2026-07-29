@@ -20,7 +20,7 @@ export const gatewayOpenApi = {
     version: '1.0.0',
     description: '使用短期 Token 按邮箱地址安全读取与发送邮件。接口不接受或返回 iMail 内部邮箱 ID。',
   },
-  servers: [{ url: '/api/dev/v1', description: '当前 iMail 实例' }],
+  servers: [{ url: '/gateway/v1', description: '当前 iMail 实例' }],
   tags: [
     { name: 'System', description: '网关状态' },
     { name: 'Mailboxes', description: 'Token 被授权使用的邮箱' },
