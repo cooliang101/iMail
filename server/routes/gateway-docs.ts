@@ -4,7 +4,7 @@ import { gatewayOpenApi } from '../gateway/openapi.js';
 
 export const gatewayDocsRouter = Router();
 
-gatewayDocsRouter.get('/docs/openapi.json', (_req, res) => {
+gatewayDocsRouter.get('/openapi.json', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json(gatewayOpenApi);
 });

@@ -22,8 +22,8 @@ export function createApp() {
   app.use('/api', messagesRouter);
   app.use('/api', draftsRouter);
   app.use('/api', developerTokensRouter);
-  app.use('/api', gatewayDocsRouter);
-  app.use('/api/dev/v1', gatewayRouter);
+  app.use('/gateway', gatewayDocsRouter);
+  app.use('/gateway/v1', gatewayRouter);
   app.use(errorHandler);
 
   return app;
