@@ -58,10 +58,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .developer-entry span { display: flex; flex-direction: column; gap: 3px; }
 .developer-entry strong { font-size: 12px; }
 .developer-entry small { font-size: 10px; color: #93a19d; }
-.preview-note { margin-top: 10px; padding: 12px; border-radius: var(--radius); background: #e6f3ef; color: #4a6961; }
-.preview-note > span { display: inline-flex; font-size: 9px; font-weight: 700; color: #147966; text-transform: uppercase; letter-spacing: .08em; }
-.preview-note p { font-size: 10px; line-height: 1.5; margin: 5px 0 8px; }
-.preview-note button { padding: 0; border: 0; background: none; font-size: 10px; color: #0f725f; font-weight: 700; cursor: pointer; }
 .user-strip { border-top: 1px solid var(--line); margin-top: 13px; padding: 15px 5px 0; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; }
 .user-strip span { display: flex; flex-direction: column; gap: 2px; }
 .user-strip strong { font-size: 11px; }.user-strip small { color: #9aa6a3; font-size: 9px; }
@@ -79,7 +75,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .mail-layout { height: calc(100dvh - 80px); min-height: 0; display: grid; grid-template-columns: minmax(320px, 390px) minmax(400px, 1fr); background: var(--surface); border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; }
-.message-pane { min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.message-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
 .pane-title { min-height: 74px; padding: 16px 17px 10px; display: flex; align-items: flex-start; justify-content: space-between; }
 .pane-title p { margin: 0 0 5px; font: 700 18px/1.2 'Segoe UI Variable Display'; letter-spacing: -.03em; }
 .pane-title span { color: #94a19e; font-size: 10px; }
@@ -87,11 +83,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .message-filters { padding: 0 16px 10px; display: flex; gap: 5px; }
 .message-filters button { border: 0; border-radius: 8px; background: transparent; color: #8b9995; padding: 6px 10px; cursor: pointer; font-size: 10px; }
 .message-filters button.active { color: #156f5e; background: #e4f1ed; font-weight: 600; }
-.message-list { overflow: auto; padding: 0 8px 10px; scrollbar-width: thin; scrollbar-color: #d7e2df transparent; }
+.message-list { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 10px; position: relative; scrollbar-width: thin; scrollbar-color: #d7e2df transparent; }
 .message-row { width: 100%; border: 0; background: transparent; border-radius: 12px; padding: 12px 10px; display: grid; grid-template-columns: 33px 1fr; gap: 10px; position: relative; text-align: left; cursor: pointer; }
 .message-row:hover { background: #f3f7f6; }
 .message-row.selected { background: #e9f3f0; }
 .message-row.unread::before { content: ''; position: absolute; left: 1px; top: 22px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+.virtual-message-space { position: relative; width: 100%; }
+.virtual-message-row { position: absolute; left: 0; right: 0; overflow: hidden; }
+.message-loading { position: sticky; bottom: 8px; width: max-content; margin: 0 auto; border: 1px solid #d8e5e1; border-radius: 999px; background: #f8fbfae8; padding: 6px 10px; color: #6f817b; box-shadow: 0 5px 18px #173c3214; font-size: 8px; backdrop-filter: blur(8px); }
 .sender-avatar { width: 33px; height: 33px; border-radius: 10px; background: color-mix(in srgb, var(--avatar-color) 22%, #fff); color: color-mix(in srgb, var(--avatar-color) 80%, #142a25); display: grid; place-items: center; font-size: 9px; font-weight: 700; }
 .sender-avatar.large { width: 39px; height: 39px; border-radius: 12px; font-size: 10px; }
 .message-copy { min-width: 0; display: flex; flex-direction: column; }
@@ -111,6 +110,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @keyframes pulse { 50% { opacity: .45; } }
 .empty-state, .empty-reader { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8c9b97; text-align: center; }
 .empty-state h3, .empty-reader h2 { color: #40514c; margin: 16px 0 5px; font-size: 15px; }.empty-state p, .empty-reader p { margin: 0; font-size: 11px; }
+.empty-state > button { margin-top: 14px; border: 0; border-radius: 9px; background: #e4f2ee; color: #146f5d; padding: 8px 12px; font-size: 10px; font-weight: 700; cursor: pointer; }
 
 .reader { min-width: 0; min-height: 0; overflow: auto; background: #fff; }
 .reader-actions { height: 49px; border-bottom: 1px solid #e7eeec; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; }
@@ -123,6 +123,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sender-line { display: grid; grid-template-columns: 39px 1fr auto auto auto; align-items: center; gap: 10px; padding-bottom: 22px; border-bottom: 1px solid #edf2f0; }
 .sender-line > span:not(.sender-avatar) { display: flex; flex-direction: column; gap: 3px; }.sender-line strong { font-size: 11px; }.sender-line small { color: #91a09c; font-size: 9px; }.sender-line time { color: #8a9894; font-size: 9px; }
 .mail-body { color: #384944; font-size: 13px; line-height: 1.75; padding: 24px 0; min-height: 190px; }.mail-body p { margin: 0 0 7px; }
+.mail-body-loading { color: #8a9995; }
 .attachments { border-top: 1px solid #edf2f0; padding-top: 17px; }.attachments > p { font-size: 10px; color: #83928e; }.attachments button { border: 1px solid #e1eae7; background: #f8fbfa; border-radius: 11px; padding: 10px 12px; display: inline-flex; gap: 9px; align-items: center; text-align: left; color: #48605a; }.attachments button span { display: flex; flex-direction: column; gap: 2px; }.attachments strong { font-size: 9px; }.attachments small { color: #91a09d; font-size: 8px; }
 .reply-actions { display: flex; gap: 8px; margin-top: 26px; }.reply-actions button { border-radius: 10px !important; }
 

@@ -88,6 +88,19 @@ describe('iMail HTTP API', () => {
     expect(missing.response.status).toBe(404); expect(missing.body.error).toBe('邮箱账户不存在');
   });
 
+  it('returns paged summaries and loads a single message body on demand', async () => {
+    await updateStore((data) => { data.messages = [{
+      id: 'message-lazy', accountId: account.id, mailbox: 'INBOX', uid: 8, from: { name: 'Sender', address: 'sender@example.com' }, to: [],
+      subject: 'Lazy body', preview: 'Preview', text: 'Full body', html: '<p>Full body</p>', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [],
+    }]; });
+    const page = await request('/api/messages?limit=1&offset=0');
+    expect(page.body).toMatchObject({ total: 1, nextOffset: 1, hasMore: false });
+    expect(page.body.messages[0]).not.toHaveProperty('text'); expect(page.body.messages[0]).not.toHaveProperty('html');
+    const detail = await request('/api/messages/message-lazy');
+    expect(detail.body.message).toMatchObject({ text: 'Full body', html: '<p>Full body</p>' });
+    expect((await request('/api/messages/missing')).response.status).toBe(404);
+  });
+
   it('deletes account-owned cache and removes it from token grants', async () => {
     await request('/api/developer-tokens', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

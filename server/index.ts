@@ -8,7 +8,7 @@ import { encryptSecret } from './crypto.js';
 import { sendMessage, syncAccount, testAccount } from './mail.js';
 import { beginOAuth, beginOAuthReconnect, completeOAuth, oauthCallbackHtml, oauthProviderCatalog, type OAuthProviderKey } from './oauth.js';
 import { settingsFor } from './providers.js';
-import { readStore, updateStore } from './store.js';
+import { getCachedMessage, listCachedMessages, readStore, updateStore } from './store.js';
 import { authenticateToken, issueToken } from './tokens.js';
 import type { MailAccount, MailSettings, ProviderId, TokenScope } from './types.js';
 
@@ -139,19 +139,23 @@ app.post('/api/sync', asyncRoute(async (_req, res) => {
 }));
 
 app.get('/api/messages', asyncRoute(async (req, res) => {
-  const data = await readStore();
-  const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined;
-  const group = typeof req.query.group === 'string' ? req.query.group : undefined;
-  const query = typeof req.query.q === 'string' ? req.query.q.toLowerCase() : '';
-  const unread = req.query.unread === 'true';
-  const groupIds = group ? new Set(data.accounts.filter((account) => account.group === group).map((account) => account.id)) : null;
-  const messages = data.messages.filter((message) =>
-    (!accountId || message.accountId === accountId) &&
-    (!groupIds || groupIds.has(message.accountId)) &&
-    (!unread || message.unread) &&
-    (!query || `${message.subject} ${message.from.name} ${message.from.address} ${message.preview}`.toLowerCase().includes(query))
-  );
-  res.json({ messages, total: messages.length });
+  const input = z.object({
+    accountId: z.string().optional(), group: z.string().optional(), q: z.string().max(200).optional(),
+    unread: z.enum(['true', 'false']).optional(), flagged: z.enum(['true', 'false']).optional(), hasAttachments: z.enum(['true', 'false']).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(60), offset: z.coerce.number().int().min(0).default(0),
+  }).parse(req.query);
+  const result = await listCachedMessages({
+    accountId: input.accountId, group: input.group, query: input.q,
+    unread: input.unread === 'true', flagged: input.flagged === 'true', hasAttachments: input.hasAttachments === 'true', limit: input.limit, offset: input.offset,
+  });
+  const messages = result.messages.map(({ text: _text, html: _html, ...summary }) => summary);
+  res.json({ messages, total: result.total, nextOffset: input.offset + messages.length, hasMore: input.offset + messages.length < result.total });
+}));
+
+app.get('/api/messages/:id', asyncRoute(async (req, res) => {
+  const message = await getCachedMessage(String(req.params.id));
+  if (!message) { res.status(404).json({ error: '邮件不存在' }); return; }
+  res.json({ message });
 }));
 
 app.patch('/api/messages/:id', asyncRoute(async (req, res) => {

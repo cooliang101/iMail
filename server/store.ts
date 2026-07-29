@@ -8,10 +8,31 @@ const initial: StoreData = { accounts: [], messages: [], tokens: [] };
 type SqlValue = string | number | bigint | null | Uint8Array;
 type Row = Record<string, SqlValue>;
 
+export type MessageQuery = {
+  accountId?: string;
+  group?: string;
+  query?: string;
+  unread?: boolean;
+  flagged?: boolean;
+  hasAttachments?: boolean;
+  limit: number;
+  offset: number;
+};
+
 function text(row: Row, key: string) { return String(row[key] ?? ''); }
 function optionalText(row: Row, key: string) { return row[key] === null || row[key] === undefined ? undefined : String(row[key]); }
 function json<T>(row: Row, key: string): T { return JSON.parse(text(row, key)) as T; }
 function integer(row: Row, key: string) { return Number(row[key]); }
+
+function messageFromRow(row: Row): CachedMessage {
+  return {
+    id: text(row, 'id'), accountId: text(row, 'account_id'), mailbox: text(row, 'mailbox'), uid: integer(row, 'uid'),
+    messageId: optionalText(row, 'message_id'), from: json(row, 'from_json'), to: json(row, 'to_json'),
+    subject: text(row, 'subject'), preview: text(row, 'preview'), text: text(row, 'text_body'), html: optionalText(row, 'html_body'),
+    date: text(row, 'received_at'), unread: Boolean(integer(row, 'unread')), flagged: Boolean(integer(row, 'flagged')),
+    hasAttachments: Boolean(integer(row, 'has_attachments')), attachments: json(row, 'attachments_json'),
+  };
+}
 
 export class SQLiteStore {
   private readonly db: DatabaseSync;
@@ -123,13 +144,7 @@ export class SQLiteStore {
       authMethod: optionalText(row, 'auth_method') as MailAccount['authMethod'], createdAt: text(row, 'created_at'),
       lastSyncAt: optionalText(row, 'last_sync_at'), status: text(row, 'status') as MailAccount['status'], lastError: optionalText(row, 'last_error'),
     }));
-    const messages = this.all(this.db.prepare('SELECT * FROM messages ORDER BY received_at DESC')).map((row): CachedMessage => ({
-      id: text(row, 'id'), accountId: text(row, 'account_id'), mailbox: text(row, 'mailbox'), uid: integer(row, 'uid'),
-      messageId: optionalText(row, 'message_id'), from: json(row, 'from_json'), to: json(row, 'to_json'),
-      subject: text(row, 'subject'), preview: text(row, 'preview'), text: text(row, 'text_body'), html: optionalText(row, 'html_body'),
-      date: text(row, 'received_at'), unread: Boolean(integer(row, 'unread')), flagged: Boolean(integer(row, 'flagged')),
-      hasAttachments: Boolean(integer(row, 'has_attachments')), attachments: json(row, 'attachments_json'),
-    }));
+    const messages = this.all(this.db.prepare('SELECT * FROM messages ORDER BY received_at DESC')).map(messageFromRow);
     const scopeRows = this.all(this.db.prepare('SELECT token_id, scope FROM developer_token_scopes ORDER BY scope'));
     const accountRows = this.all(this.db.prepare('SELECT token_id, account_id FROM developer_token_accounts ORDER BY account_id'));
     const tokens = this.all(this.db.prepare('SELECT * FROM developer_tokens ORDER BY created_at DESC')).map((row): DeveloperToken => ({
@@ -144,6 +159,34 @@ export class SQLiteStore {
   async read(): Promise<StoreData> {
     await this.queue;
     return this.snapshot();
+  }
+
+  async listMessages(input: MessageQuery): Promise<{ messages: CachedMessage[]; total: number }> {
+    await this.queue;
+    const where: string[] = [];
+    const values: SqlValue[] = [];
+    if (input.accountId) { where.push('m.account_id = ?'); values.push(input.accountId); }
+    if (input.group) { where.push('a.group_name = ?'); values.push(input.group); }
+    if (input.unread) where.push('m.unread = 1');
+    if (input.flagged) where.push('m.flagged = 1');
+    if (input.hasAttachments) where.push('m.has_attachments = 1');
+    if (input.query?.trim()) {
+      where.push('(m.subject LIKE ? OR m.preview LIKE ? OR m.from_json LIKE ? OR m.to_json LIKE ?)');
+      const pattern = `%${input.query.trim()}%`;
+      values.push(pattern, pattern, pattern, pattern);
+    }
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const from = `FROM messages m JOIN accounts a ON a.id = m.account_id ${clause}`;
+    const count = this.db.prepare(`SELECT count(*) AS total ${from}`).get(...values) as Row;
+    const rows = this.db.prepare(`SELECT m.* ${from} ORDER BY m.received_at DESC, m.id DESC LIMIT ? OFFSET ?`)
+      .all(...values, input.limit, input.offset) as Row[];
+    return { messages: rows.map(messageFromRow), total: integer(count, 'total') };
+  }
+
+  async getMessage(id: string): Promise<CachedMessage | undefined> {
+    await this.queue;
+    const row = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as Row | undefined;
+    return row ? messageFromRow(row) : undefined;
   }
 
   async update(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> {
@@ -202,4 +245,6 @@ function configuredStore() {
 
 export function readStore(): Promise<StoreData> { return configuredStore().read(); }
 export function updateStore(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> { return configuredStore().update(mutator); }
+export function listCachedMessages(input: MessageQuery) { return configuredStore().listMessages(input); }
+export function getCachedMessage(id: string) { return configuredStore().getMessage(id); }
 export function closeStore() { defaultStore?.close(); defaultStore = undefined; }

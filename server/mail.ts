@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ImapFlow } from 'imapflow';
+import { ImapFlow, type FetchMessageObject } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { resolveAccountSecret } from './oauth.js';
@@ -87,10 +87,12 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
   try {
     await client.connect();
     const mailbox = await client.mailboxOpen('INBOX', { readOnly: true });
-    const start = Math.max(1, mailbox.exists - 79);
+    const cached = store.messages.filter((message) => message.accountId === accountId && message.mailbox === 'INBOX');
+    const maxCachedUid = cached.reduce((max, message) => Math.max(max, message.uid), 0);
     const incoming: CachedMessage[] = [];
-    if (mailbox.exists > 0) {
-      for await (const item of client.fetch(`${start}:*`, { uid: true, flags: true, source: true, envelope: true, internalDate: true })) {
+    const flagUpdates = new Map<number, { unread: boolean; flagged: boolean }>();
+    const parseIncoming = async (items: AsyncIterable<FetchMessageObject>) => {
+      for await (const item of items) {
         if (!item.source) continue;
         const parsed = await simpleParser(item.source);
         const fromValue = parsed.from?.value[0];
@@ -120,6 +122,20 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
           })),
         });
       }
+    };
+
+    if (mailbox.exists > 0 && maxCachedUid === 0) {
+      const start = Math.max(1, mailbox.exists - 79);
+      await parseIncoming(client.fetch(`${start}:*`, { uid: true, flags: true, source: true, envelope: true, internalDate: true }));
+    } else if (maxCachedUid > 0 && mailbox.uidNext > maxCachedUid + 1) {
+      await parseIncoming(client.fetch(`${maxCachedUid + 1}:*`, { uid: true, flags: true, source: true, envelope: true, internalDate: true }, { uid: true }));
+    }
+
+    const recentCachedUids = cached.sort((a, b) => b.uid - a.uid).slice(0, 100).map((message) => message.uid);
+    if (recentCachedUids.length > 0) {
+      for await (const item of client.fetch(recentCachedUids, { uid: true, flags: true }, { uid: true })) {
+        flagUpdates.set(item.uid, { unread: !item.flags?.has('\\Seen'), flagged: Boolean(item.flags?.has('\\Flagged')) });
+      }
     }
 
     await updateStore((data) => {
@@ -127,6 +143,11 @@ export async function syncAccount(accountId: string): Promise<{ synced: number }
       data.messages = [...data.messages.filter((message) => message.accountId !== accountId || !ids.has(message.id)), ...incoming]
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 5000);
+      for (const message of data.messages) {
+        if (message.accountId !== accountId || message.mailbox !== 'INBOX') continue;
+        const flags = flagUpdates.get(message.uid);
+        if (flags) Object.assign(message, flags);
+      }
       const current = data.accounts.find((item) => item.id === accountId);
       if (current) {
         current.status = 'connected';

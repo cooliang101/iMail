@@ -69,6 +69,26 @@ describe('SQLiteStore', () => {
     expect((await reopened.read()).accounts).toEqual([account()]);
   });
 
+  it('paginates cached messages and applies account, group, search and status filters', async () => {
+    const { store } = await temporaryStore();
+    const second = account({ id: 'account-2', email: 'second@example.com', group: '工作' });
+    await store.update((data) => {
+      data.accounts = [account(), second];
+      data.messages = [
+        message({ id: 'm4', uid: 4, date: '2026-07-28T04:00:00.000Z', subject: 'Latest report', unread: true }),
+        message({ id: 'm3', uid: 3, date: '2026-07-28T03:00:00.000Z', subject: 'Flagged', unread: false, flagged: true }),
+        message({ id: 'm2', uid: 2, accountId: second.id, date: '2026-07-28T02:00:00.000Z', subject: 'Work invoice', hasAttachments: true }),
+        message({ id: 'm1', uid: 1, accountId: second.id, date: '2026-07-28T01:00:00.000Z', subject: 'Old work' }),
+      ];
+    });
+    const first = await store.listMessages({ limit: 2, offset: 0 });
+    expect(first.total).toBe(4); expect(first.messages.map((item) => item.id)).toEqual(['m4', 'm3']);
+    expect((await store.listMessages({ limit: 2, offset: 2 })).messages.map((item) => item.id)).toEqual(['m2', 'm1']);
+    expect((await store.listMessages({ group: '工作', query: 'invoice', hasAttachments: true, limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['m2']);
+    expect((await store.listMessages({ accountId: account().id, unread: true, limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['m4']);
+    expect((await store.listMessages({ flagged: true, limit: 10, offset: 0 })).messages.map((item) => item.id)).toEqual(['m3']);
+  });
+
   it('serializes concurrent updates without losing writes', async () => {
     const { store } = await temporaryStore();
     await Promise.all(Array.from({ length: 20 }, (_, index) => store.update(async (data) => {

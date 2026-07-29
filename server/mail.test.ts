@@ -6,10 +6,11 @@ const state = vi.hoisted(() => ({
   store: { accounts: [], messages: [], tokens: [] } as StoreData,
   imapOptions: [] as Array<Record<string, unknown>>,
   smtpOptions: [] as Array<Record<string, any>>,
-  fetchItems: [] as Array<Record<string, any>>,
+  fetchBatches: [] as Array<Array<Record<string, any>>>,
+  fetchCalls: [] as Array<{ range: unknown; query: Record<string, unknown>; options?: Record<string, unknown> }>,
   parsed: {} as Record<string, any>,
   connect: vi.fn(async () => undefined),
-  mailboxOpen: vi.fn(async () => ({ exists: 0 })),
+  mailboxOpen: vi.fn(async () => ({ exists: 0, uidNext: 1 })),
   logout: vi.fn(async () => undefined),
   verify: vi.fn(async () => true),
   close: vi.fn(),
@@ -30,8 +31,10 @@ vi.mock('imapflow', () => ({
     connect = state.connect;
     mailboxOpen = state.mailboxOpen;
     logout = state.logout;
-    fetch() {
-      const items = state.fetchItems;
+    fetch(range: unknown, query: Record<string, unknown>, options?: Record<string, unknown>) {
+      const index = state.fetchCalls.length;
+      state.fetchCalls.push({ range, query, options });
+      const items = state.fetchBatches[index] ?? [];
       return { async *[Symbol.asyncIterator]() { for (const item of items) yield item; } };
     }
   },
@@ -58,8 +61,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.secret = { authType: 'app-password', password: 'app-password' };
   state.store = { accounts: [], messages: [], tokens: [] };
-  state.imapOptions = []; state.smtpOptions = []; state.fetchItems = [];
-  state.connect.mockResolvedValue(undefined); state.mailboxOpen.mockResolvedValue({ exists: 0 }); state.logout.mockResolvedValue(undefined);
+  state.imapOptions = []; state.smtpOptions = []; state.fetchBatches = []; state.fetchCalls = [];
+  state.connect.mockResolvedValue(undefined); state.mailboxOpen.mockResolvedValue({ exists: 0, uidNext: 1 }); state.logout.mockResolvedValue(undefined);
   state.verify.mockResolvedValue(true); state.sendMail.mockResolvedValue({ messageId: '<sent@example.com>', accepted: ['recipient@example.com'] });
   state.parsed = {};
 });
@@ -86,8 +89,8 @@ describe('mail account connection', () => {
 describe('message synchronization', () => {
   it('maps IMAP messages, flags and attachment metadata into the cache', async () => {
     const configured = account(); state.store.accounts = [configured];
-    state.mailboxOpen.mockResolvedValue({ exists: 1 });
-    state.fetchItems = [{ uid: 42, source: Buffer.from('mail'), flags: new Set(['\\Flagged']), internalDate: new Date('2026-07-28T01:00:00.000Z') }];
+    state.mailboxOpen.mockResolvedValue({ exists: 1, uidNext: 43 });
+    state.fetchBatches = [[{ uid: 42, source: Buffer.from('mail'), flags: new Set(['\\Flagged']), internalDate: new Date('2026-07-28T01:00:00.000Z') }]];
     state.parsed = {
       from: { value: [{ name: 'Sender', address: 'sender@example.com' }] }, to: { value: [{ name: 'Owner', address: 'owner@example.com' }] },
       subject: ' Hello ', text: ' Body text ', html: '<p>Body text</p>', messageId: '<42@example.com>', date: new Date('2026-07-28T01:00:00.000Z'),
@@ -98,6 +101,40 @@ describe('message synchronization', () => {
     expect(state.store.messages[0].attachments).toEqual([{ filename: 'note.txt', contentType: 'text/plain', size: 12 }]);
     expect(state.store.accounts[0].status).toBe('connected');
     expect(state.store.accounts[0].lastSyncAt).toBeTruthy();
+  });
+
+  it('uses cached UIDs, downloads only new messages and refreshes recent flags without message bodies', async () => {
+    const configured = account();
+    state.store.accounts = [configured];
+    state.store.messages = [{
+      id: 'cached-42', accountId: configured.id, mailbox: 'INBOX', uid: 42,
+      from: { name: 'Cached', address: 'cached@example.com' }, to: [], subject: 'Cached', preview: 'Cached', text: 'Cached body',
+      date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [],
+    }];
+    state.mailboxOpen.mockResolvedValue({ exists: 43, uidNext: 44 });
+    state.fetchBatches = [
+      [{ uid: 43, source: Buffer.from('new-mail'), flags: new Set(), internalDate: new Date('2026-07-29T01:00:00.000Z') }],
+      [{ uid: 42, flags: new Set(['\\Seen', '\\Flagged']) }],
+    ];
+    state.parsed = { from: { value: [{ name: 'New', address: 'new@example.com' }] }, to: { value: [] }, subject: 'New', text: 'New body', attachments: [] };
+    await expect(syncAccount(configured.id)).resolves.toEqual({ synced: 1 });
+    expect(state.fetchCalls[0]).toMatchObject({ range: '43:*', options: { uid: true }, query: { source: true } });
+    expect(state.fetchCalls[1]).toMatchObject({ range: [42], options: { uid: true }, query: { flags: true } });
+    expect(state.fetchCalls[1].query).not.toHaveProperty('source');
+    expect(state.simpleParser).toHaveBeenCalledOnce();
+    expect(state.store.messages.find((message) => message.uid === 42)).toMatchObject({ text: 'Cached body', unread: false, flagged: true });
+    expect(state.store.messages.find((message) => message.uid === 43)).toMatchObject({ text: 'New body' });
+  });
+
+  it('does not redownload cached bodies when the mailbox has no new UID', async () => {
+    const configured = account(); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'cached-42', accountId: configured.id, mailbox: 'INBOX', uid: 42, from: { name: '', address: '' }, to: [], subject: 'Cached', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [] }];
+    state.mailboxOpen.mockResolvedValue({ exists: 42, uidNext: 43 });
+    state.fetchBatches = [[{ uid: 42, flags: new Set() }]];
+    await expect(syncAccount(configured.id)).resolves.toEqual({ synced: 0 });
+    expect(state.fetchCalls).toHaveLength(1);
+    expect(state.fetchCalls[0].query).not.toHaveProperty('source');
+    expect(state.simpleParser).not.toHaveBeenCalled();
   });
 
   it('records a connection error and always logs out', async () => {

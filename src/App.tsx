@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button, Tooltip } from '@fluentui/react-components';
 import {
   AddressBook, Archive, ArrowClockwise, ArrowLeft, ArrowRight, Bell, CaretDown, Check,
@@ -6,11 +6,12 @@ import {
   PencilSimple, Plus, SidebarSimple, Star, Tag, Trash, UserCircle, WarningCircle, X,
 } from '@phosphor-icons/react';
 import { api } from './api';
-import { demoAccounts, demoMessages } from './demo';
 import type { Account, DeveloperToken, Message, ProviderId } from './types';
+import { virtualRange } from './virtual';
 
 type View = 'inbox' | 'starred' | 'tokens';
 type Notice = { kind: 'success' | 'error'; text: string } | null;
+type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
 
 const providerLabel: Record<ProviderId, string> = { outlook: 'Outlook', gmail: 'Gmail', qq: 'QQ', yahoo: 'Yahoo', hotmail: 'Hotmail', icloud: 'iCloud', custom: 'IMAP' };
 const providers: Array<{ id: ProviderId; name: string; mark: string; oauthKey?: 'google' | 'microsoft' | 'yahoo'; helpUrl?: string }> = [
@@ -48,6 +49,7 @@ function App() {
   const [accountFilter, setAccountFilter] = useState('all');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [mailFilter, setMailFilter] = useState<'all' | 'unread' | 'attachments'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -56,24 +58,26 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [syncing, setSyncing] = useState(false);
+  const [messageTotal, setMessageTotal] = useState(0);
+  const [messagesHasMore, setMessagesHasMore] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messageRevision, setMessageRevision] = useState(0);
+  const messageQueryRef = useRef('');
 
-  const isDemo = ready && realAccounts.length === 0;
-  const accounts = isDemo ? demoAccounts : realAccounts;
-  const messages = isDemo ? demoMessages : realMessages;
+  const accounts = realAccounts;
+  const messages = realMessages;
 
   async function load() {
     try {
-      const [accountData, messageData, tokenData] = await Promise.all([
+      const [accountData, tokenData] = await Promise.all([
         api<{ accounts: Account[] }>('/api/accounts'),
-        api<{ messages: Message[] }>('/api/messages'),
         api<{ tokens: DeveloperToken[] }>('/api/developer-tokens'),
       ]);
       setRealAccounts(accountData.accounts);
-      setRealMessages(messageData.messages);
       setTokens(tokenData.tokens);
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '服务连接失败' });
-    } finally { setReady(true); }
+    }
   }
 
   useEffect(() => { void load(); }, []);
@@ -84,20 +88,58 @@ function App() {
   }, [notice]);
 
   const groups = useMemo(() => Array.from(new Set(accounts.map((account) => account.group))), [accounts]);
-  const filteredMessages = useMemo(() => messages.filter((message) => {
-    const account = accounts.find((item) => item.id === message.accountId);
-    const text = `${message.subject} ${message.from.name} ${message.from.address} ${message.preview}`.toLowerCase();
-    return (accountFilter === 'all' || message.accountId === accountFilter)
-      && (!groupFilter || account?.group === groupFilter)
-      && (view !== 'starred' || message.flagged)
-      && (!search || text.includes(search.toLowerCase()));
-  }), [messages, accounts, accountFilter, groupFilter, search, view]);
-  const selected = filteredMessages.find((message) => message.id === selectedId) ?? filteredMessages[0];
+  const messageQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (accountFilter !== 'all') params.set('accountId', accountFilter);
+    if (groupFilter) params.set('group', groupFilter);
+    if (search.trim()) params.set('q', search.trim());
+    if (view === 'starred') params.set('flagged', 'true');
+    if (mailFilter === 'unread') params.set('unread', 'true');
+    if (mailFilter === 'attachments') params.set('hasAttachments', 'true');
+    return params.toString();
+  }, [accountFilter, groupFilter, search, view, mailFilter]);
+  const selected = messages.find((message) => message.id === selectedId) ?? messages[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    messageQueryRef.current = messageQuery;
+    const timer = window.setTimeout(() => {
+      setMessagesLoading(true);
+      void api<MessagePage>(`/api/messages?${messageQuery}&limit=60&offset=0`).then((result) => {
+        if (cancelled) return;
+        setRealMessages(result.messages); setMessageTotal(result.total); setMessagesHasMore(result.hasMore); setSelectedId(null);
+      }).catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件缓存加载失败' }); })
+        .finally(() => { if (!cancelled) { setMessagesLoading(false); setReady(true); } });
+    }, search.trim() ? 220 : 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [messageQuery, messageRevision]);
+
+  useEffect(() => {
+    if (!selected || selected.text !== undefined) return;
+    let cancelled = false;
+    void api<{ message: Message }>(`/api/messages/${selected.id}`).then(({ message }) => {
+      if (!cancelled) setRealMessages((current) => current.map((item) => item.id === message.id ? message : item));
+    }).catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件正文加载失败' }); });
+    return () => { cancelled = true; };
+  }, [selected?.id, selected?.text]);
+
+  const loadMoreMessages = useCallback(async () => {
+    if (messagesLoading || !messagesHasMore) return;
+    const queryAtStart = messageQuery;
+    setMessagesLoading(true);
+    try {
+      const result = await api<MessagePage>(`/api/messages?${queryAtStart}&limit=60&offset=${realMessages.length}`);
+      if (messageQueryRef.current !== queryAtStart) return;
+      setRealMessages((current) => [...current, ...result.messages.filter((message) => !current.some((item) => item.id === message.id))]);
+      setMessageTotal(result.total); setMessagesHasMore(result.hasMore);
+    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '加载更多邮件失败' }); }
+    finally { setMessagesLoading(false); }
+  }, [messageQuery, messagesHasMore, messagesLoading, realMessages.length]);
 
   async function syncAll() {
-    if (isDemo) { setAddOpen(true); return; }
+    if (realAccounts.length === 0) { setAddOpen(true); return; }
     setSyncing(true);
-    try { await api('/api/sync', { method: 'POST' }); await load(); setNotice({ kind: 'success', text: '所有邮箱已完成同步' }); }
+    try { await api('/api/sync', { method: 'POST' }); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: '缓存已更新' }); }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '同步失败' }); }
     finally { setSyncing(false); }
   }
@@ -139,7 +181,6 @@ function App() {
       </nav>
       <div className="sidebar-spacer" />
       <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => selectScope('tokens')}><Code size={19} /><span><strong>开发者网关</strong><small>Token 与邮件 API</small></span><ArrowRight size={16} /></button>
-      {isDemo && <div className="preview-note"><span>预览模式</span><p>当前为示例邮件，接入第一个邮箱后自动替换。</p><button onClick={() => setAddOpen(true)}>接入真实邮箱</button></div>}
       <div className="user-strip"><UserCircle size={32} weight="duotone" /><span><strong>本地工作区</strong><small>数据仅存储在本机</small></span><CaretDown size={15} /></div>
     </aside>
 
@@ -154,27 +195,67 @@ function App() {
       {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreate={() => setTokenOpen(true)} onReload={load} setNotice={setNotice} /> :
         <div className="mail-layout">
           <section className="message-pane">
-            <div className="pane-title"><div><p>{groupFilter ?? (accountFilter === 'all' ? (view === 'starred' ? '星标邮件' : '统一收件箱') : accounts.find((account) => account.id === accountFilter)?.displayName)}</p><span>{filteredMessages.length} 封邮件</span></div><button><Tag size={18} /></button></div>
-            <div className="message-filters"><button className="active">全部</button><button>未读</button><button>有附件</button></div>
-            <div className="message-list">
-              {!ready ? Array.from({ length: 6 }).map((_, index) => <div className="message-skeleton" key={index}><i /><span /><b /></div>) : filteredMessages.length === 0 ? <div className="empty-state"><Tray size={42} weight="duotone" /><h3>这里暂时很安静</h3><p>换一个邮箱或清除搜索条件试试。</p></div> : filteredMessages.map((message) => {
-                const account = accounts.find((item) => item.id === message.accountId)!;
-                return <button key={message.id} className={`message-row ${selected?.id === message.id ? 'selected' : ''} ${message.unread ? 'unread' : ''}`} onClick={() => setSelectedId(message.id)}>
-                  <span className="sender-avatar" style={{ '--avatar-color': account.color } as React.CSSProperties}>{initials(message.from.name || message.from.address)}</span>
-                  <span className="message-copy"><span className="message-meta"><strong>{message.from.name || message.from.address}</strong><time>{relativeTime(message.date)}</time></span><b>{message.subject}</b><span>{message.preview}</span><small><i style={{ background: account.color }} />{account.displayName}{message.hasAttachments && <><File size={13} />附件</>}</small></span>
-                  {message.flagged && <Star className="row-star" size={15} weight="fill" />}
-                </button>;
-              })}
-            </div>
+            <div className="pane-title"><div><p>{groupFilter ?? (accountFilter === 'all' ? (view === 'starred' ? '星标邮件' : '统一收件箱') : accounts.find((account) => account.id === accountFilter)?.displayName)}</p><span>{messageTotal} 封邮件</span></div><button><Tag size={18} /></button></div>
+            <div className="message-filters"><button className={mailFilter === 'all' ? 'active' : ''} onClick={() => setMailFilter('all')}>全部</button><button className={mailFilter === 'unread' ? 'active' : ''} onClick={() => setMailFilter('unread')}>未读</button><button className={mailFilter === 'attachments' ? 'active' : ''} onClick={() => setMailFilter('attachments')}>有附件</button></div>
+            <VirtualMessageList messages={messages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={setSelectedId} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
           </section>
           <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => setComposeOpen(true)} />
         </div>}
     </main>
 
-    {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} onAdded={async () => { setAddOpen(false); await load(); setNotice({ kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} />}
+    {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} onAdded={async () => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} />}
     {composeOpen && <ComposeModal accounts={realAccounts} reply={selected} onClose={() => setComposeOpen(false)} onSent={() => { setComposeOpen(false); setNotice({ kind: 'success', text: '邮件已发送' }); }} />}
     {tokenOpen && <CreateTokenModal accounts={realAccounts} onClose={() => setTokenOpen(false)} onCreated={async () => { await load(); }} />}
     {settingsOpen && <AccountSettingsModal accounts={realAccounts} onClose={() => setSettingsOpen(false)} onReload={load} setNotice={setNotice} />}
+  </div>;
+}
+
+const MESSAGE_ROW_HEIGHT = 98;
+const MESSAGE_OVERSCAN = 6;
+
+function VirtualMessageList({ messages, accounts, selectedId, ready, loading, hasMore, onSelect, onLoadMore, onAddAccount }: {
+  messages: Message[]; accounts: Account[]; selectedId?: string; ready: boolean; loading: boolean; hasMore: boolean;
+  onSelect: (id: string) => void; onLoadMore: () => void | Promise<void>; onAddAccount: () => void;
+}) {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(600);
+
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element) return;
+    const update = () => setViewportHeight(element.clientHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (viewportRef.current) viewportRef.current.scrollTop = 0;
+    setScrollTop(0);
+  }, [messages[0]?.id]);
+
+  const { start, end } = virtualRange(messages.length, scrollTop, viewportHeight, MESSAGE_ROW_HEIGHT, MESSAGE_OVERSCAN);
+
+  useEffect(() => {
+    if (hasMore && !loading && scrollTop + viewportHeight >= messages.length * MESSAGE_ROW_HEIGHT - MESSAGE_ROW_HEIGHT * 8) void onLoadMore();
+  }, [hasMore, loading, messages.length, onLoadMore, scrollTop, viewportHeight]);
+
+  return <div className="message-list virtual-message-list" ref={viewportRef} onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
+    {!ready ? Array.from({ length: 6 }).map((_, index) => <div className="message-skeleton" key={index}><i /><span /><b /></div>) : messages.length === 0 ? <div className="empty-state"><Tray size={42} weight="duotone" /><h3>{accounts.length === 0 ? '还没有接入邮箱' : '这里暂时很安静'}</h3><p>{accounts.length === 0 ? '点击左侧加号，连接你的第一个邮箱。' : '换一个邮箱或清除搜索条件试试。'}</p>{accounts.length === 0 && <button onClick={onAddAccount}>添加邮箱</button>}</div> : <div className="virtual-message-space" style={{ height: messages.length * MESSAGE_ROW_HEIGHT }}>
+      {messages.slice(start, end).map((message, visibleIndex) => {
+        const index = start + visibleIndex;
+        const account = accounts.find((item) => item.id === message.accountId);
+        const color = account?.color ?? '#66857d';
+        return <button key={message.id} style={{ top: index * MESSAGE_ROW_HEIGHT, height: MESSAGE_ROW_HEIGHT }} className={`message-row virtual-message-row ${selectedId === message.id ? 'selected' : ''} ${message.unread ? 'unread' : ''}`} onClick={() => onSelect(message.id)}>
+          <span className="sender-avatar" style={{ '--avatar-color': color } as React.CSSProperties}>{initials(message.from.name || message.from.address)}</span>
+          <span className="message-copy"><span className="message-meta"><strong>{message.from.name || message.from.address}</strong><time>{relativeTime(message.date)}</time></span><b>{message.subject}</b><span>{message.preview}</span><small><i style={{ background: color }} />{account?.displayName ?? '邮箱'}{message.hasAttachments && <><File size={13} />附件</>}</small></span>
+          {message.flagged && <Star className="row-star" size={15} weight="fill" />}
+        </button>;
+      })}
+    </div>}
+    {loading && ready && <div className="message-loading">正在读取本地缓存…</div>}
   </div>;
 }
 
@@ -186,7 +267,7 @@ function MessageReader({ message, account, onReply }: { message?: Message; accou
       <div className="reader-context"><span style={{ '--account-color': account.color } as React.CSSProperties}>{account.displayName}</span><span>{account.group}</span></div>
       <h1>{message.subject}</h1>
       <div className="sender-line"><span className="sender-avatar large" style={{ '--avatar-color': account.color } as React.CSSProperties}>{initials(message.from.name || message.from.address)}</span><span><strong>{message.from.name || message.from.address}</strong><small>{message.from.address} 发给 {message.to[0]?.address || account.email}</small></span><time>{new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(message.date))}</time><button><Star size={18} weight={message.flagged ? 'fill' : 'regular'} /></button><button><CaretDown size={16} /></button></div>
-      <div className="mail-body">{message.text.split('\n').map((line, index) => <p key={index}>{line || <br />}</p>)}</div>
+      <div className={`mail-body ${message.text === undefined ? 'mail-body-loading' : ''}`}>{message.text === undefined ? <p>正在从本地缓存加载正文…</p> : message.text.split('\n').map((line, index) => <p key={index}>{line || <br />}</p>)}</div>
       {message.attachments.length > 0 && <div className="attachments"><p>{message.attachments.length} 个附件</p>{message.attachments.map((attachment) => <button key={attachment.filename}><File size={23} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{(attachment.size / 1024 / 1024).toFixed(1)} MB</small></span></button>)}</div>}
       <div className="reply-actions"><Button appearance="primary" icon={<ArrowLeft size={17} />} onClick={onReply}>回复</Button><Button appearance="outline" icon={<ArrowRight size={17} />}>转发</Button></div>
     </div>
@@ -337,7 +418,7 @@ function ComposeModal({ accounts, reply, onClose, onSent }: { accounts: Account[
     catch (value) { setError(value instanceof Error ? value.message : '发送失败'); } finally { setBusy(false); }
   }
   return <Overlay onClose={onClose}><form className="compose-modal" onSubmit={submit}><div className="modal-header compact"><div><span>新邮件</span><h2>{reply ? '回复邮件' : '写邮件'}</h2></div><button type="button" onClick={onClose}><X size={21} /></button></div>
-    {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={30} /><h3>先接入一个真实邮箱</h3><p>预览账户不能发送邮件。</p></div> : <><label className="compose-row"><span>发件人</span><select name="accountId" defaultValue={reply?.accountId}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.displayName} · {account.email}</option>)}</select></label><label className="compose-row"><span>收件人</span><input name="to" type="email" defaultValue={reply?.from.address} required /></label><label className="compose-row"><span>主题</span><input name="subject" defaultValue={reply ? `Re: ${reply.subject}` : ''} required /></label><textarea name="text" className="compose-body" defaultValue={reply ? `\n\n----- 原邮件 -----\n${reply.text}` : ''} placeholder="写下邮件内容…" required />{error && <div className="inline-error">{error}</div>}<div className="modal-footer"><button type="button" onClick={onClose}>存为草稿</button><Button appearance="primary" icon={<PaperPlaneTilt size={17} />} type="submit" disabled={busy}>{busy ? '发送中…' : '发送邮件'}</Button></div></>}
+    {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={30} /><h3>先接入一个真实邮箱</h3><p>接入邮箱后即可发送邮件。</p></div> : <><label className="compose-row"><span>发件人</span><select name="accountId" defaultValue={reply?.accountId}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.displayName} · {account.email}</option>)}</select></label><label className="compose-row"><span>收件人</span><input name="to" type="email" defaultValue={reply?.from.address} required /></label><label className="compose-row"><span>主题</span><input name="subject" defaultValue={reply ? `Re: ${reply.subject}` : ''} required /></label><textarea name="text" className="compose-body" defaultValue={reply ? `\n\n----- 原邮件 -----\n${reply.text ?? ''}` : ''} placeholder="写下邮件内容…" required />{error && <div className="inline-error">{error}</div>}<div className="modal-footer"><button type="button" onClick={onClose}>存为草稿</button><Button appearance="primary" icon={<PaperPlaneTilt size={17} />} type="submit" disabled={busy}>{busy ? '发送中…' : '发送邮件'}</Button></div></>}
   </form></Overlay>;
 }
 

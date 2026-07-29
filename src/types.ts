@@ -20,7 +20,7 @@ export type Message = {
   to: Array<{ name: string; address: string }>;
   subject: string;
   preview: string;
-  text: string;
+  text?: string;
   date: string;
   unread: boolean;
   flagged: boolean;
