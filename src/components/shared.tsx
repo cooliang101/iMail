@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { EnvelopeSimple, MicrosoftOutlookLogo } from '@phosphor-icons/react';
 import { siGmail, siIcloud, siQq } from 'simple-icons';
 import type { ProviderId } from '../types';
@@ -30,6 +30,14 @@ export function AccountProviderMark({ provider, className = '' }: { provider: Pr
 export function initials(value: string) {
   const parts = value.trim().split(/\s+/);
   return (parts.length > 1 ? parts.map((part) => part[0]).join('') : value.slice(0, 2)).toUpperCase();
+}
+
+export function SenderAvatar({ messageId, name, color, large = false }: { messageId: string; name: string; color: string; large?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  return <span className={`sender-avatar ${large ? 'large' : ''}`} style={{ '--avatar-color': color } as CSSProperties}>
+    {initials(name)}
+    {!failed && <img src={`/api/messages/${encodeURIComponent(messageId)}/sender-logo`} alt="" loading="lazy" onError={() => setFailed(true)} />}
+  </span>;
 }
 
 export function relativeTime(value: string) {
@@ -66,4 +74,3 @@ export function Overlay({ children, onClose, wide = false, dialogClassName = '' 
     <section ref={dialogRef} className={`modal ${wide ? 'modal-wide' : ''} ${dialogClassName}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><span id={titleId} className="sr-only">iMail 对话框</span>{children}</section>
   </div>;
 }
-
