@@ -1,0 +1,139 @@
+import type { Server, IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
+import WebSocket, { WebSocketServer } from 'ws';
+import { syncAccount } from '../mail.js';
+import { authenticateToken } from '../tokens.js';
+import type { DeveloperToken } from '../types.js';
+import { gatewayEvents, type GatewayMessageCreatedEvent } from './events.js';
+
+const EVENTS_PATH = '/gateway/v1/events';
+const AUTH_TIMEOUT_MS = 5_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+type Session = {
+  socket: WebSocket;
+  rawToken?: string;
+  token?: DeveloperToken;
+  alive: boolean;
+  authenticating: boolean;
+  delivery: Promise<void>;
+  authTimer: NodeJS.Timeout;
+};
+
+function bearer(value: string | string[] | undefined) {
+  const header = Array.isArray(value) ? value[0] : value;
+  return header?.replace(/^Bearer\s+/i, '');
+}
+
+function send(socket: WebSocket, value: unknown) {
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
+}
+
+export function attachGatewayWebSocket(server: Server, options: { syncIntervalMs?: number; sync?: typeof syncAccount } = {}) {
+  const wss = new WebSocketServer({ noServer: true });
+  const sessions = new Set<Session>();
+  const syncingAccounts = new Set<string>();
+  const sync = options.sync ?? syncAccount;
+  const configuredInterval = options.syncIntervalMs ?? Number(process.env.GATEWAY_WS_SYNC_INTERVAL_MS ?? 15_000);
+  const syncIntervalMs = Number.isFinite(configuredInterval) ? Math.max(5_000, configuredInterval) : 15_000;
+
+  const authenticate = async (session: Session, rawToken: string | undefined) => {
+    if (session.token || session.authenticating) return;
+    session.authenticating = true;
+    const token = await authenticateToken(rawToken, 'messages:read').catch(() => null);
+    session.authenticating = false;
+    if (!token) {
+      send(session.socket, { type: 'error', error: { code: 'UNAUTHORIZED', message: 'Token 无效、已过期或缺少 messages:read 权限' } });
+      session.socket.close(1008, 'Unauthorized');
+      return;
+    }
+    clearTimeout(session.authTimer);
+    session.rawToken = rawToken;
+    session.token = token;
+    send(session.socket, { type: 'connected', occurredAt: new Date().toISOString() });
+    void poll();
+  };
+
+  const poll = async () => {
+    const accountIds = new Set(Array.from(sessions).flatMap((session) => session.token?.accountIds ?? []));
+    await Promise.allSettled(Array.from(accountIds).map(async (accountId) => {
+      if (syncingAccounts.has(accountId)) return;
+      syncingAccounts.add(accountId);
+      try { await sync(accountId); }
+      finally { syncingAccounts.delete(accountId); }
+    }));
+  };
+
+  wss.on('connection', (socket, request) => {
+    const session: Session = {
+      socket,
+      alive: true,
+      authenticating: false,
+      delivery: Promise.resolve(),
+      authTimer: setTimeout(() => socket.close(1008, 'Authentication timeout'), AUTH_TIMEOUT_MS),
+    };
+    sessions.add(session);
+    socket.on('pong', () => { session.alive = true; });
+    socket.on('message', (raw) => {
+      if (session.token) return;
+      try {
+        const message = JSON.parse(raw.toString()) as { type?: unknown; token?: unknown };
+        if (message.type !== 'authenticate' || typeof message.token !== 'string') throw new Error();
+        void authenticate(session, message.token);
+      } catch {
+        send(socket, { type: 'error', error: { code: 'INVALID_MESSAGE', message: '首条消息必须是 authenticate 请求' } });
+        socket.close(1008, 'Invalid authentication message');
+      }
+    });
+    socket.on('close', () => { clearTimeout(session.authTimer); sessions.delete(session); });
+    socket.on('error', () => undefined);
+    const headerToken = bearer(request.headers.authorization);
+    if (headerToken) void authenticate(session, headerToken);
+  });
+
+  const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    let pathname: string;
+    try { pathname = new URL(request.url ?? '', 'http://localhost').pathname; }
+    catch { socket.destroy(); return; }
+    if (pathname !== EVENTS_PATH) {
+      socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(request, socket, head, (websocket) => wss.emit('connection', websocket, request));
+  };
+  server.on('upgrade', onUpgrade);
+
+  const unsubscribe = gatewayEvents.subscribe((event: GatewayMessageCreatedEvent) => {
+    for (const session of sessions) {
+      if (!session.token?.accountIds.includes(event.accountId) || !session.rawToken) continue;
+      session.delivery = session.delivery.then(async () => {
+        const active = await authenticateToken(session.rawToken, 'messages:read');
+        if (!active) { session.socket.close(1008, 'Token expired or revoked'); return; }
+        send(session.socket, { id: event.id, type: event.type, occurredAt: event.occurredAt, data: event.data });
+      }).catch(() => session.socket.close(1011, 'Event delivery failed'));
+    }
+  });
+
+  const syncTimer = setInterval(() => { void poll(); }, syncIntervalMs);
+  syncTimer.unref();
+  const heartbeatTimer = setInterval(() => {
+    for (const session of sessions) {
+      if (!session.alive) { session.socket.terminate(); continue; }
+      session.alive = false;
+      session.socket.ping();
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
+
+  const close = () => {
+    clearInterval(syncTimer);
+    clearInterval(heartbeatTimer);
+    unsubscribe();
+    server.off('upgrade', onUpgrade);
+    for (const session of sessions) session.socket.terminate();
+    wss.close();
+  };
+  server.once('close', close);
+  return { close, path: EVENTS_PATH };
+}

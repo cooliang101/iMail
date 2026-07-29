@@ -56,6 +56,7 @@ vi.mock('nodemailer', () => ({
 }));
 
 import { describeProtocolError, downloadAttachment, moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
+import { gatewayEvents, type GatewayMessageCreatedEvent } from './gateway/events.js';
 
 function account(overrides: Partial<MailAccount> = {}): MailAccount {
   return {
@@ -170,7 +171,7 @@ describe('message synchronization', () => {
   });
 
   it('uses cached UIDs, downloads only new messages and refreshes recent flags without message bodies', async () => {
-    const configured = account();
+    const configured = account({ lastSyncAt: '2026-07-28T00:00:00.000Z' });
     state.store.accounts = [configured];
     state.store.messages = [{
       id: 'cached-42', accountId: configured.id, mailbox: 'INBOX', uid: 42,
@@ -183,13 +184,18 @@ describe('message synchronization', () => {
       [{ uid: 42, flags: new Set(['\\Seen', '\\Flagged']) }],
     ];
     state.parsed = { from: { value: [{ name: 'New', address: 'new@example.com' }] }, to: { value: [] }, subject: 'New', text: 'New body', attachments: [] };
+    const events: GatewayMessageCreatedEvent[] = [];
+    const unsubscribe = gatewayEvents.subscribe((event) => events.push(event));
     await expect(syncAccount(configured.id)).resolves.toEqual({ synced: 1 });
+    unsubscribe();
     expect(state.fetchCalls[0]).toMatchObject({ range: '43:*', options: { uid: true }, query: { source: true } });
     expect(state.fetchCalls[1]).toMatchObject({ range: [42], options: { uid: true }, query: { flags: true } });
     expect(state.fetchCalls[1].query).not.toHaveProperty('source');
     expect(state.simpleParser).toHaveBeenCalledOnce();
     expect(state.store.messages.find((message) => message.uid === 42)).toMatchObject({ text: 'Cached body', unread: false, flagged: true });
     expect(state.store.messages.find((message) => message.uid === 43)).toMatchObject({ text: 'New body' });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: 'message.created', accountId: configured.id, data: { message: { subject: 'New', accountEmail: configured.email } } });
   });
 
   it('does not redownload cached bodies when the mailbox has no new UID', async () => {

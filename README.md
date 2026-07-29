@@ -118,6 +118,23 @@ http://127.0.0.1:8787/gateway/docs
 
 该页面无第三方 UI 运行时依赖，可直接填入 Token、参数和 JSON 正文测试接口。OpenAPI 3.1 契约位于 `/gateway/openapi.json`。
 
+订阅新邮件：
+
+```js
+const socket = new WebSocket('ws://127.0.0.1:8787/gateway/v1/events');
+
+socket.addEventListener('open', () => {
+  socket.send(JSON.stringify({ type: 'authenticate', token: 'imail_your_token' }));
+});
+
+socket.addEventListener('message', ({ data }) => {
+  const event = JSON.parse(data);
+  if (event.type === 'message.created') console.log(event.data.message);
+});
+```
+
+连接要求 `messages:read` 权限。网关仅推送 Token 授权邮箱的新邮件摘要，不包含正文或内部账户 ID；Token 被撤销或过期后连接会以 `1008` 关闭。有订阅者时网关默认每 15 秒检查一次新邮件，可通过 `GATEWAY_WS_SYNC_INTERVAL_MS` 调整（最小 5 秒）。首次同步用于建立本地基线，不会把历史邮件当作新邮件推送。服务端客户端也可以在 WebSocket 握手中使用 `Authorization: Bearer ...`。
+
 读取邮件：
 
 ```bash

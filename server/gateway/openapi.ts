@@ -18,7 +18,7 @@ export const gatewayOpenApi = {
   info: {
     title: 'iMail Developer Gateway',
     version: '1.0.0',
-    description: '使用短期 Token 按邮箱地址安全读取与发送邮件。接口不接受或返回 iMail 内部邮箱 ID。',
+    description: '使用短期 Token 按邮箱地址安全读取、发送邮件，并通过 WebSocket 接收新邮件事件。接口不接受或返回 iMail 内部邮箱 ID。',
   },
   servers: [{ url: '/gateway/v1', description: '当前 iMail 实例' }],
   tags: [
@@ -62,6 +62,13 @@ export const gatewayOpenApi = {
           { $ref: '#/components/schemas/MessageSummary' },
           { type: 'object', required: ['text'], properties: { text: { type: 'string' }, html: { type: 'string' } } },
         ],
+      },
+      MessageCreatedEvent: {
+        type: 'object', required: ['id', 'type', 'occurredAt', 'data'],
+        properties: {
+          id: { type: 'string', format: 'uuid' }, type: { const: 'message.created' }, occurredAt: { type: 'string', format: 'date-time' },
+          data: { type: 'object', required: ['message'], properties: { message: { $ref: '#/components/schemas/MessageSummary' } } },
+        },
       },
       Page: {
         type: 'object', required: ['limit', 'count', 'hasMore', 'nextCursor'],
@@ -126,5 +133,11 @@ export const gatewayOpenApi = {
         responses: { '201': { description: '发送成功' }, '400': errorResponse('请求正文无效'), '401': errorResponse('Token 无效或权限不足'), '404': errorResponse('发件邮箱不存在或未授权') },
       },
     },
+  },
+  'x-websocket': {
+    url: '/gateway/v1/events',
+    description: '存在订阅者时，网关会自动同步授权邮箱，并推送新邮件摘要。',
+    authentication: { firstMessage: { type: 'authenticate', token: 'imail_your_token' }, requiredScope: 'messages:read' },
+    messages: { connected: { example: { type: 'connected', occurredAt: '2026-07-29T10:00:00.000Z' } }, messageCreated: { $ref: '#/components/schemas/MessageCreatedEvent' } },
   },
 } as const;

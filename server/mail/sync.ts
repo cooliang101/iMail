@@ -3,6 +3,7 @@ import type { FetchMessageObject, ListResponse } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { readStore, updateStore } from '../store.js';
 import type { CachedMessage, MailboxFolder, MailboxRole } from '../types.js';
+import { gatewayEvents } from '../gateway/events.js';
 import { address, imapClientFor } from './client.js';
 
 const specialUseForRole: Partial<Record<MailboxRole, string[]>> = {
@@ -34,6 +35,7 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
   const store = await readStore();
   const account = store.accounts.find((item) => item.id === accountId);
   if (!account) throw new Error('邮箱账户不存在');
+  const previouslySynced = Boolean(account.lastSyncAt);
   await updateStore((data) => {
     const current = data.accounts.find((item) => item.id === accountId);
     if (current) { current.status = 'syncing'; current.lastError = undefined; }
@@ -63,6 +65,7 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
     const cached = store.messages.filter((message) => message.accountId === accountId && message.mailbox === mailboxPath);
     const maxCachedUid = cached.reduce((max, message) => Math.max(max, message.uid), 0);
     const incoming: CachedMessage[] = [];
+    const createdMessages: CachedMessage[] = [];
     const flagUpdates = new Map<number, { unread: boolean; flagged: boolean }>();
 
     const parseIncoming = async (items: AsyncIterable<FetchMessageObject>) => {
@@ -110,6 +113,7 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
       for (const message of incoming) {
         const previous = data.messages.find((item) => item.id === message.id);
         if (previous) { message.labels = previous.labels ?? []; message.snoozedUntil = previous.snoozedUntil; }
+        else createdMessages.push(message);
       }
       const incomingMessageIds = new Set(incoming.map((message) => message.messageId).filter(Boolean));
       data.messages = [...data.messages.filter((message) => message.accountId !== accountId || (!ids.has(message.id) && !((mailboxRole === 'custom' ? message.mailbox === mailboxPath : (message.mailboxRole ?? 'inbox') === mailboxRole) && message.messageId && incomingMessageIds.has(message.messageId)))), ...incoming]
@@ -122,6 +126,7 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
       const current = data.accounts.find((item) => item.id === accountId);
       if (current) { current.status = 'connected'; current.lastSyncAt = new Date().toISOString(); current.lastError = undefined; current.mailboxes = folders; }
     });
+    if (previouslySynced && createdMessages.length > 0) gatewayEvents.publishMessageCreated(account, createdMessages);
     return { synced: incoming.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步失败';
