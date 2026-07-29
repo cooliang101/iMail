@@ -8,7 +8,7 @@ import { AccountProviderMark, ProviderIcon, providerLabel } from './components/s
 import { AppInput } from './components/form-controls';
 import { VirtualMessageList, MessageReader } from './features/mail';
 import { AddAccountModal, AccountSettingsModal } from './features/accounts';
-import { ComposeModal, DraftWorkspace } from './features/compose';
+import { ComposePane, DraftWorkspace } from './features/compose';
 import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal, type WorkspaceFolder } from './features/organize';
 import { CreateTokenModal, TokenWorkspace } from './features/developer';
 
@@ -329,7 +329,7 @@ function App() {
 
     <aside className={`primary-sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-heading"><div><strong>iMail</strong><span>统一通信工作台</span></div><button className="mobile-close" aria-label="关闭侧栏" onClick={() => setSidebarOpen(false)}><X size={20} /></button></div>
-      <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => { setActiveDraft(undefined); setComposeMode('new'); setSidebarOpen(false); }}>写邮件</Button>
+      <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => { setActiveDraft(undefined); setComposeMode('new'); setView('inbox'); setSidebarOpen(false); }}>写邮件</Button>
       <div className="mobile-account-controls" aria-label="移动端邮箱账户">
         <button className={accountFilter === 'all' ? 'active' : ''} onClick={() => selectScope('inbox')}><Tray size={18} /><span><strong>全部邮箱</strong><small>{accounts.length} 个账户</small></span></button>
         {accounts.map((account) => <button key={account.id} className={accountFilter === account.id ? 'active' : ''} onClick={() => selectScope('inbox', account.id)}><AccountProviderMark provider={account.provider} /><span><strong>{account.displayName}</strong><small>{account.email}</small></span></button>)}
@@ -372,9 +372,9 @@ function App() {
         <button data-icon-tone="info" className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
       </header>
 
-      {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreate={() => setTokenOpen(true)} onReload={load} setNotice={setNotice} /> : view === 'drafts' ? <DraftWorkspace drafts={drafts} accounts={accounts} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); await load(); setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> :
-        <div className={`mail-layout ${selectedId ? 'mobile-reader-open' : ''}`}>
-          <section className="message-pane">
+      {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreate={() => setTokenOpen(true)} onReload={load} setNotice={setNotice} /> :
+        <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
+          {view === 'drafts' ? <DraftWorkspace drafts={drafts} accounts={accounts} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> : <section className="message-pane">
             <div className="pane-title">
               <div className="pane-heading">
                 {activeAccount && <AccountProviderMark provider={activeAccount.provider} className="pane-provider-mark" />}
@@ -387,19 +387,18 @@ function App() {
             </div>
             <div className="message-filters"><button className={mailFilter === 'all' ? 'active' : ''} onClick={() => setMailFilter('all')}>全部</button><button className={mailFilter === 'unread' ? 'active' : ''} onClick={() => setMailFilter('unread')}>未读</button><button className={mailFilter === 'attachments' ? 'active' : ''} onClick={() => setMailFilter('attachments')}>有附件</button></div>
             <VirtualMessageList messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
-          </section>
-          <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => setComposeMode('reply')} onForward={() => setComposeMode('forward')} onCloseMobile={() => setSelectedId(null)}
+          </section>}
+          {composeMode ? <ComposePane key={`${composeMode}-${activeDraft?.id ?? selected?.id ?? 'new'}`} accounts={realAccounts} mode={composeMode} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' ? <section className="composer-pane composer-welcome"><PencilSimple size={48} weight="duotone" /><h2>选择草稿继续编辑</h2><p>修改会自动保存，也可以直接新建一封邮件。</p><button onClick={() => { setActiveDraft(undefined); setComposeMode('new'); }}>新建邮件</button></section> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} onReply={() => { setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}
             onPrevious={() => { if (selectedIndex > 0) selectMessage(messages[selectedIndex - 1].id); }}
             onNext={() => { if (selectedIndex >= 0 && selectedIndex < messages.length - 1) selectMessage(messages[selectedIndex + 1].id); }}
-            hasPrevious={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < messages.length - 1} />
+            hasPrevious={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < messages.length - 1} />}
         </div>}
     </main>
 
     {addOpen && <AddAccountModal accounts={accounts} onClose={() => setAddOpen(false)} onAdded={async (result) => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice(result?.warning ? { kind: 'error', text: `授权已保存，连接验证失败：${result.warning}` } : { kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} />}
-    {composeMode && <ComposeModal accounts={realAccounts} mode={composeMode} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setActiveDraft(undefined); }} onSaved={async () => { setComposeMode(null); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '草稿已保存到本机' }); }} onSent={async () => { setComposeMode(null); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} />}
     {tokenOpen && <CreateTokenModal accounts={realAccounts} onClose={() => setTokenOpen(false)} onCreated={async () => { await load(); }} />}
     {settingsOpen && <AccountSettingsModal accounts={realAccounts} onClose={() => setSettingsOpen(false)} onReload={load} setNotice={setNotice} />}
     {notificationsOpen && <NotificationsModal notifications={notifications} accounts={accounts} onClose={() => setNotificationsOpen(false)} onOpenMessage={(notification) => { setNotificationsOpen(false); if (notification.accountId) setAccountFilter(notification.accountId); setView('inbox'); setSelectedId(notification.messageId ?? null); }} />}

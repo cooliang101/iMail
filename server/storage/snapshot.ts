@@ -22,7 +22,7 @@ export function readSnapshot(db: DatabaseSync): StoreData {
   const messages = all(db, 'SELECT * FROM messages ORDER BY received_at DESC').map(messageFromRow);
   const drafts = all(db, 'SELECT * FROM drafts ORDER BY updated_at DESC').map((row): Draft => ({
     id: text(row, 'id'), accountId: text(row, 'account_id'), to: json(row, 'to_json'), cc: json(row, 'cc_json'),
-    subject: text(row, 'subject'), text: text(row, 'text_body'), createdAt: text(row, 'created_at'), updatedAt: text(row, 'updated_at'),
+    subject: text(row, 'subject'), text: text(row, 'text_body'), html: text(row, 'html_body'), attachments: json(row, 'attachments_json'), createdAt: text(row, 'created_at'), updatedAt: text(row, 'updated_at'),
   }));
   const scopeRows = all(db, 'SELECT token_id, scope FROM developer_token_scopes ORDER BY scope');
   const accountRows = all(db, 'SELECT token_id, account_id FROM developer_token_accounts ORDER BY account_id');

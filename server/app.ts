@@ -15,7 +15,7 @@ export function createApp() {
   const origins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map((item) => item.trim());
 
   app.use(cors({ origin: origins }));
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '25mb' }));
   app.use('/api', systemRouter);
   app.use('/api', oauthRouter);
   app.use('/api', accountsRouter);

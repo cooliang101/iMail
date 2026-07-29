@@ -1,3 +1,2 @@
-export * from './ComposeModal';
+export * from './ComposePane';
 export * from './DraftWorkspace';
-

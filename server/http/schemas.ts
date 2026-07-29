@@ -33,12 +33,24 @@ export const oauthStartSchema = z.object({
 
 export const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash', 'custom']);
 
+const draftAttachmentSchema = z.object({
+  id: z.string().min(1).max(100),
+  filename: z.string().min(1).max(255),
+  contentType: z.string().min(1).max(150),
+  size: z.number().int().nonnegative().max(5 * 1024 * 1024),
+  data: z.string().max(7_000_000),
+});
+
 export const draftSchema = z.object({
   accountId: z.string().uuid(),
   to: z.array(z.string().email()).default([]),
   cc: z.array(z.string().email()).default([]),
   subject: z.string().max(500).default(''),
   text: z.string().max(2_000_000).default(''),
+  html: z.string().max(8_000_000).default(''),
+  attachments: z.array(draftAttachmentSchema).max(10).default([]),
+}).superRefine((draft, context) => {
+  if (draft.attachments.reduce((total, attachment) => total + attachment.size, 0) > 15 * 1024 * 1024) context.addIssue({ code: 'custom', path: ['attachments'], message: '附件总大小不能超过 15 MB' });
 });
 
 export const sendSchema = z.object({
@@ -48,7 +60,10 @@ export const sendSchema = z.object({
   subject: z.string().min(1),
   text: z.string().min(1),
   html: z.string().optional(),
+  attachments: z.array(draftAttachmentSchema).max(10).optional(),
   draftId: z.string().uuid().optional(),
+}).superRefine((message, context) => {
+  if ((message.attachments ?? []).reduce((total, attachment) => total + attachment.size, 0) > 15 * 1024 * 1024) context.addIssue({ code: 'custom', path: ['attachments'], message: '附件总大小不能超过 15 MB' });
 });
 
 export const tokenSchema = z.object({
