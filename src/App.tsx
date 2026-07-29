@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@fluentui/react-components';
-import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
+import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
 import { api } from './api';
 import type { Account, DeveloperToken, Draft, MailboxRole, Message } from './types';
 import type { MailNotification, Notice } from './app-model';
@@ -46,6 +46,7 @@ function App() {
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [activeDraft, setActiveDraft] = useState<Draft | undefined>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [syncing, setSyncing] = useState(false);
   const [messageTotal, setMessageTotal] = useState(0);
@@ -271,7 +272,7 @@ function App() {
 
   const scopeTitle = activeLabel ? `标签 · ${activeLabel}` : view === 'starred' ? '星标邮件' : view === 'sent' ? '已发送' : view === 'snoozed' ? '稍后处理' : view === 'archive' ? '归档' : '统一收件箱';
 
-  return <div className="app-shell">
+  return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     {notice && <div className={`toast toast-${notice.kind}`}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
 
     <aside className="account-rail" aria-label="邮箱账户">
@@ -303,7 +304,7 @@ function App() {
         <button data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => selectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
         <button data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => selectScope('archive')}><Archive size={19} /><span>归档</span></button>
       </nav>
-      <div className="section-label"><span>工作空间</span><button title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(true)}><Plus size={15} /></button></div>
+      <div className="section-label"><span>工作空间</span><button className="workspace-add" title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(true)}><FolderSimplePlus size={17} /></button></div>
       <nav className="nav-block groups">
         {groups.map((group, index) => <button key={group} className={groupFilter === group ? 'active' : ''} onClick={() => selectScope('inbox', 'all', group)}><span className={`group-symbol group-${index % 4}`} /><span>{group}</span><b>{messageStats.byGroup.find((item) => item.group === group)?.unread || ''}</b></button>)}
       </nav>
@@ -315,7 +316,8 @@ function App() {
 
     <main className="workspace">
       <header className="topbar">
-        <button className="sidebar-trigger" aria-label="打开侧栏" onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
+        <button className="sidebar-trigger desktop-sidebar-trigger" title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((current) => !current)}><SidebarSimple size={20} /></button>
+        <button className="sidebar-trigger mobile-sidebar-trigger" title="打开侧栏" aria-label="打开侧栏" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
         <AppInput className="search-box" contentBefore={<MagnifyingGlass size={18} />} contentAfter={<kbd>Ctrl K</kbd>} ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" aria-label="搜索当前范围内的邮件" />
         <button data-icon-tone="primary" className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '同步中' : '同步'}</span></button>
         <button data-icon-tone="info" className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
@@ -327,9 +329,9 @@ function App() {
             <div className="pane-title">
               <div className="pane-heading">
                 {activeAccount && <AccountProviderMark provider={activeAccount.provider} className="pane-provider-mark" />}
-                <div>
-                  <p>{groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName)}</p>
-                  <span>{activeAccount ? `${providerLabel[activeAccount.provider]} · ${activeAccount.email} · ` : ''}{messageTotal} 封邮件</span>
+                <div className="pane-title-copy">
+                  <div className="pane-title-line"><p>{groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName)}</p><span className="pane-count">{messageTotal} 封邮件</span></div>
+                  {activeAccount && <span className="pane-subtitle">{providerLabel[activeAccount.provider]} · {activeAccount.email}</span>}
                 </div>
               </div>
               <button data-icon-tone="info" title={selected ? '管理所选邮件标签' : '请先选择一封邮件'} aria-label="管理邮件标签" disabled={!selected} onClick={() => setLabelOpen(true)}><Tag size={18} /></button>
