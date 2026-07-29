@@ -1,15 +1,36 @@
 import { createHash } from 'node:crypto';
-import type { FetchMessageObject } from 'imapflow';
+import type { FetchMessageObject, ListResponse } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { readStore, updateStore } from '../store.js';
-import type { CachedMessage, MailboxRole } from '../types.js';
+import type { CachedMessage, MailboxFolder, MailboxRole } from '../types.js';
 import { address, imapClientFor } from './client.js';
 
 const specialUseForRole: Partial<Record<MailboxRole, string[]>> = {
   sent: ['\\Sent'], archive: ['\\Archive', '\\All'], trash: ['\\Trash'],
 };
 
-export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 'inbox'): Promise<{ synced: number }> {
+function publicMailbox(item: Partial<ListResponse> & { path: string }): MailboxFolder {
+  return {
+    path: item.path,
+    name: item.name || item.path.split(item.delimiter || '/').at(-1) || item.path,
+    delimiter: item.delimiter || '/',
+    specialUse: item.specialUse,
+    selectable: !item.flags?.has('\\Noselect'),
+    subscribed: item.subscribed ?? true,
+    total: item.status?.messages,
+    unread: item.status?.unseen,
+  };
+}
+
+function roleForMailbox(item: Partial<ListResponse> | undefined): MailboxRole {
+  if (!item || item.path?.toUpperCase() === 'INBOX' || item.specialUse === '\\Inbox') return 'inbox';
+  if (item.specialUse === '\\Sent') return 'sent';
+  if (item.specialUse === '\\Archive' || item.specialUse === '\\All') return 'archive';
+  if (item.specialUse === '\\Trash') return 'trash';
+  return 'custom';
+}
+
+export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 'inbox', requestedMailbox?: string): Promise<{ synced: number }> {
   const store = await readStore();
   const account = store.accounts.find((item) => item.id === accountId);
   if (!account) throw new Error('邮箱账户不存在');
@@ -21,12 +42,19 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
   const client = await imapClientFor(account);
   try {
     await client.connect();
+    const listed = await client.list({ statusQuery: { messages: true, unseen: true } });
+    const folders = listed.map(publicMailbox);
     let mailboxPath = 'INBOX';
     let allMailArchive = false;
-    if (mailboxRole !== 'inbox') {
-      const mailboxes = await client.list();
+    if (requestedMailbox) {
+      const target = listed.find((item) => item.path === requestedMailbox);
+      if (!target || target.flags?.has('\\Noselect')) throw new Error('邮箱文件夹不存在或不可选择');
+      mailboxPath = target.path;
+      mailboxRole = roleForMailbox(target);
+      allMailArchive = mailboxRole === 'archive' && target.specialUse === '\\All';
+    } else if (mailboxRole !== 'inbox') {
       const specialUses = specialUseForRole[mailboxRole] ?? [];
-      const target = mailboxes.find((item) => specialUses.includes(item.specialUse ?? ''));
+      const target = listed.find((item) => specialUses.includes(item.specialUse ?? ''));
       if (!target) throw new Error(`服务商没有返回${mailboxRole === 'sent' ? '已发送' : mailboxRole === 'archive' ? '归档' : '垃圾箱'}文件夹`);
       mailboxPath = target.path;
       allMailArchive = mailboxRole === 'archive' && target.specialUse === '\\All';
@@ -48,7 +76,7 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
         const text = parsed.text?.trim() ?? '';
         const html = typeof parsed.html === 'string' ? parsed.html : undefined;
         incoming.push({
-          id: createHash('sha256').update(mailboxRole === 'inbox' ? `${accountId}:${item.uid}` : `${accountId}:${mailboxRole}:${item.uid}`).digest('hex').slice(0, 24),
+          id: createHash('sha256').update(mailboxRole === 'inbox' ? `${accountId}:${item.uid}` : mailboxRole === 'custom' ? `${accountId}:${mailboxPath}:${item.uid}` : `${accountId}:${mailboxRole}:${item.uid}`).digest('hex').slice(0, 24),
           accountId, mailbox: mailboxPath, mailboxRole, uid: item.uid, messageId: parsed.messageId,
           from: address(fromValue), to: toValue.map(address), subject: parsed.subject?.trim() || '（无主题）',
           preview: text.replace(/\s+/g, ' ').slice(0, 180), text, html,
@@ -84,7 +112,7 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
         if (previous) { message.labels = previous.labels ?? []; message.snoozedUntil = previous.snoozedUntil; }
       }
       const incomingMessageIds = new Set(incoming.map((message) => message.messageId).filter(Boolean));
-      data.messages = [...data.messages.filter((message) => message.accountId !== accountId || (!ids.has(message.id) && !((message.mailboxRole ?? 'inbox') === mailboxRole && message.messageId && incomingMessageIds.has(message.messageId)))), ...incoming]
+      data.messages = [...data.messages.filter((message) => message.accountId !== accountId || (!ids.has(message.id) && !((mailboxRole === 'custom' ? message.mailbox === mailboxPath : (message.mailboxRole ?? 'inbox') === mailboxRole) && message.messageId && incomingMessageIds.has(message.messageId)))), ...incoming]
         .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5000);
       for (const message of data.messages) {
         if (message.accountId !== accountId || message.mailbox !== mailboxPath) continue;
@@ -92,7 +120,7 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
         if (flags) Object.assign(message, flags);
       }
       const current = data.accounts.find((item) => item.id === accountId);
-      if (current) { current.status = 'connected'; current.lastSyncAt = new Date().toISOString(); current.lastError = undefined; }
+      if (current) { current.status = 'connected'; current.lastSyncAt = new Date().toISOString(); current.lastError = undefined; current.mailboxes = folders; }
     });
     return { synced: incoming.length };
   } catch (error) {

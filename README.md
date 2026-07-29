@@ -107,59 +107,59 @@ APP_MASTER_KEY=请替换为64位十六进制值
 基础地址：
 
 ```text
-http://127.0.0.1:8787/api/dev/v1
+http://127.0.0.1:8787/gateway/v1
 ```
 
 轻量交互文档：
 
 ```text
-http://127.0.0.1:8787/api/docs
+http://127.0.0.1:8787/gateway/docs
 ```
 
-该页面无第三方 UI 运行时依赖，可直接填入 Token、参数和 JSON 正文测试接口。OpenAPI 3.1 契约位于 `/api/docs/openapi.json`。
+该页面无第三方 UI 运行时依赖，可直接填入 Token、参数和 JSON 正文测试接口。OpenAPI 3.1 契约位于 `/gateway/openapi.json`。
 
 读取邮件：
 
 ```bash
-curl "http://127.0.0.1:8787/api/dev/v1/messages?limit=10" \
+curl "http://127.0.0.1:8787/gateway/v1/messages?limit=10" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 列表只返回摘要，不加载邮件正文。使用响应中的 `page.nextCursor` 获取下一页：
 
 ```bash
-curl "http://127.0.0.1:8787/api/dev/v1/messages?limit=10&cursor=上一页游标" \
+curl "http://127.0.0.1:8787/gateway/v1/messages?limit=10&cursor=上一页游标" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 读取单封邮件正文：
 
 ```bash
-curl "http://127.0.0.1:8787/api/dev/v1/messages/邮件ID" \
+curl "http://127.0.0.1:8787/gateway/v1/messages/邮件ID" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 指定邮箱可使用邮箱级路由，或在聚合路由上传入 `mailbox`：
 
 ```bash
-curl "http://127.0.0.1:8787/api/dev/v1/mailboxes/user@example.com/messages?limit=10" \
+curl "http://127.0.0.1:8787/gateway/v1/mailboxes/user@example.com/messages?limit=10" \
   -H "Authorization: Bearer imail_your_token"
 
-curl "http://127.0.0.1:8787/api/dev/v1/messages?mailbox=user@example.com" \
+curl "http://127.0.0.1:8787/gateway/v1/messages?mailbox=user@example.com" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 读取可用账户：
 
 ```bash
-curl "http://127.0.0.1:8787/api/dev/v1/mailboxes" \
+curl "http://127.0.0.1:8787/gateway/v1/mailboxes" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 发送邮件：
 
 ```bash
-curl -X POST "http://127.0.0.1:8787/api/dev/v1/send" \
+curl -X POST "http://127.0.0.1:8787/gateway/v1/send" \
   -H "Authorization: Bearer imail_your_token" \
   -H "Content-Type: application/json" \
   -d '{

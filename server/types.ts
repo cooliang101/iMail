@@ -1,5 +1,17 @@
 export type ProviderId = 'outlook' | 'gmail' | 'qq' | 'yahoo' | 'hotmail' | 'icloud' | 'custom';
-export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'trash';
+export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'trash' | 'custom';
+export type WorkspaceIconId = 'folder' | 'briefcase' | 'building' | 'home' | 'users' | 'code' | 'heart' | 'star';
+
+export type MailboxFolder = {
+  path: string;
+  name: string;
+  delimiter: string;
+  specialUse?: string;
+  selectable: boolean;
+  subscribed: boolean;
+  total?: number;
+  unread?: number;
+};
 
 export type MailSettings = {
   imapHost: string;
@@ -27,6 +39,7 @@ export type MailAccount = {
   email: string;
   displayName: string;
   group: string;
+  groupIcon?: WorkspaceIconId;
   color: string;
   settings: MailSettings;
   encryptedSecret: string;
@@ -35,6 +48,7 @@ export type MailAccount = {
   lastSyncAt?: string;
   status: 'connected' | 'error' | 'syncing';
   lastError?: string;
+  mailboxes?: MailboxFolder[];
 };
 
 export type CachedMessage = {

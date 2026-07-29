@@ -43,7 +43,7 @@ export function gatewayDocsPage() {
   </div>
   <script>
   (async function(){
-    const spec=await fetch('/api/docs/openapi.json').then(function(r){return r.json()});
+    const spec=await fetch('/gateway/openapi.json').then(function(r){return r.json()});
     const operations=[];
     Object.entries(spec.paths).forEach(function(entry){Object.entries(entry[1]).forEach(function(methodEntry){if(['get','post','put','patch','delete'].includes(methodEntry[0]))operations.push({path:entry[0],method:methodEntry[0].toUpperCase(),definition:methodEntry[1]})})});
     const nav=document.getElementById('endpoints'),form=document.getElementById('request-form'),params=document.getElementById('parameters'),bodyField=document.getElementById('body-field'),body=document.getElementById('body'),token=document.getElementById('token');

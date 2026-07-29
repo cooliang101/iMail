@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { encryptSecret } from '../crypto.js';
 import { asyncRoute } from '../http/async-route.js';
 import { publicAccount } from '../http/presenters.js';
-import { accountSchema, mailboxRoleSchema } from '../http/schemas.js';
+import { accountSchema, mailboxRoleSchema, workspaceIconSchema } from '../http/schemas.js';
 import { syncAccount, testAccount } from '../mail.js';
 import { beginOAuthReconnect, validateStoredAccountConnection } from '../oauth.js';
 import { settingsFor } from '../providers.js';
@@ -59,7 +59,7 @@ accountsRouter.post('/accounts', asyncRoute(async (req, res) => {
   const settings = settingsFor(input.provider as ProviderId, input.settings as MailSettings | undefined);
   const account: MailAccount = {
     id: crypto.randomUUID(), provider: input.provider, email: input.email.toLowerCase(), displayName: input.displayName,
-    group: input.group, color: input.color, settings,
+    group: input.group, groupIcon: input.groupIcon, color: input.color, settings,
     encryptedSecret: await encryptSecret({ authType: input.password ? 'app-password' : 'oauth2', password: input.password, accessToken: input.accessToken }),
     authMethod: input.password ? 'app-password' : 'oauth2', createdAt: new Date().toISOString(), status: 'connected',
   };
@@ -83,7 +83,7 @@ accountsRouter.delete('/accounts/:id', asyncRoute(async (req, res) => {
 }));
 
 accountsRouter.patch('/accounts/:id', asyncRoute(async (req, res) => {
-  const input = z.object({ displayName: z.string().trim().min(1).max(80).optional(), group: z.string().trim().min(1).max(40).optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional() }).parse(req.body);
+  const input = z.object({ displayName: z.string().trim().min(1).max(80).optional(), group: z.string().trim().min(1).max(40).optional(), groupIcon: workspaceIconSchema.optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional() }).parse(req.body);
   let updated: MailAccount | undefined;
   await updateStore((data) => {
     updated = data.accounts.find((item) => item.id === req.params.id);
@@ -98,6 +98,11 @@ accountsRouter.post('/accounts/:id/sync', asyncRoute(async (req, res) => res.jso
 accountsRouter.post('/accounts/:id/mailboxes/:role/sync', asyncRoute(async (req, res) => {
   const role = mailboxRoleSchema.parse(req.params.role);
   res.json(await syncAccount(String(req.params.id), role));
+}));
+
+accountsRouter.post('/accounts/:id/mailboxes/sync', asyncRoute(async (req, res) => {
+  const input = z.object({ mailbox: z.string().trim().min(1).max(500) }).parse(req.body);
+  res.json(await syncAccount(String(req.params.id), 'custom', input.mailbox));
 }));
 
 accountsRouter.post('/mailboxes/:role/sync', asyncRoute(async (req, res) => {

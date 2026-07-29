@@ -56,7 +56,7 @@ describe('SQLiteStore', () => {
 
   it('round-trips accounts, nested messages, attachments and normalized token relations', async () => {
     const { store } = await temporaryStore();
-    const expected = { accounts: [account({ lastSyncAt: '2026-07-28T02:00:00.000Z' })], messages: [message()], tokens: [token({ lastUsedAt: '2026-07-28T03:00:00.000Z' })], drafts: [] };
+    const expected = { accounts: [account({ lastSyncAt: '2026-07-28T02:00:00.000Z', groupIcon: 'briefcase' })], messages: [message()], tokens: [token({ lastUsedAt: '2026-07-28T03:00:00.000Z' })], drafts: [] };
     await store.update((data) => { Object.assign(data, expected); });
     expect(await store.read()).toEqual(expected);
   });
@@ -99,6 +99,24 @@ describe('SQLiteStore', () => {
         { group: '工作', total: 2, unread: 2 },
       ],
     });
+  });
+
+  it('merges same-named mailbox folders within one workspace', async () => {
+    const { store } = await temporaryStore();
+    const first = account({ group: '项目', mailboxes: [{ path: 'Projects', name: 'Projects', delimiter: '/', selectable: true, subscribed: true }] });
+    const second = account({ id: 'account-2', email: 'second@example.com', group: '项目', mailboxes: [{ path: 'Folders/Projects', name: 'projects', delimiter: '/', selectable: true, subscribed: true }] });
+    const outside = account({ id: 'account-3', email: 'outside@example.com', group: '个人', mailboxes: [{ path: 'Projects', name: 'Projects', delimiter: '/', selectable: true, subscribed: true }] });
+    await store.update((data) => {
+      data.accounts = [first, second, outside];
+      data.messages = [
+        message({ id: 'project-1', accountId: first.id, mailbox: 'Projects', mailboxRole: 'custom', uid: 1 }),
+        message({ id: 'project-2', accountId: second.id, mailbox: 'Folders/Projects', mailboxRole: 'custom', uid: 2 }),
+        message({ id: 'outside-project', accountId: outside.id, mailbox: 'Projects', mailboxRole: 'custom', uid: 3 }),
+      ];
+    });
+
+    const result = await store.listMessages({ group: '项目', mailboxName: 'PROJECTS', limit: 10, offset: 0 });
+    expect(result.messages.map((item) => item.id)).toEqual(['project-2', 'project-1']);
   });
 
   it('serializes concurrent updates without losing writes', async () => {

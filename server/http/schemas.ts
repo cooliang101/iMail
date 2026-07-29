@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const providerSchema = z.enum(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
+export const workspaceIconSchema = z.enum(['folder', 'briefcase', 'building', 'home', 'users', 'code', 'heart', 'star']);
 
 export const settingsSchema = z.object({
   imapHost: z.string().min(1),
@@ -16,6 +17,7 @@ export const accountSchema = z.object({
   email: z.string().email(),
   displayName: z.string().min(1).max(80),
   group: z.string().min(1).max(40).default('个人'),
+  groupIcon: workspaceIconSchema.default('folder'),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#17a887'),
   password: z.string().optional(),
   accessToken: z.string().optional(),
@@ -29,7 +31,7 @@ export const oauthStartSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#168f78'),
 });
 
-export const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash']);
+export const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash', 'custom']);
 
 export const draftSchema = z.object({
   accountId: z.string().uuid(),
