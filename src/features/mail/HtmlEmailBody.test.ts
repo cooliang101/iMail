@@ -29,4 +29,11 @@ describe('rendered email sanitization', () => {
     expect(sanitize('<custom-box class="x"><strong style="font-weight:700">kept</strong></custom-box>'))
       .toBe('<strong style="font-weight:700">kept</strong>');
   });
+
+  it('converts legacy email presentation attributes to sanitized inline styles', () => {
+    const result = sanitize('<table class="bg-blue" bgcolor="#0a007d" width="100%" cellspacing="0"><tr><td align="center" valign="top">Blue panel</td></tr></table>');
+    expect(result).toContain('style="background-color:#0a007d;width:100%;border-spacing:0"');
+    expect(result).toContain('style="text-align:center;vertical-align:top"');
+    expect(result).not.toMatch(/class=|bgcolor=|\swidth=|cellspacing=|\salign=|valign=/i);
+  });
 });

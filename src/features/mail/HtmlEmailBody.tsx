@@ -58,6 +58,7 @@ export function sanitizeEmailHtml(html: string, Parser: typeof DOMParser = DOMPa
       continue;
     }
 
+    preserveLegacyPresentation(element, tag);
     for (const attribute of Array.from(element.attributes)) {
       const name = attribute.name.toLocaleLowerCase();
       const permitted = sharedAttributes.has(name) || attributesByElement[tag]?.has(name);
@@ -78,6 +79,60 @@ export function sanitizeEmailHtml(html: string, Parser: typeof DOMParser = DOMPa
   }
 
   return document.body.innerHTML;
+}
+
+function preserveLegacyPresentation(element: Element, tag: string) {
+  copyColorAttribute(element, 'bgcolor', 'background-color');
+  copyColorAttribute(element, 'color', 'color');
+  copyDimensionAttribute(element, 'width');
+  copyDimensionAttribute(element, 'height');
+
+  const align = element.getAttribute('align')?.trim().toLocaleLowerCase();
+  if (align && ['left', 'right', 'center', 'justify'].includes(align)) {
+    if (tag === 'table') {
+      if (align === 'center') {
+        setStyleFallback(element, 'margin-left', 'auto');
+        setStyleFallback(element, 'margin-right', 'auto');
+      } else if (align === 'left' || align === 'right') {
+        setStyleFallback(element, 'float', align);
+      }
+    } else {
+      setStyleFallback(element, 'text-align', align);
+    }
+  }
+
+  const valign = element.getAttribute('valign')?.trim().toLocaleLowerCase();
+  if (valign && ['baseline', 'bottom', 'middle', 'top'].includes(valign)) {
+    setStyleFallback(element, 'vertical-align', valign);
+  }
+
+  if (tag === 'table') {
+    const cellspacing = safeDimension(element.getAttribute('cellspacing'));
+    if (cellspacing) setStyleFallback(element, 'border-spacing', cellspacing);
+  }
+}
+
+function copyColorAttribute(element: Element, attribute: string, property: string) {
+  const value = element.getAttribute(attribute)?.trim();
+  if (value && /^(?:#[\da-f]{3,8}|(?:rgb|hsl)a?\([\d.%+\-,\s]+\)|[a-z]{1,24})$/i.test(value)) {
+    setStyleFallback(element, property, value);
+  }
+}
+
+function copyDimensionAttribute(element: Element, attribute: 'height' | 'width') {
+  const value = safeDimension(element.getAttribute(attribute));
+  if (value) setStyleFallback(element, attribute, value);
+}
+
+function safeDimension(value: string | null) {
+  const normalized = value?.trim();
+  if (!normalized || !/^(?:auto|0|\d+(?:\.\d+)?(?:px|%|em|rem|pt|pc|in|cm|mm|vw|vh|vmin|vmax)?)$/i.test(normalized)) return '';
+  return /^\d+(?:\.\d+)?$/.test(normalized) && normalized !== '0' ? `${normalized}px` : normalized;
+}
+
+function setStyleFallback(element: Element, property: string, value: string) {
+  const style = (element as HTMLElement).style;
+  if (!style.getPropertyValue(property)) style.setProperty(property, value);
 }
 
 function sanitizeInlineStyle(value: string, document: Document) {
