@@ -110,6 +110,12 @@
   --color-danger-subtle: #faece9;
   --color-success: #21816b;
   --color-success-subtle: #e6f4f0;
+  --color-message-hover: #f3f7f6;
+  --color-message-selected: #e2f2ee;
+  --color-reader-surface: #fbfdfc;
+  --color-reader-toolbar: #f7faf9;
+  --color-mail-body: #f2f8f6;
+  --color-mail-body-border: #dce9e5;
 
   /* Identity colors are intentionally separate from the UI accent. */
   --color-provider-outlook: #1677b8;
@@ -176,6 +182,9 @@
   --color-accent: #1d7fc6; --color-accent-hover: #126db5; --color-accent-pressed: #0e5999;
   --color-accent-subtle: #e7f1fa; --color-accent-subtle-hover: #dcecf8;
   --color-focus: #368fd1; --color-focus-ring: rgb(29 127 198 / 13%);
+  --color-message-hover: #f0f5fa; --color-message-selected: #e7f1fa;
+  --color-reader-surface: #f8fbff; --color-reader-toolbar: #f2f6fb;
+  --color-mail-body: #edf4fb; --color-mail-body-border: #d4e2ef;
   --shadow-sm: 0 5px 18px rgb(20 48 83 / 8%);
   --shadow-md: 0 16px 38px rgb(19 47 82 / 14%);
   --shadow-lg: 0 24px 70px rgb(12 35 66 / 26%);
@@ -183,26 +192,29 @@
 
 [data-theme='tech'] {
   --font-family-display: 'Cascadia Code', 'Segoe UI Variable Display', 'Microsoft YaHei UI', sans-serif;
-  --brand-10: #03171b; --brand-20: #06252b; --brand-30: #07363e; --brand-40: #084953;
-  --brand-50: #075d69; --brand-60: #067381; --brand-70: #078a99; --brand-80: #13a0ae;
-  --brand-90: #2bb4bf; --brand-100: #4ac5ce; --brand-110: #6dd4db; --brand-120: #91e1e6;
-  --brand-130: #b4ecef; --brand-140: #d2f4f6; --brand-150: #e9fafa; --brand-160: #f7fdfd;
-  --neutral-0: #ffffff; --neutral-10: #f9fcfd; --neutral-20: #f3f8f9; --neutral-30: #e9f1f3;
-  --neutral-40: #dce7e9; --neutral-50: #cfdee1; --neutral-60: #aec3c7; --neutral-70: #829da2;
-  --neutral-80: #617b81; --neutral-90: #425f66; --neutral-100: #29464e; --neutral-110: #17343c; --neutral-120: #0b252d;
-  --color-canvas: #e8f1f3; --color-surface: #f8fcfd; --color-surface-subtle: #f0f7f8;
-  --color-surface-raised: #ffffff; --color-surface-sunken: #e5eff1; --color-rail: #071f29;
-  --color-text: #0b252d; --color-text-strong: #061b22; --color-text-secondary: #58737a;
-  --color-text-tertiary: #7b959b; --color-text-inverse: #eaffff;
-  --color-border: #d1e0e3; --color-border-strong: #a6c4c9;
-  --color-accent: #078a99; --color-accent-hover: #067381; --color-accent-pressed: #075d69;
-  --color-accent-subtle: #dff3f4; --color-accent-subtle-hover: #d2edef;
-  --color-focus: #13a0ae; --color-focus-ring: rgb(19 160 174 / 14%);
+  --brand-10: #211006; --brand-20: #351909; --brand-30: #4b230c; --brand-40: #632e0e;
+  --brand-50: #7e3a11; --brand-60: #9b4715; --brand-70: #bd571b; --brand-80: #d16a28;
+  --brand-90: #df8143; --brand-100: #e89a62; --brand-110: #efb181; --brand-120: #f4c6a1;
+  --brand-130: #f7d9bf; --brand-140: #fae8d8; --brand-150: #fcf3eb; --brand-160: #fefaf7;
+  --neutral-0: #ffffff; --neutral-10: #f8fafb; --neutral-20: #f0f3f5; --neutral-30: #e5eaed;
+  --neutral-40: #d9dfe3; --neutral-50: #cbd3d8; --neutral-60: #aeb9c0; --neutral-70: #828f98;
+  --neutral-80: #63717b; --neutral-90: #46545f; --neutral-100: #303e48; --neutral-110: #202e38; --neutral-120: #121f29;
+  --color-canvas: #dfe5e8; --color-surface: #eef2f4; --color-surface-subtle: #e7ecef;
+  --color-surface-raised: #f9fbfc; --color-surface-sunken: #dbe2e6; --color-rail: #111a20;
+  --color-text: #121f29; --color-text-strong: #0c161d; --color-text-secondary: #596873;
+  --color-text-tertiary: #7c8992; --color-text-inverse: #f6f9fa;
+  --color-border: #c9d2d7; --color-border-strong: #95a4ad;
+  --color-accent: #bd571b; --color-accent-hover: #9b4715; --color-accent-pressed: #7e3a11;
+  --color-accent-subtle: #f4e3d6; --color-accent-subtle-hover: #efd5c1;
+  --color-focus: #d16a28; --color-focus-ring: rgb(209 106 40 / 17%);
+  --color-message-hover: #e3e8eb; --color-message-selected: #f4e3d6;
+  --color-reader-surface: #f3f6f7; --color-reader-toolbar: #e9eef0;
+  --color-mail-body: #e4eaed; --color-mail-body-border: #bbc6cc;
   --radius-xs: 0.1875rem; --radius-sm: 0.3125rem; --radius-md: 0.4375rem;
   --radius-lg: 0.625rem; --radius-xl: 0.75rem;
-  --shadow-sm: 0 6px 18px rgb(4 52 60 / 8%);
-  --shadow-md: 0 18px 42px rgb(3 45 53 / 15%);
-  --shadow-lg: 0 28px 80px rgb(1 29 37 / 31%);
+  --shadow-sm: 0 6px 18px rgb(35 30 24 / 9%);
+  --shadow-md: 0 18px 42px rgb(26 29 31 / 16%);
+  --shadow-lg: 0 28px 80px rgb(11 18 23 / 32%);
 }
 
 [data-theme='soft-neubrutalism'] {
@@ -226,6 +238,9 @@
   --color-warning: #876424; --color-warning-subtle: #fff0bd;
   --color-danger: #a4535c; --color-danger-subtle: #f8dfe1;
   --color-success: #397967; --color-success-subtle: #dcefe8;
+  --color-message-hover: #f7e9d1; --color-message-selected: #efddef;
+  --color-reader-surface: #fff8e9; --color-reader-toolbar: #f4ead9;
+  --color-mail-body: #fff0bd; --color-mail-body-border: #34303a;
   --radius-xs: 0.25rem; --radius-sm: 0.375rem; --radius-md: 0.5rem;
   --radius-lg: 0.6875rem; --radius-xl: 0.875rem;
   --shadow-sm: 3px 3px 0 #34303a;

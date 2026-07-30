@@ -31,9 +31,9 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .app-checkbox .fui-Checkbox__input { inset: 0; width: 22px; height: 22px; }
 
 .app-shell { height: 100dvh; display: grid; grid-template-columns: var(--layout-account-rail) var(--layout-sidebar) minmax(0, 1fr); background: var(--color-canvas); overflow: hidden; transition: grid-template-columns var(--duration-normal) var(--ease-standard); }
-[data-theme='tech'] .workspace { background-color: var(--color-canvas); background-image: linear-gradient(rgb(7 138 153 / 5%) 1px, transparent 1px), linear-gradient(90deg, rgb(7 138 153 / 5%) 1px, transparent 1px); background-size: 24px 24px; }
-[data-theme='tech'] .brand-mark { filter: drop-shadow(0 0 8px rgb(43 180 191 / 42%)); }
-[data-theme='tech'] .compose-button { box-shadow: 0 0 0 1px rgb(74 197 206 / 25%), 0 8px 24px rgb(7 138 153 / 20%); }
+[data-theme='tech'] .workspace { background-color: var(--color-canvas); background-image: linear-gradient(rgb(189 87 27 / 7%) 1px, transparent 1px), linear-gradient(90deg, rgb(17 26 32 / 5%) 1px, transparent 1px); background-size: 24px 24px; }
+[data-theme='tech'] .brand-mark { filter: drop-shadow(0 0 8px rgb(223 129 67 / 38%)); }
+[data-theme='tech'] .compose-button { box-shadow: 0 0 0 1px rgb(223 129 67 / 28%), 0 8px 24px rgb(68 46 31 / 20%); }
 [data-theme='soft-neubrutalism'] .workspace { background-color: var(--color-canvas); background-image: radial-gradient(rgb(52 48 58 / 12%) .8px, transparent .8px); background-size: 14px 14px; }
 [data-theme='soft-neubrutalism'] .account-rail,
 [data-theme='soft-neubrutalism'] .primary-sidebar { border-right: 2px solid var(--color-border-strong); }

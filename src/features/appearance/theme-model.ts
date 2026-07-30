@@ -37,10 +37,10 @@ export const themeOptions: Array<{
   },
   {
     id: 'tech',
-    name: '霓虹终端',
+    name: '琥珀终端',
     eyebrow: '科技风',
-    description: '冰川白与深海墨色，配合青色信号光、细网格和更利落的几何边角。',
-    colors: ['#071f29', '#0a8d9c', '#d9f6f7', '#f4fbfc'],
+    description: '冷峻石墨与工业灰，配合琥珀信号灯、细网格和更利落的终端几何。',
+    colors: ['#111a20', '#bd571b', '#f4e3d6', '#eef2f4'],
   },
   {
     id: 'business-blue',
