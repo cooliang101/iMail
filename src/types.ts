@@ -137,6 +137,8 @@ export type SyncJob = {
   finishedAt?: string;
   syncedCount?: number;
   newCount?: number;
+  updatedCount?: number;
+  deletedCount?: number;
   errorMessage?: string;
 };
 

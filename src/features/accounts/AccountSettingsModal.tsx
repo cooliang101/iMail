@@ -8,6 +8,7 @@ import type { Notice } from '../../app-model';
 import { Overlay, ProviderIcon, providerLabel } from '../../components/shared';
 import { AppCheckbox, AppInput, AppSelect } from '../../components/form-controls';
 import { SyncPolicyEditor } from './SyncPolicyEditor';
+import { AccountSyncSummary } from './SyncStatusSummary';
 
 export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }: { accounts: Account[]; onClose: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -186,6 +187,7 @@ export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }:
             <footer className="settings-account-actions card-editor-actions"><button type="button" onClick={() => setEditingId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '保存中…' : '保存修改'}</Button></footer>
           </form> : <>
             <header className="settings-account-summary"><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · {account.group}</small><em className={`connection-${account.status}`}>{connectionText}</em></span><small className="account-auth-kind">{authText}</small></header>
+            {syncStatus && <AccountSyncSummary status={syncStatus} />}
             {syncEditingId === account.id && syncStatus ? <SyncPolicyEditor account={account} status={syncStatus} busy={busyId === account.id} onSave={(changes) => updateSyncPolicy(account, changes)} onSync={() => queueSync(account)} onClose={() => setSyncEditingId(null)} />
               : credentialId === account.id ? <form className="credential-renewal" onSubmit={(event) => void updateCredential(event, account)}><label><span>{credentialGuideFor(account.provider)?.secretLabel || '新的授权码 / 应用专用密码'}</span><AppInput name="password" type="password" placeholder={credentialGuideFor(account.provider)?.secretPlaceholder || '输入新的专用凭据'} autoFocus required /></label><div className="card-editor-actions"><button type="button" onClick={() => setCredentialId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '正在验证…' : '验证并更新'}</Button></div></form>
               : confirmRemoveId === account.id ? <div className="account-remove-confirm"><span><strong>确认移除这个邮箱？</strong><small>{account.email} 的本地邮件缓存也会删除。</small></span><button type="button" onClick={() => setConfirmRemoveId(null)}>取消</button><button type="button" className="confirm-remove-account" disabled={busyId === account.id} onClick={() => void remove(account)}>{busyId === account.id ? '正在移除…' : '确认移除'}</button></div>
