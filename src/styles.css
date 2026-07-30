@@ -11,6 +11,12 @@
   --line: #dce6e3;
   --surface: #fbfdfc;
   --radius: 14px;
+  --text-caption: 11px;
+  --text-secondary: 12px;
+  --text-control: 13px;
+  --text-body: 14px;
+  --leading-compact: 1.35;
+  --leading-copy: 1.6;
 }
 
 * { box-sizing: border-box; }
@@ -382,6 +388,11 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 
 /* Readability pass: preserve the compact mail layout while keeping text comfortably legible. */
 body { font-size: 14px; }
+body { line-height: var(--leading-copy); text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+:where(button, input, select, textarea) { line-height: var(--leading-compact); }
+:where(p, small) { text-wrap: pretty; }
+:where(h1, h2, h3) { text-wrap: balance; }
+:where(time, code, kbd, .pane-count) { font-variant-numeric: tabular-nums; }
 .sidebar-heading span, .nav-block b, .section-label, .developer-entry small, .user-strip strong, .user-strip small { font-size: 12px; }
 .nav-block button, .developer-entry { font-size: 14px; }
 .developer-entry strong, .search-box input, .sync-button, .sync-settings-button, .icon-button, .sidebar-trigger { font-size: 13px; }
@@ -409,6 +420,164 @@ body { font-size: 14px; }
 .endpoint-strip small, .token-title span, .token-item code, .token-item span, .token-time small, .quickstart-title span, .security-note span, .check-row small, .scope-row small { font-size: 11px; }
 .endpoint-strip code, .endpoint-strip button, .token-item strong, .revoke, .quickstart-title strong, .security-note strong, .quickstart > a, .gateway-account-select, .check-row strong, .scope-row strong { font-size: 12px; }
 .quickstart pre, .raw-token code, .raw-token button, .token-created p { font-size: 11px; }
+
+/* Complete typography system: captions never drop below 11px and supporting copy uses 12px. */
+.app-select,
+.search-box kbd,
+.workspace-account-tag,
+.workspace-account-more,
+.message-loading,
+.message-copy small,
+.reader-labels span,
+.shortcut-row kbd,
+.context-menu kbd,
+.account-auth-kind,
+.settings-account-summary > span em,
+.account-sync-summary > header small,
+.mailbox-sync-details article em,
+.notification-list em,
+.draft-account em,
+.draft-main small,
+.workspace-icon-grid button,
+.workspace-help { font-size: var(--text-caption); line-height: 1.4; }
+
+.workspace-account-tag,
+.workspace-account-more { line-height: 16px; padding-inline: 5px; }
+.sender-avatar { font-size: 11px; }
+.sender-avatar.large { font-size: 12px; }
+.message-copy small { margin-top: 6px; }
+.empty-state p,
+.empty-reader p,
+.empty-state > button,
+.reader-context,
+.reader-labels span,
+.shortcut-groups h3,
+.shortcut-row small,
+.shortcut-row kbd,
+.shortcut-error,
+.context-menu button > kbd { font-size: var(--text-secondary); line-height: 1.5; }
+.empty-state h3,
+.empty-reader h2 { font-size: 17px; line-height: 1.3; }
+.empty-state > button { min-height: 36px; padding-inline: 14px; }
+.reader-account { max-width: min(560px, 82%); padding: 5px 9px 5px 6px; }
+.reader-labels span { padding: 5px 9px; }
+.shortcut-groups h3 { letter-spacing: .045em; }
+.shortcut-row { min-height: 68px; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 11px; padding: 10px 11px; }
+.shortcut-row strong { font-size: var(--text-control); line-height: 1.35; }
+.shortcut-row small { white-space: normal; }
+.shortcut-row > button { min-height: 36px; padding-inline: 10px; }
+
+.settings-account-summary > span small,
+.settings-account-summary > span em,
+.account-auth-kind,
+.settings-account-actions button,
+.account-remove-confirm small,
+.sync-worker-health,
+.sync-worker-health small,
+.account-sync-summary > header small,
+.account-sync-times small,
+.account-sync-summary > p,
+.sync-default-policy small,
+.sync-default-policy label,
+.sync-default-policy .app-select,
+.sync-policy-status small,
+.mailbox-sync-empty,
+.mailbox-sync-details > header small,
+.mailbox-sync-details article > header small,
+.mailbox-sync-details article em,
+.mailbox-sync-details dt,
+.mailbox-sync-details dd,
+.mailbox-sync-details article > p,
+.sync-policy-grid > label,
+.sync-toggle small,
+.sync-policy-grid .app-select,
+.sync-folder-options legend,
+.sync-folder-options label > small,
+.sync-policy-options { font-size: var(--text-secondary); line-height: 1.5; }
+.account-remove-confirm strong,
+.account-sync-summary > header strong,
+.account-sync-times strong,
+.sync-default-policy strong,
+.sync-policy-status strong,
+.mailbox-sync-details > header strong,
+.mailbox-sync-details article > header strong,
+.sync-toggle strong { font-size: var(--text-control); line-height: 1.4; }
+.sync-worker-health { min-height: 38px; padding: 9px 12px; }
+.account-sync-times,
+.mailbox-sync-details dl { gap: 9px; }
+.account-sync-times > span,
+.mailbox-sync-details dl div { gap: 3px; }
+.account-sync-summary > p,
+.mailbox-sync-details article > p { white-space: normal; overflow-wrap: anywhere; }
+.sync-default-policy { gap: 12px; padding: 14px 15px; }
+.sync-default-policy .app-select,
+.sync-policy-grid .app-select { min-height: 38px; }
+.sync-policy-status { grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px; }
+.sync-policy-status small,
+.mailbox-sync-details article > header small,
+.sync-folder-options label > small { white-space: normal; }
+.mailbox-sync-details article { padding: 12px; }
+.mailbox-sync-details dl { grid-template-columns: repeat(3, minmax(90px, 1fr)); }
+.sync-folder-options { max-height: 190px; gap: 8px; padding: 11px; }
+
+.composer-header > div span,
+.compose-save-status,
+.contact-suggestions small,
+.contact-suggestions em,
+.composer-attachments small,
+.composer-footer > span,
+.draft-pane-header span,
+.draft-pane-header small,
+.draft-account,
+.draft-account em,
+.draft-main small,
+.snooze-options small,
+.notification-list small,
+.notification-list em,
+.workspace-help { font-size: var(--text-secondary); line-height: 1.5; }
+.contact-suggestions strong,
+.composer-attachments strong,
+.draft-main p,
+.label-options > button,
+.selected-labels > button,
+.label-create button,
+.snooze-options strong,
+.snooze-options .app-input,
+.snooze-clear,
+.notification-list strong,
+.workspace-name > span,
+.workspace-icon-grid button { font-size: var(--text-control); line-height: 1.4; }
+.composer-header > div span,
+.draft-pane-header span { letter-spacing: .06em; }
+.compose-save-status { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.compose-row { min-height: 48px; font-size: var(--text-control); grid-template-columns: 68px minmax(0, 1fr); }
+.contact-suggestions button { min-height: 54px; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; padding: 8px 10px; }
+.contact-suggestions button > span { gap: 3px; }
+.composer-link-popover button { font-size: var(--text-control); }
+.composer-editor .ProseMirror { font-size: var(--text-body); line-height: 1.8; }
+.composer-attachments > span { max-width: 280px; grid-template-columns: 20px minmax(0, 1fr) 28px; gap: 8px; padding: 8px 8px 8px 10px; }
+.compose-empty p,
+.composer-welcome p,
+.draft-empty p,
+.utility-empty p { font-size: var(--text-secondary); line-height: 1.6; }
+.composer-welcome > button,
+.draft-empty button { min-height: 38px; font-size: var(--text-control); padding-inline: 15px; }
+.draft-pane-header { flex-basis: 78px; }
+.draft-main { padding: 13px 11px; gap: 6px; }
+.draft-main strong { font-size: var(--text-control); }
+.label-options > button,
+.selected-labels > button { min-height: 34px; }
+.label-create .app-input { font-size: var(--text-control); }
+.snooze-options > button,
+.snooze-options > label { min-height: 70px; gap: 12px; padding: 12px 14px; }
+.snooze-options .app-input { min-height: 36px; }
+.notification-list > button { min-height: 76px; gap: 12px; padding: 12px 13px; }
+.notification-list span { gap: 4px; }
+.notification-list small { white-space: normal; }
+.workspace-icon-grid button { min-height: 64px; gap: 5px; }
+.workspace-help { line-height: 1.6; }
+.settings-empty p { font-size: var(--text-secondary); line-height: 1.6; }
+.toast { min-height: 38px; font-size: var(--text-secondary); line-height: 1.45; }
 
 .mcp-guide > header { display: flex; justify-content: space-between; gap: 18px; }
 .mcp-guide-grid-single { grid-template-columns: minmax(0, 1fr); }.mcp-guide-grid-single .mcp-config-card { max-width: 720px; }
@@ -441,7 +610,7 @@ body { font-size: 14px; }
   .mobile-account-controls > button.active { background: #e7f2ef; color: #176f5f; }
   .mobile-account-controls > button > span { min-width: 0; display: grid; gap: 2px; }
   .mobile-account-controls strong, .mobile-account-controls small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-account-controls strong { font-size: 12px; }.mobile-account-controls small { color: #8a9995; font-size: 10px; }
+  .mobile-account-controls strong { font-size: 13px; }.mobile-account-controls small { color: #8a9995; font-size: 12px; line-height: 1.45; }
   .mobile-account-controls > div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .mobile-account-controls > div button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; border: 1px solid #dce7e4; border-radius: 9px; background: #fff; color: #58706a; font-size: 11px; }
   .reader-content { width: 100%; padding: 24px 20px 44px; }.reader-actions { padding-inline: 10px; }.sender-line { gap: 4px; }.sender-line button { padding: 6px; }
