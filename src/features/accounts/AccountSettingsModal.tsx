@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@fluentui/react-components';
 import { ArrowClockwise, CaretDown, Envelope, Key, PencilSimple, SlidersHorizontal, Trash, WarningCircle } from '@phosphor-icons/react';
 import { api } from '../../api';
+import { subscribeSyncEvents } from '../../sync-events';
 import { credentialGuideFor, oauthCallbackOrigins } from '../../provider-guides';
 import type { Account, AccountSyncStatus, SyncPolicy, SyncWorkerHealth } from '../../types';
 import type { Notice } from '../../app-model';
@@ -50,18 +51,32 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   }, [onReload, setNotice]);
 
   async function refreshSyncStatus() {
-    const [result, defaults] = await Promise.all([
-      api<{ accounts: AccountSyncStatus[]; worker: SyncWorkerHealth }>('/api/sync-status'),
-      api<{ policy: Omit<SyncPolicy, 'accountId' | 'updatedAt'> }>('/api/sync-policy'),
-    ]);
-    setSyncStatuses(result.accounts); setWorkerHealth(result.worker); setDefaultPolicy(defaults.policy);
+    const result = await api<{ accounts: AccountSyncStatus[]; worker: SyncWorkerHealth }>('/api/sync-status');
+    setSyncStatuses(result.accounts); setWorkerHealth(result.worker);
   }
 
   useEffect(() => {
-    void refreshSyncStatus().catch(() => undefined);
-    const timer = window.setInterval(() => { void refreshSyncStatus().catch(() => undefined); }, 5_000);
-    return () => window.clearInterval(timer);
-  }, [accounts.length]);
+    if (section !== 'sync') return;
+    let refreshTimer: number | undefined;
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => { refreshTimer = undefined; void refreshSyncStatus().catch(() => undefined); }, 250);
+    };
+    void Promise.all([
+      refreshSyncStatus(),
+      api<{ policy: Omit<SyncPolicy, 'accountId' | 'updatedAt'> }>('/api/sync-policy').then((result) => setDefaultPolicy(result.policy)),
+    ]).catch(() => undefined);
+    const unsubscribe = subscribeSyncEvents(['connected', 'sync.started', 'sync.completed', 'sync.failed'], refresh);
+    const fallbackTimer = window.setInterval(refresh, 60_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', refresh);
+      window.clearInterval(fallbackTimer);
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+    };
+  }, [section, accounts.map((account) => account.id).join(',')]);
 
   async function reconnect(account: Account) {
     setError('');
@@ -132,8 +147,8 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   async function updateSyncPolicy(account: Account, changes: Record<string, unknown>) {
     setBusyId(account.id); setError('');
     try {
-      await api(`/api/accounts/${account.id}/sync-policy`, { method: 'PATCH', body: JSON.stringify(changes) });
-      await refreshSyncStatus();
+      const result = await api<{ policy: SyncPolicy }>(`/api/accounts/${account.id}/sync-policy`, { method: 'PATCH', body: JSON.stringify(changes) });
+      setSyncStatuses((current) => current.map((status) => status.accountId === account.id ? { ...status, policy: result.policy } : status));
       setNotice({ kind: 'success', text: `${account.email} 的后端同步策略已更新` });
     } catch (value) { setError(value instanceof Error ? value.message : '同步策略更新失败'); }
     finally { setBusyId(null); }

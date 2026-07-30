@@ -74,6 +74,11 @@ export type CachedMessage = {
   snoozedUntil?: string;
 };
 
+export type MailboxMessageChange = {
+  before?: CachedMessage;
+  after?: CachedMessage;
+};
+
 export type ContactLogo = {
   key: string;
   contentType: string;

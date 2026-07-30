@@ -166,6 +166,11 @@ describe('SQLiteStore', () => {
       completedAt: '2026-07-30T03:00:00.000Z',
     });
     expect(result.createdMessages.map((item) => item.id)).toEqual(['new-message']);
+    expect(result.messageChanges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ before: expect.objectContaining({ id: 'deleted-remotely' }) }),
+      expect.objectContaining({ before: expect.objectContaining({ id: 'existing' }), after: expect.objectContaining({ id: 'existing', unread: false, flagged: true }) }),
+      expect.objectContaining({ after: expect.objectContaining({ id: 'new-message' }) }),
+    ]));
     const snapshot = await store.read();
     expect(snapshot.messages.map((item) => item.id).sort()).toEqual(['existing', 'new-message']);
     expect(snapshot.messages.find((item) => item.id === 'existing')).toMatchObject({ subject: 'Updated subject', unread: false, flagged: true, labels: ['客户'], snoozedUntil: '2999-01-01T00:00:00.000Z' });

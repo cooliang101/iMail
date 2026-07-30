@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FetchMessageObject, ListResponse } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { commitMailboxSync, readStore, setAccountSyncStatus } from '../store.js';
-import type { CachedMessage, MailboxFolder, MailboxRole } from '../types.js';
+import type { CachedMessage, MailboxFolder, MailboxMessageChange, MailboxRole } from '../types.js';
 import { gatewayEvents } from '../gateway/events.js';
 import { address, imapClientFor } from './client.js';
 import { mailboxRoleFor } from './mailbox-role.js';
@@ -36,6 +36,7 @@ export type SyncExecutionResult = {
   highestModseq?: string;
   lastSeenUid: number;
   createdMessages: CachedMessage[];
+  messageChanges: MailboxMessageChange[];
 };
 
 export async function syncMailbox(accountId: string, mailboxRole: MailboxRole = 'inbox', requestedMailbox?: string, cursor?: SyncCursor): Promise<SyncExecutionResult> {
@@ -137,7 +138,7 @@ export async function syncMailbox(accountId: string, mailboxRole: MailboxRole = 
       const flags = flagUpdates.get(message.uid);
       return count + (flags && (message.unread !== flags.unread || message.flagged !== flags.flagged) ? 1 : 0);
     }, 0);
-    const { createdMessages } = await commitMailboxSync({
+    const { createdMessages, messageChanges } = await commitMailboxSync({
       accountId, mailbox: mailboxPath, mailboxRole, incoming, removedUids: [...removedUids], uidValidityChanged,
       flagUpdates: [...flagUpdates].map(([uid, flags]) => ({ uid, ...flags })), folders, completedAt: new Date().toISOString(),
     });
@@ -145,7 +146,7 @@ export async function syncMailbox(accountId: string, mailboxRole: MailboxRole = 
     return {
       synced: incoming.length, created: createdMessages.length, updated: updatedCount, deleted: uidValidityChanged ? cached.length : removedUids.size,
       mailbox: mailboxPath, mailboxRole, uidValidity, highestModseq, lastSeenUid,
-      createdMessages: previouslySynced ? createdMessages : [],
+      createdMessages: previouslySynced ? createdMessages : [], messageChanges,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步失败';

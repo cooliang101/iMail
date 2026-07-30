@@ -31,7 +31,7 @@ IMAP providers ◄────────────────────�
 - `server/sync/worker-runtime.ts`：领取任务、续租、执行 IMAP 同步、推进游标并记录安全错误。
 - `server/sync/idle.ts`：为可用账户保持收件箱 IDLE 连接，只负责提前唤醒持久化任务；断线不影响周期轮询。
 - `server/sync/worker.ts`：独立进程入口和信号关闭。
-- `server/routes/sync.ts`：策略、状态、任务查询和前端 SSE 通知。
+- `server/routes/sync.ts`：策略、状态、任务查询和前端 SSE 通知。客户端复用单个 SSE 连接；`sync.completed` 携带经过裁剪的邮件摘要增量，前端直接合并新增、标记变化与删除，不再因同步事件重复查询 `api/messages`。`sync-status` 仅在进入同步设置、事件到达或低频可见页兜底时查询，默认策略不参与轮询。浏览器场景是单向服务端推送，因此无需额外引入 MQTT broker。
 
 同步游标按账户和真实邮箱文件夹保存，包括 `UIDVALIDITY`、最后 UID 与 `HIGHESTMODSEQ`。UIDVALIDITY 改变时只重建对应文件夹；支持 CONDSTORE 时按 modseq 获取标记变化，同时显式检查已缓存 UID 是否仍存在。API 的“立即同步”和 MCP `mailbox_sync` 都只创建持久化任务。
 

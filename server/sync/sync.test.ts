@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { MailAccount, StoreData, SyncPolicy } from '../types.js';
+import type { CachedMessage, MailAccount, StoreData, SyncPolicy } from '../types.js';
 import type { SyncExecutionResult } from '../mail.js';
 import { enqueueDueSyncs, targetsForPolicy } from './scheduler.js';
 import { SyncStore } from './store.js';
@@ -66,10 +66,19 @@ describe('persistent synchronization control plane', () => {
     const job = store.claimNextJob('worker-a', 60_000, new Date(),) ?? store.enqueueJob({ accountId: account().id, reason: 'manual' });
     const claimed = job.status === 'running' ? job : store.claimNextJob('worker-a', 60_000)!;
     store.markJobStarted(claimed, 'INBOX');
-    store.completeJob(claimed, { mailbox: 'INBOX', uidValidity: '44', lastSeenUid: 102, synced: 2, created: 2, updated: 0, deleted: 0 }, 5);
+    const changedMessage: CachedMessage = {
+      id: 'message-1', accountId: account().id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 102,
+      from: { name: 'Sender', address: 'sender@example.com' }, to: [{ name: 'Owner', address: account().email }],
+      subject: 'New mail', preview: 'Preview', text: 'private body', date: '2026-07-30T02:00:00.000Z', unread: true, flagged: false,
+      hasAttachments: false, attachments: [], labels: [],
+    };
+    store.completeJob(claimed, { mailbox: 'INBOX', uidValidity: '44', lastSeenUid: 102, synced: 2, created: 2, updated: 0, deleted: 0, messageChanges: [{ after: changedMessage }] }, 5);
     expect(store.getJob(claimed.id)).toMatchObject({ status: 'succeeded', syncedCount: 2, newCount: 2 });
     expect(store.getMailboxState(account().id, 'INBOX')).toMatchObject({ uidValidity: '44', lastSeenUid: 102, consecutiveFailures: 0, syncState: 'idle' });
     expect(store.listEvents(0).map((event) => event.type)).toEqual(['sync.started', 'sync.completed']);
+    const completedPayload = store.listEvents(0).find((event) => event.type === 'sync.completed')?.payload;
+    expect(completedPayload).toMatchObject({ messageChanges: [{ after: { id: changedMessage.id, accountId: account().id, from: { logo: { url: expect.stringContaining('sender%40example.com') } } } }] });
+    expect(JSON.stringify(completedPayload)).not.toContain('private body');
   });
 
   it('schedules due work without a frontend connection and executes it through the worker task boundary', async () => {
@@ -79,7 +88,7 @@ describe('persistent synchronization control plane', () => {
     expect(jobs).toHaveLength(1);
     const job = store.claimNextJob('worker-a', 60_000, new Date('2026-07-30T02:00:01.000Z'))!;
     const result: SyncExecutionResult = {
-      synced: 1, created: 1, updated: 0, deleted: 0, mailbox: 'INBOX', mailboxRole: 'inbox', uidValidity: '8', lastSeenUid: 9, createdMessages: [],
+      synced: 1, created: 1, updated: 0, deleted: 0, mailbox: 'INBOX', mailboxRole: 'inbox', uidValidity: '8', lastSeenUid: 9, createdMessages: [], messageChanges: [],
     };
     const runSync = vi.fn(async () => result);
     await executeSyncJob(job, 'worker-a', store, 60_000, { loadStore, runSync });

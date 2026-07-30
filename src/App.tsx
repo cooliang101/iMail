@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@fluentui/react-components';
 import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
 import { api } from './api';
+import { subscribeSyncEvents } from './sync-events';
 import type { Account, Contact, DeveloperToken, Draft, MailboxRole, Message } from './types';
-import type { AppPreferences, ContextTarget, MailNotification, Notice, ShortcutBindings, WorkspaceFolder } from './app-model';
+import type { AppPreferences, ContextTarget, MailNotification, MessageStats, Notice, ShortcutBindings, WorkspaceFolder } from './app-model';
 import { AccountProviderMark, ProviderIcon, providerLabel } from './components/shared';
 import { AppInput } from './components/form-controls';
-import { VirtualMessageList, MessageReader, reconcileMessageCache } from './features/mail';
+import { applyMessageChanges, applyMessageStatsChanges, messageTotalDelta, VirtualMessageList, MessageReader, type MessageChange } from './features/mail';
 import { AddAccountModal } from './features/accounts';
 import { ComposePane, DraftWorkspace, type ComposePaneHandle } from './features/compose';
 import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal } from './features/organize';
@@ -18,12 +19,6 @@ import { useAuth } from './features/auth';
 
 type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
-type MessageStats = {
-  total: number;
-  unread: number;
-  byAccount: Array<{ accountId: string; total: number; unread: number }>;
-  byGroup: Array<{ group: string; total: number; unread: number }>;
-};
 function App() {
   const { user, logout } = useAuth();
   const [realAccounts, setRealAccounts] = useState<Account[]>([]);
@@ -69,7 +64,7 @@ function App() {
   const [messageRevision, setMessageRevision] = useState(0);
   const [messageStats, setMessageStats] = useState<MessageStats>({ total: 0, unread: 0, byAccount: [], byGroup: [] });
   const messageQueryRef = useRef('');
-  const realMessagesRef = useRef<Message[]>([]);
+  const realAccountsRef = useRef<Account[]>([]);
   const implicitSelectedIdRef = useRef<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const folderDiscoveryStarted = useRef(false);
@@ -108,7 +103,7 @@ function App() {
       localStorage.setItem(localShortcutsKey, JSON.stringify(result.preferences.shortcutBindings));
     }).catch(() => undefined);
   }, []);
-  useEffect(() => { realMessagesRef.current = realMessages; }, [realMessages]);
+  useEffect(() => { realAccountsRef.current = realAccounts; }, [realAccounts]);
   useEffect(() => {
     if (folderDiscoveryStarted.current || accounts.length === 0 || accounts.some((account) => account.mailboxes.length > 0)) return;
     folderDiscoveryStarted.current = true;
@@ -153,43 +148,20 @@ function App() {
   }, [accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox]);
   messageQueryRef.current = messageQuery;
   useEffect(() => {
-    let refreshTimer: number | undefined;
-    let refreshing = false;
-    let refreshAgain = false;
-    const scheduleRefresh = () => {
-      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => { refreshTimer = undefined; void refreshSilently(); }, 800);
-    };
-    const refreshSilently = async () => {
-      if (refreshing) { refreshAgain = true; return; }
-      refreshing = true;
-      const query = messageQueryRef.current;
+    const applySyncChanges = (event: MessageEvent) => {
       try {
-        const [result, stats] = await Promise.all([
-          api<MessagePage>(`/api/messages?${query}&limit=${Math.max(60, realMessagesRef.current.length)}&offset=0`),
-          api<MessageStats>('/api/message-stats'),
-        ]);
-        if (messageQueryRef.current !== query) return;
-        setRealMessages((current) => reconcileMessageCache(current, result.messages));
-        setMessageTotal(result.total);
-        setMessagesHasMore(result.hasMore);
-        setMessageStats((current) => JSON.stringify(current) === JSON.stringify(stats) ? current : stats);
+        const changes = (JSON.parse(event.data) as { payload?: { messageChanges?: MessageChange[] } }).payload?.messageChanges ?? [];
+        if (changes.length === 0) return;
+        const query = messageQueryRef.current;
+        const currentAccounts = realAccountsRef.current;
+        setRealMessages((current) => applyMessageChanges(current, changes, query, currentAccounts));
+        setMessageTotal((current) => Math.max(0, current + messageTotalDelta(changes, query, currentAccounts)));
+        setMessageStats((current) => applyMessageStatsChanges(current, changes, currentAccounts));
       } catch {
-        // Background reconciliation must never interrupt or reset the current view.
-      } finally {
-        refreshing = false;
-        if (refreshAgain) { refreshAgain = false; scheduleRefresh(); }
+        // A malformed optional event payload must not interrupt the current mailbox view.
       }
     };
-    const events = new EventSource('/api/events');
-    events.addEventListener('sync.completed', scheduleRefresh);
-    events.addEventListener('message.created', scheduleRefresh);
-    const onVisibility = () => { if (document.visibilityState === 'visible') scheduleRefresh(); };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      events.close(); document.removeEventListener('visibilitychange', onVisibility);
-      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
-    };
+    return subscribeSyncEvents(['sync.completed'], applySyncChanges);
   }, []);
   const selected = messages.find((message) => message.id === (selectedId ?? implicitSelectedIdRef.current)) ?? messages[0];
   const selectedIndex = selected ? messages.findIndex((message) => message.id === selected.id) : -1;

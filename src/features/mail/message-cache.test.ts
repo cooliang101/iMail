@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Message } from '../../types';
-import { reconcileMessageCache } from './message-cache';
+import type { Account, Message } from '../../types';
+import { applyMessageChanges, applyMessageStatsChanges, messageMatchesQuery, messageTotalDelta, reconcileMessageCache } from './message-cache';
 
 function message(overrides: Partial<Message> = {}): Message {
   return {
@@ -9,6 +9,8 @@ function message(overrides: Partial<Message> = {}): Message {
     date: '2026-07-30T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [], labels: [], ...overrides,
   };
 }
+
+const account = { id: 'account-1', group: '个人', mailboxes: [{ path: 'INBOX', name: '收件箱' }] } as Account;
 
 describe('message cache reconciliation', () => {
   it('keeps the existing reference when background data is unchanged', () => {
@@ -29,5 +31,18 @@ describe('message cache reconciliation', () => {
     const reconciled = reconcileMessageCache([existing], incoming);
     expect(reconciled.map((item) => item.id)).toEqual(['message-2', 'message-1']);
     expect(reconciled[1]).toBe(existing);
+  });
+
+  it('applies SSE deltas using the active mailbox query without another list request', () => {
+    const existing = message();
+    const incoming = message({ id: 'message-2', subject: 'New message', date: '2026-07-30T01:00:00.000Z' });
+    const changes = [{ after: incoming }, { before: existing, after: { ...existing, unread: false } }];
+    const query = 'mailboxRole=inbox&unread=true';
+
+    expect(messageMatchesQuery(incoming, query, [account])).toBe(true);
+    expect(applyMessageChanges([existing], changes, query, [account])).toEqual([incoming]);
+    expect(messageTotalDelta(changes, query, [account])).toBe(0);
+    expect(applyMessageStatsChanges({ total: 1, unread: 1, byAccount: [{ accountId: account.id, total: 1, unread: 1 }], byGroup: [{ group: account.group, total: 1, unread: 1 }] }, changes, [account]))
+      .toMatchObject({ total: 2, unread: 1, byAccount: [{ total: 2, unread: 1 }], byGroup: [{ total: 2, unread: 1 }] });
   });
 });

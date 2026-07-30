@@ -7,7 +7,7 @@ import type { MessageQuery, MessageStats } from './storage/models.js';
 import type { MailboxSyncCommit } from './storage/models.js';
 import { readSnapshot } from './storage/snapshot.js';
 import { replaceData } from './storage/write-data.js';
-import type { CachedMessage, StoreData } from './types.js';
+import type { CachedMessage, MailboxMessageChange, StoreData } from './types.js';
 import { reconcileContacts } from './contact-model.js';
 import { currentUserId, userMetadataKey } from './auth/context.js';
 
@@ -165,11 +165,16 @@ export class SQLiteStore {
     await operation;
   }
 
-  async commitMailboxSync(input: MailboxSyncCommit): Promise<{ createdMessages: CachedMessage[] }> {
+  async commitMailboxSync(input: MailboxSyncCommit): Promise<{ createdMessages: CachedMessage[]; messageChanges: MailboxMessageChange[] }> {
     let createdMessages: CachedMessage[] = [];
+    let messageChanges: MailboxMessageChange[] = [];
     const operation = this.queue.catch(() => undefined).then(() => {
       this.db.exec('BEGIN IMMEDIATE');
       try {
+        const summaryColumns = `id, account_id, mailbox, mailbox_role, uid, message_id, from_json, to_json, subject, preview,
+          '' AS text_body, NULL AS html_body, received_at, unread, flagged, has_attachments, attachments_json, labels_json, snoozed_until`;
+        const listAccountSummaries = this.db.prepare(`SELECT ${summaryColumns} FROM messages WHERE account_id = ?`);
+        const beforeMessages = (listAccountSummaries.all(input.accountId) as Row[]).map(messageFromRow);
         const selectExisting = this.db.prepare('SELECT labels_json, snoozed_until FROM messages WHERE id = ?');
         const deleteMailbox = this.db.prepare('DELETE FROM messages WHERE account_id = ? AND mailbox = ?');
         const deleteUid = this.db.prepare('DELETE FROM messages WHERE account_id = ? AND mailbox = ? AND uid = ?');
@@ -214,12 +219,27 @@ export class SQLiteStore {
         if (owner) this.db.prepare('DELETE FROM contacts WHERE user_id = ?').run(owner.user_id); else this.db.exec('DELETE FROM contacts');
         const insertContact = this.db.prepare('INSERT INTO contacts (address, name, message_count, last_contact_at, logo_key, logo_content_type, logo_source_url, logo_fetched_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
         for (const contact of contacts) insertContact.run(contact.address, contact.name, contact.messageCount, contact.lastContactAt, contact.logo?.key ?? null, contact.logo?.contentType ?? null, contact.logo?.sourceUrl ?? null, contact.logo?.fetchedAt ?? null, owner?.user_id ?? contact.ownerId ?? '__legacy__');
+        const afterMessages = (listAccountSummaries.all(input.accountId) as Row[]).map(messageFromRow);
+        const beforeById = new Map(beforeMessages.map((message) => [message.id, message]));
+        const afterById = new Map(afterMessages.map((message) => [message.id, message]));
+        const summaryKey = (message: CachedMessage) => JSON.stringify({
+          accountId: message.accountId, mailbox: message.mailbox, mailboxRole: message.mailboxRole ?? 'inbox', from: message.from, to: message.to,
+          subject: message.subject, preview: message.preview, date: message.date, unread: message.unread, flagged: message.flagged,
+          hasAttachments: message.hasAttachments, attachments: message.attachments, labels: message.labels ?? [], snoozedUntil: message.snoozedUntil,
+        });
+        messageChanges = [
+          ...beforeMessages.filter((message) => !afterById.has(message.id)).map((before) => ({ before })),
+          ...afterMessages.filter((after) => {
+            const before = beforeById.get(after.id);
+            return !before || summaryKey(before) !== summaryKey(after);
+          }).map((after) => ({ before: beforeById.get(after.id), after })),
+        ];
         this.db.exec('COMMIT');
       } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     });
     this.queue = operation.then(() => undefined, () => undefined);
     await operation;
-    return { createdMessages };
+    return { createdMessages, messageChanges };
   }
 
   close() { this.db.close(); }

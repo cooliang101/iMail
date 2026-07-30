@@ -9,6 +9,7 @@ import type {
   SyncJob, SyncJobReason, SyncPolicy, SyncPolicySettings, SyncState,
 } from '../types.js';
 import { gatewayMessageSummary } from '../gateway/presenters.js';
+import { publicMessageSummary } from '../http/presenters.js';
 import { currentUserId } from '../auth/context.js';
 
 type Row = Record<string, string | number | bigint | null>;
@@ -213,7 +214,7 @@ export class SyncStore {
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
 
-  completeJob(job: SyncJob, result: { mailbox: string; uidValidity?: string; highestModseq?: string; lastSeenUid: number; synced: number; created: number; updated: number; deleted: number }, intervalMinutes: number) {
+  completeJob(job: SyncJob, result: { mailbox: string; uidValidity?: string; highestModseq?: string; lastSeenUid: number; synced: number; created: number; updated: number; deleted: number; messageChanges?: Array<{ before?: CachedMessage; after?: CachedMessage }> }, intervalMinutes: number) {
     const now = new Date(); const nowIso = now.toISOString(); const next = new Date(now.getTime() + intervalMinutes * 60_000).toISOString();
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -231,7 +232,13 @@ export class SyncStore {
         connection_status = 'connected', sync_state = 'idle', last_error_code = NULL, last_error_message = NULL`)
         .run(job.accountId, result.mailbox, job.mailboxRole, result.uidValidity ?? null, result.lastSeenUid, result.highestModseq ?? null, nowIso, nowIso, next);
       this.db.prepare("DELETE FROM mailbox_sync_states WHERE account_id = ? AND mailbox LIKE '@role:%' AND mailbox <> ?").run(job.accountId, result.mailbox);
-      this.insertEvent('sync.completed', job.accountId, job.id, { mailbox: result.mailbox, mailboxRole: job.mailboxRole, synced: result.synced, created: result.created, updated: result.updated, deleted: result.deleted }, nowIso);
+      this.insertEvent('sync.completed', job.accountId, job.id, {
+        mailbox: result.mailbox, mailboxRole: job.mailboxRole, synced: result.synced, created: result.created, updated: result.updated, deleted: result.deleted,
+        messageChanges: (result.messageChanges ?? []).map((change) => ({
+          ...(change.before ? { before: publicMessageSummary(change.before) } : {}),
+          ...(change.after ? { after: publicMessageSummary(change.after) } : {}),
+        })),
+      }, nowIso);
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }

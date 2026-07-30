@@ -1,5 +1,12 @@
 export type Notice = { kind: 'success' | 'error'; text: string } | null;
 
+export type MessageStats = {
+  total: number;
+  unread: number;
+  byAccount: Array<{ accountId: string; total: number; unread: number }>;
+  byGroup: Array<{ group: string; total: number; unread: number }>;
+};
+
 export type MessageBodyView = 'source' | 'rendered';
 export type StartupView = 'inbox' | 'starred';
 export type NotificationKind = MailNotification['kind'];
