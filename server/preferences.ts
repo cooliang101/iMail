@@ -28,8 +28,8 @@ export const defaultAppPreferences: AppPreferences = {
   startupView: 'inbox', markReadOnOpen: true, defaultMessageView: 'source',
   notificationKinds: { unread: true, snooze: true, error: true },
   shortcutBindings: {
-    focusSearch: 'Mod+K', compose: 'C', sync: '', nextMessage: 'J', previousMessage: 'K', reply: 'R', forward: 'F',
-    toggleStar: 'S', markUnread: 'U', archive: 'E', delete: 'Shift+#', openShortcutSettings: 'Mod+/',
+    focusSearch: 'Mod+K', compose: 'C', sync: 'Mod+Shift+R', nextMessage: 'ArrowRight', previousMessage: 'ArrowLeft', reply: 'R', forward: 'F',
+    toggleStar: 'S', markUnread: 'U', archive: 'A', delete: 'Delete', openShortcutSettings: 'Mod+/',
   },
 };
 

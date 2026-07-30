@@ -7,8 +7,8 @@ export const shortcutDefinitions: Array<{ id: ShortcutActionId; label: string; d
   { id: 'focusSearch', label: '搜索邮件', description: '聚焦并选中搜索框', scope: 'global' },
   { id: 'compose', label: '写新邮件', description: '打开新邮件编辑器', scope: 'global' },
   { id: 'sync', label: '同步当前范围', description: '同步当前邮箱或文件夹', scope: 'global' },
-  { id: 'nextMessage', label: '下一封邮件', description: '在列表中向下移动', scope: 'mail' },
-  { id: 'previousMessage', label: '上一封邮件', description: '在列表中向上移动', scope: 'mail' },
+  { id: 'nextMessage', label: '下一封邮件', description: '在列表中向右切换', scope: 'mail' },
+  { id: 'previousMessage', label: '上一封邮件', description: '在列表中向左切换', scope: 'mail' },
   { id: 'reply', label: '回复', description: '回复当前邮件', scope: 'mail' },
   { id: 'forward', label: '转发', description: '转发当前邮件', scope: 'mail' },
   { id: 'toggleStar', label: '切换星标', description: '添加或取消当前邮件星标', scope: 'mail' },
@@ -19,8 +19,8 @@ export const shortcutDefinitions: Array<{ id: ShortcutActionId; label: string; d
 ];
 
 export const defaultShortcutBindings: ShortcutBindings = {
-  focusSearch: 'Mod+K', compose: 'C', sync: '', nextMessage: 'J', previousMessage: 'K', reply: 'R', forward: 'F',
-  toggleStar: 'S', markUnread: 'U', archive: 'E', delete: 'Shift+#', openShortcutSettings: 'Mod+/',
+  focusSearch: 'Mod+K', compose: 'C', sync: 'Mod+Shift+R', nextMessage: 'ArrowRight', previousMessage: 'ArrowLeft', reply: 'R', forward: 'F',
+  toggleStar: 'S', markUnread: 'U', archive: 'A', delete: 'Delete', openShortcutSettings: 'Mod+/',
 };
 
 type KeyboardLike = Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>;
@@ -37,13 +37,13 @@ export function shortcutMatches(event: KeyboardLike, binding: string) {
 }
 
 export function isBrowserRefreshShortcut(event: KeyboardLike) {
-  return (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLocaleLowerCase() === 'r';
+  return (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLocaleLowerCase() === 'r';
 }
 
 export function shortcutLabel(binding: string) {
   if (!binding) return '未设置';
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
-  return binding.split('+').map((part) => part === 'Mod' ? (isMac ? '⌘' : 'Ctrl') : part === 'Shift' ? '⇧' : part === 'Alt' ? (isMac ? '⌥' : 'Alt') : part).join(isMac ? '' : ' + ');
+  return binding.split('+').map((part) => part === 'Mod' ? (isMac ? '⌘' : 'Ctrl') : part === 'Shift' ? '⇧' : part === 'Alt' ? (isMac ? '⌥' : 'Alt') : part === 'ArrowRight' ? '→' : part === 'ArrowLeft' ? '←' : part === 'Delete' ? (isMac ? '⌫' : 'Del') : part).join(isMac ? '' : ' + ');
 }
 
 export function loadShortcutBindings(storage: Pick<Storage, 'getItem'> = localStorage, key = shortcutStorageKey): ShortcutBindings {
@@ -51,7 +51,7 @@ export function loadShortcutBindings(storage: Pick<Storage, 'getItem'> = localSt
     const saved = JSON.parse(storage.getItem(key) ?? '{}') as Partial<Record<ShortcutActionId, unknown>>;
     return Object.fromEntries(shortcutDefinitions.map(({ id }) => {
       const binding = typeof saved[id] === 'string' ? saved[id] : defaultShortcutBindings[id];
-      return [id, id === 'sync' && binding === 'Mod+R' ? '' : binding];
+      return [id, id === 'sync' && binding === 'Mod+R' ? defaultShortcutBindings.sync : binding];
     })) as ShortcutBindings;
   } catch {
     return { ...defaultShortcutBindings };
