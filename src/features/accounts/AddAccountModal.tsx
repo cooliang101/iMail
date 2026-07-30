@@ -9,10 +9,12 @@ import { Overlay, providerLabel, providers } from '../../components/shared';
 import type { AppSelectOption } from '../../components/form-controls';
 import { AccountConnectionFields } from './AccountConnectionFields';
 import { ProviderPicker } from './ProviderPicker';
+import { usePlatform } from '../../platform/runtime';
 
 const defaultWorkspaceNames = ['工作', '个人', '对外支持', '开发测试', '同学联系'];
 
 export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Account[]; onClose: () => void; onAdded: (result?: { warning?: string }) => void | Promise<void> }) {
+  const platform = usePlatform();
   const [provider, setProvider] = useState<ProviderId>('outlook');
   const [advanced, setAdvanced] = useState(false);
   const [manualMode, setManualMode] = useState(false);
@@ -25,6 +27,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
   const oauthAccountIdsRef = useRef<Set<string>>(new Set());
   const oauthProviderRef = useRef<ProviderId>('outlook');
   const onAddedRef = useRef(onAdded);
+  const oauthCancelledRef = useRef(false);
   const selectedProvider = providers.find((item) => item.id === provider)!;
   const oauthStatus = selectedProvider.oauthKey ? oauthCatalog.find((item) => item.id === selectedProvider.oauthKey) : undefined;
   const credentialGuide = credentialGuideFor(provider);
@@ -90,6 +93,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
   }, []);
 
   function cancelOAuth() {
+    oauthCancelledRef.current = true;
     popupRef.current?.close(); popupRef.current = null; setBusy(false); setError('已停止等待授权，你可以修改配置或重新登录。');
   }
 
@@ -97,12 +101,36 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
     event.preventDefault(); setBusy(true); setError('');
     const form = new FormData(event.currentTarget);
     if (usesOAuth) {
+      oauthCancelledRef.current = false;
+      oauthStartedAtRef.current = Date.now();
+      oauthProviderRef.current = provider;
+      if (platform.kind === 'tauri') {
+        try {
+          const snapshot = await api<{ accounts: Account[] }>('/api/accounts');
+          oauthAccountIdsRef.current = new Set(snapshot.accounts.map((account) => account.id));
+          const result = await api<{ authorizationUrl: string }>('/api/oauth/start', { method: 'POST', body: JSON.stringify({ provider, displayName: form.get('displayName') || undefined, group: form.get('group'), color: '#168f78' }) });
+          await platform.openExternal(result.authorizationUrl);
+          while (!oauthCancelledRef.current && Date.now() - oauthStartedAtRef.current <= 10 * 60_000) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+            const current = await api<{ accounts: Account[] }>('/api/accounts');
+            const connected = current.accounts.find((account) => !oauthAccountIdsRef.current.has(account.id) && account.provider === oauthProviderRef.current && account.authMethod === 'oauth2');
+            if (!connected) continue;
+            setBusy(false);
+            await onAddedRef.current(connected.status === 'connected' ? undefined : { warning: `${connected.email} 的授权已保存；${connected.lastError || '邮件连接仍需重试'}` });
+            return;
+          }
+          if (!oauthCancelledRef.current) setError('授权等待已超时，请重新发起登录。');
+        } catch (value) {
+          if (!oauthCancelledRef.current) setError(value instanceof Error ? value.message : '无法打开邮箱登录，请稍后重试。');
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
       const popup = window.open('', 'imail-oauth', 'popup,width=560,height=720,menubar=no,toolbar=no');
       if (!popup) { setError('浏览器阻止了登录窗口，请允许弹出窗口后重试'); setBusy(false); return; }
       popup.document.write('<title>iMail</title><p style="font-family:system-ui;padding:32px">正在打开安全登录…</p>');
       popupRef.current = popup;
-      oauthStartedAtRef.current = Date.now();
-      oauthProviderRef.current = provider;
       try {
         const snapshot = await api<{ accounts: Account[] }>('/api/accounts');
         oauthAccountIdsRef.current = new Set(snapshot.accounts.map((account) => account.id));

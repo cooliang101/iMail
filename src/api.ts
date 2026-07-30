@@ -1,5 +1,10 @@
-export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+export type ApiTransport = {
+  request<T>(path: string, options?: RequestInit): Promise<T>;
+};
+
+export function createApiTransport({ baseUrl = '', fetcher = fetch }: { baseUrl?: string; fetcher?: typeof fetch } = {}): ApiTransport {
+  return { async request<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetcher(`${baseUrl}${path}`, {
     ...options,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -13,4 +18,11 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+  } };
+}
+
+const defaultTransport = createApiTransport();
+
+export function api<T>(path: string, options?: RequestInit): Promise<T> {
+  return defaultTransport.request<T>(path, options);
 }

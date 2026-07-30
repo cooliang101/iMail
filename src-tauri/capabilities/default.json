@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "Only the trusted iMail localhost UI can use narrowly scoped desktop integrations.",
+  "windows": ["main"],
+  "local": false,
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:8787/*",
+      "http://localhost:5173/*"
+    ]
+  },
+  "permissions": [
+    "core:default",
+    "opener:allow-default-urls",
+    "dialog:allow-save",
+    "fs:allow-write-file",
+    "notification:default"
+  ]
+}

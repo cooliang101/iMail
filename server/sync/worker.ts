@@ -1,4 +1,3 @@
-import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { closeStore } from '../store.js';
 import { closeSyncStore } from './store.js';
@@ -17,4 +16,5 @@ export function runSyncWorkerProcess() {
   return worker;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) runSyncWorkerProcess();
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (path.basename(entry) === 'worker.ts' && path.basename(path.dirname(entry)) === 'sync') runSyncWorkerProcess();

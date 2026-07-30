@@ -5,11 +5,14 @@ import './theme.css';
 import './styles.css';
 import { AuthGate } from './features/auth';
 import { AppThemeProvider } from './features/appearance';
+import { PlatformProvider } from './platform/runtime';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppThemeProvider>
-      <AuthGate><App /></AuthGate>
-    </AppThemeProvider>
+    <PlatformProvider>
+      <AppThemeProvider>
+        <AuthGate><App /></AuthGate>
+      </AppThemeProvider>
+    </PlatformProvider>
   </StrictMode>,
 );

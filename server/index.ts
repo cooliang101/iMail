@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { fork, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:http';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createServer, type Server } from 'node:http';
 import { app } from './app.js';
 import { attachGatewayWebSocket } from './gateway/websocket.js';
 import { closeAuthStore } from './auth/http.js';
@@ -19,8 +18,10 @@ export function startServer() {
   let closing = false;
   if (process.env.IMAIL_SYNC_WORKER_MODE !== 'external' && process.env.IMAIL_SYNC_WORKER_MODE !== 'disabled') {
     const spawnWorker = () => {
-      syncWorker = fork(fileURLToPath(new URL('./sync/worker.ts', import.meta.url)), [], {
-        execArgv: ['--import', 'tsx'], stdio: ['inherit', 'inherit', 'inherit', 'ipc'], env: { ...process.env, IMAIL_SYNC_WORKER_MODE: 'child' },
+      const configuredWorker = process.env.IMAIL_WORKER_ENTRY;
+      const workerEntry = configuredWorker ? path.resolve(configuredWorker) : path.resolve('server/sync/worker.ts');
+      syncWorker = fork(workerEntry, [], {
+        execArgv: configuredWorker ? [] : ['--import', 'tsx'], stdio: ['inherit', 'inherit', 'inherit', 'ipc'], env: { ...process.env, IMAIL_SYNC_WORKER_MODE: 'child' },
       });
       syncWorker.once('exit', (code, signal) => {
         if (closing || !server.listening) return;
@@ -34,4 +35,22 @@ export function startServer() {
   return server.listen(port, host, () => console.log(`iMail API running at http://${host}:${port}`));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) startServer();
+export function installServerSignalHandlers(server: Server) {
+  let stopping = false;
+  const shutdown = () => {
+    if (stopping) return;
+    stopping = true;
+    const forced = setTimeout(() => process.exit(1), 10_000);
+    forced.unref();
+    server.close((error) => {
+      clearTimeout(forced);
+      process.exit(error ? 1 : 0);
+    });
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  process.once('disconnect', shutdown);
+}
+
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (path.basename(entry) === 'index.ts' && path.basename(path.dirname(entry)) === 'server') installServerSignalHandlers(startServer());

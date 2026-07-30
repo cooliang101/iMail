@@ -13,13 +13,17 @@ import { oauthRouter } from './routes/oauth-routes.js';
 import { systemRouter } from './routes/system.js';
 import { syncRouter } from './routes/sync.js';
 import { authRouter, requireAppSession } from './auth/http.js';
+import { desktopRuntimeConfig, desktopRuntimeMiddleware, desktopStartupHealth, installDesktopStaticApp } from './desktop/runtime.js';
 
 export function createApp() {
   const app = express();
+  const desktop = desktopRuntimeConfig();
   const origins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map((item) => item.trim());
 
+  app.use(desktopRuntimeMiddleware(desktop));
   app.use(cors({ origin: origins, credentials: true }));
   app.use(express.json({ limit: '25mb' }));
+  app.get('/api/desktop-health', desktopStartupHealth(desktop));
   app.use('/api', authRouter);
   app.use('/api', requireAppSession);
   app.use('/api', systemRouter);
@@ -33,6 +37,7 @@ export function createApp() {
   app.use('/gateway', gatewayDocsRouter);
   app.use('/gateway/v1', gatewayRouter);
   app.use(mcpRouter);
+  installDesktopStaticApp(app, desktop);
   app.use(errorHandler);
 
   return app;

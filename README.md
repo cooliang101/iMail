@@ -61,6 +61,33 @@ npm run build
 npm start
 ```
 
+## 桌面应用
+
+桌面版使用 Tauri v2 承载同一套 React 前端，并将 Node/Express 服务和同步 Worker 作为仅监听回环地址的 sidecar 启动。Web 版仍可独立开发、构建和部署，不依赖 Rust 或 Tauri：
+
+```bash
+npm run dev:web
+npm run build:web
+```
+
+Windows 开发和 NSIS 安装包构建需要 Node.js 22.5+、Rust stable、Microsoft C++ Build Tools 与 WebView2：
+
+```bash
+npm run dev:desktop
+npm run build:desktop:windows
+```
+
+安装包输出到 `src-tauri/target/release/bundle/nsis/`。发布前可分别验证内置服务和真实发布宿主：
+
+```bash
+npm run test:desktop-runtime
+npm run test:desktop-release
+```
+
+macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools，再执行 `npm run build:desktop:macos`。DMG、hardened runtime 和网络/JIT entitlement 已配置；正式分发仍需在 macOS 构建机配置 Apple Developer 签名与 notarization。Windows 无法生成或签名 macOS 产物，因此仓库通过跨平台配置单元测试覆盖 macOS sidecar 命名、DMG、最低系统版本、hardened runtime 与 entitlement。
+
+桌面宿主只通过 Platform Adapter 接管系统浏览器、保存对话框和通知等 OS 能力；邮件、账户、同步、REST 与 MCP 仍走共享 HTTP 服务，避免形成第三套业务协议。完整架构与迭代路线见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
+
 ## 添加邮箱
 
 点击左侧账户栏的 `+` 并选择服务商。Gmail、Outlook、Hotmail 和审核通过的 Yahoo 应用会打开服务商官方登录窗口；iMail 使用 OAuth 2.0 Authorization Code + PKCE 获取授权并加密保存 Refresh Token。OAuth 授权会先安全保存，再验证 IMAP 与 SMTP；即使邮件协议暂时不可用，已取得的 Refresh Token 也不会丢失。进入“邮箱设置”点击“重试连接”会直接复用已保存授权，只有 Token 被服务商撤销或失效时才需要“重新授权”。这些服务商也可在添加页切换到应用专用密码；QQ、iCloud、未获审核的 Yahoo 和通用 IMAP 默认使用应用专用密码或授权码。所有专用凭据都会先验证连接，再加密保存。

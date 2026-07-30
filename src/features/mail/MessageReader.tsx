@@ -4,10 +4,12 @@ import type { Account, Message } from '../../types';
 import type { MessageBodyView } from '../../app-model';
 import { AccountProviderMark, providerLabel, SenderAvatar } from '../../components/shared';
 import { MessageBody } from './MessageBody';
+import { usePlatform } from '../../platform/runtime';
 
 export function MessageReader({ message, account, defaultBodyView, onReply, onForward, onCloseMobile, onToggleFlag, onArchive, onDelete, onSnooze, onManageLabels, onMarkUnread, onPrevious, onNext, onContextMenu, hasPrevious, hasNext, actionBusy }: {
   message?: Message; account?: Account; defaultBodyView: MessageBodyView; onReply: () => void; onForward: () => void; onCloseMobile: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onSnooze: () => void; onManageLabels: () => void; onMarkUnread: () => void; onPrevious: () => void; onNext: () => void; onContextMenu?: (message: Message, point: { x: number; y: number }) => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
 }) {
+  const platform = usePlatform();
   const [bodyView, setBodyView] = useState<MessageBodyView>(defaultBodyView);
   useEffect(() => setBodyView(defaultBodyView), [defaultBodyView, message?.id]);
 
@@ -27,7 +29,7 @@ export function MessageReader({ message, account, defaultBodyView, onReply, onFo
           ? <p>正在从本地缓存加载正文…</p>
           : <MessageBody text={message.text} html={message.html} subject={message.subject} view={bodyView} />}
       </div>
-      {message.attachments.length > 0 && <div className="attachments"><p>{message.attachments.length} 个附件 · 点击即可按需从邮箱服务器下载</p>{message.attachments.map((attachment, index) => <a key={`${attachment.filename}-${index}`} href={`/api/messages/${message.id}/attachments/${attachment.index ?? index}`} download={attachment.filename}><File size={23} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{attachment.size < 1024 * 1024 ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : `${(attachment.size / 1024 / 1024).toFixed(1)} MB`}</small></span></a>)}</div>}
+      {message.attachments.length > 0 && <div className="attachments"><p>{message.attachments.length} 个附件 · 点击即可按需从邮箱服务器下载</p>{message.attachments.map((attachment, index) => { const url = `/api/messages/${message.id}/attachments/${attachment.index ?? index}`; return <a key={`${attachment.filename}-${index}`} href={url} download={attachment.filename} onClick={platform.kind === 'tauri' ? (event) => { event.preventDefault(); void platform.saveDownload({ url, filename: attachment.filename }); } : undefined}><File size={23} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{attachment.size < 1024 * 1024 ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : `${(attachment.size / 1024 / 1024).toFixed(1)} MB`}</small></span></a>; })}</div>}
     </div></div>
   </article>;
 }
