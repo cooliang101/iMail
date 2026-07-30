@@ -75,7 +75,7 @@ function App() {
   const accounts = realAccounts;
   const messages = realMessages;
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const [accountData, tokenData, statsData, draftData, labelData, contactData] = await Promise.all([
         api<{ accounts: Account[] }>('/api/accounts'),
@@ -94,9 +94,9 @@ function App() {
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '服务连接失败' });
     }
-  }
+  }, []);
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     void api<{ preferences: AppPreferences }>('/api/preferences').then((result) => {
       setPreferences(result.preferences); setShortcutBindings(result.preferences.shortcutBindings); setView(result.preferences.startupView);

@@ -19,8 +19,8 @@ class FakeEventSource {
 
   close() { this.closed = true; }
 
-  emit(type: string) {
-    const event = { type } as MessageEvent;
+  emit(type: string, data = '') {
+    const event = { type, data } as MessageEvent;
     for (const listener of this.listeners.get(type) ?? []) {
       if (typeof listener === 'function') listener(event);
       else listener.handleEvent(event);
@@ -51,5 +51,20 @@ describe('shared sync events', () => {
     expect(FakeEventSource.instances[0].closed).toBe(false);
     unsubscribeCreated();
     expect(FakeEventSource.instances[0].closed).toBe(true);
+  });
+
+  it('replays the latest status snapshot to subscribers that open after the SSE connection', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const keepAlive = subscribeSyncEvents(['sync.completed'], vi.fn());
+    FakeEventSource.instances[0].emit('sync.status', '{"accounts":[],"worker":{"workers":[],"queuedJobs":0}}');
+
+    const status = vi.fn();
+    const unsubscribeStatus = subscribeSyncEvents(['sync.status'], status);
+    await Promise.resolve();
+
+    expect(status).toHaveBeenCalledOnce();
+    expect(status.mock.calls[0][0].data).toContain('queuedJobs');
+    unsubscribeStatus();
+    keepAlive();
   });
 });

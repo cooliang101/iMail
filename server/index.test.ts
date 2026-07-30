@@ -211,6 +211,26 @@ describe('iMail HTTP API', () => {
     expect(status.body.accounts[0]).toMatchObject({ accountId: account.id, policy: { intervalMinutes: 15 }, jobs: [{ id: queued.body.jobId, status: 'queued', reason: 'manual' }] });
     expect(status.body.accounts[0].jobs).toHaveLength(1);
     expect(JSON.stringify(status.body)).not.toContain(account.encryptedSecret);
+
+    const eventResponse = await fetch(`${baseUrl}/api/events`, { headers: { Cookie: authCookie } });
+    expect(eventResponse.status).toBe(200);
+    const reader = eventResponse.body!.getReader();
+    const decoder = new TextDecoder();
+    let eventText = '';
+    while (!eventText.includes('event: sync.status')) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      eventText += decoder.decode(chunk.value, { stream: true });
+    }
+    await reader.cancel();
+    const statusEvent = eventText.match(/event: sync\.status\ndata: ([^\n]+)/);
+    expect(statusEvent).not.toBeNull();
+    expect(JSON.parse(statusEvent![1]).accounts[0]).toMatchObject({
+      accountId: account.id,
+      policy: { intervalMinutes: 15 },
+      jobs: [{ id: queued.body.jobId, status: 'queued' }],
+    });
+    expect(statusEvent![1]).not.toContain(account.encryptedSecret);
   });
 
   it('updates account workspace metadata without exposing credentials', async () => {

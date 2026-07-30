@@ -24,15 +24,20 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   const [error, setError] = useState('');
   const popupRef = useRef<Window | null>(null);
   const oauthOriginsRef = useRef(oauthCallbackOrigins(['http://localhost:8787/api/oauth'], window.location.origin));
+  const providersRequestedRef = useRef(false);
+  const defaultPolicyRequestedRef = useRef(false);
 
   useEffect(() => {
     setCredentialId(null); setEditingId(null); setSyncEditingId(null); setConfirmRemoveId(null); setAdvancedSyncOpen(false); setError('');
   }, [section]);
 
   useEffect(() => {
-    void api<{ oauth: Array<{ redirectUri: string }> }>('/api/providers').then((result) => {
-      oauthOriginsRef.current = oauthCallbackOrigins(result.oauth.map((item) => item.redirectUri), window.location.origin);
-    }).catch(() => undefined);
+    if (!providersRequestedRef.current) {
+      providersRequestedRef.current = true;
+      void api<{ oauth: Array<{ redirectUri: string }> }>('/api/providers').then((result) => {
+        oauthOriginsRef.current = oauthCallbackOrigins(result.oauth.map((item) => item.redirectUri), window.location.origin);
+      }).catch(() => undefined);
+    }
     const receive = (event: MessageEvent) => {
       if (event.source !== popupRef.current || !oauthOriginsRef.current.has(event.origin) || event.data?.source !== 'imail-oauth') return;
       popupRef.current = null;
@@ -50,33 +55,23 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
     return () => { window.removeEventListener('message', receive); window.clearInterval(timer); };
   }, [onReload, setNotice]);
 
-  async function refreshSyncStatus() {
-    const result = await api<{ accounts: AccountSyncStatus[]; worker: SyncWorkerHealth }>('/api/sync-status');
-    setSyncStatuses(result.accounts); setWorkerHealth(result.worker);
-  }
-
   useEffect(() => {
     if (section !== 'sync') return;
-    let refreshTimer: number | undefined;
-    const refresh = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => { refreshTimer = undefined; void refreshSyncStatus().catch(() => undefined); }, 250);
+    const applyStatus = (event: MessageEvent) => {
+      try {
+        const result = JSON.parse(event.data) as { accounts: AccountSyncStatus[]; worker: SyncWorkerHealth };
+        setSyncStatuses(result.accounts); setWorkerHealth(result.worker);
+      } catch {
+        // Ignore a malformed status snapshot and wait for the next SSE heartbeat.
+      }
     };
-    void Promise.all([
-      refreshSyncStatus(),
-      api<{ policy: Omit<SyncPolicy, 'accountId' | 'updatedAt'> }>('/api/sync-policy').then((result) => setDefaultPolicy(result.policy)),
-    ]).catch(() => undefined);
-    const unsubscribe = subscribeSyncEvents(['connected', 'sync.started', 'sync.completed', 'sync.failed'], refresh);
-    const fallbackTimer = window.setInterval(refresh, 60_000);
-    document.addEventListener('visibilitychange', refresh);
-    return () => {
-      unsubscribe();
-      document.removeEventListener('visibilitychange', refresh);
-      window.clearInterval(fallbackTimer);
-      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
-    };
-  }, [section, accounts.map((account) => account.id).join(',')]);
+    if (!defaultPolicyRequestedRef.current) {
+      defaultPolicyRequestedRef.current = true;
+      void api<{ policy: Omit<SyncPolicy, 'accountId' | 'updatedAt'> }>('/api/sync-policy')
+        .then((result) => setDefaultPolicy(result.policy)).catch(() => undefined);
+    }
+    return subscribeSyncEvents(['sync.status'], applyStatus);
+  }, [section]);
 
   async function reconnect(account: Account) {
     setError('');
@@ -158,7 +153,6 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
     setBusyId(account.id); setError('');
     try {
       await api(`/api/accounts/${account.id}/sync`, { method: 'POST' });
-      await refreshSyncStatus();
       setNotice({ kind: 'success', text: `${account.email} 已加入后端同步队列` });
     } catch (value) { setError(value instanceof Error ? value.message : '无法创建同步任务'); }
     finally { setBusyId(null); }

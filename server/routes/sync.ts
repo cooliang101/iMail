@@ -17,6 +17,17 @@ const policyChangesSchema = z.object({
 
 export const syncRouter = Router();
 
+function syncStatusSnapshot(accountIds: Iterable<string>) {
+  const syncStore = getSyncStore();
+  const accounts = Array.from(accountIds, (accountId) => ({
+    accountId,
+    policy: syncStore.ensurePolicy(accountId),
+    states: syncStore.listMailboxStates(accountId),
+    jobs: syncStore.listJobs({ accountId, limit: 10 }),
+  }));
+  return { accounts, worker: syncStore.workerHealth() };
+}
+
 syncRouter.get('/sync-policy', asyncRoute(async (_req, res) => {
   res.json({ policy: getSyncStore().getDefaultPolicy() });
 }));
@@ -45,14 +56,7 @@ syncRouter.patch('/accounts/:id/sync-policy', asyncRoute(async (req, res) => {
 
 syncRouter.get('/sync-status', asyncRoute(async (_req, res) => {
   const { accounts } = await readStore();
-  const syncStore = getSyncStore();
-  const result = accounts.map((account) => {
-    const policy = syncStore.ensurePolicy(account.id);
-    const states = syncStore.listMailboxStates(account.id);
-    const jobs = syncStore.listJobs({ accountId: account.id, limit: 10 });
-    return { accountId: account.id, policy, states, jobs };
-  });
-  res.json({ accounts: result, worker: syncStore.workerHealth() });
+  res.json(syncStatusSnapshot(accounts.map((account) => account.id)));
 }));
 
 syncRouter.get('/sync-jobs/:id', asyncRoute(async (req, res) => {
@@ -72,16 +76,23 @@ syncRouter.get('/events', asyncRoute(async (req, res) => {
   const requestedCursor = req.headers['last-event-id'] ?? req.query.after;
   let cursor = requestedCursor === undefined ? getSyncStore().latestEventId() : Number(requestedCursor);
   if (!Number.isFinite(cursor) || cursor < 0) cursor = 0;
+  const sendStatus = () => {
+    res.write(`event: sync.status\ndata: ${JSON.stringify(syncStatusSnapshot(accountIds))}\n\n`);
+  };
   const send = () => {
+    let changed = false;
     for (const event of getSyncStore().listEvents(cursor)) {
       cursor = event.id;
       if (!accountIds.has(event.accountId)) continue;
       res.write(`id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      changed = true;
     }
+    if (changed) sendStatus();
   };
   res.write(`event: connected\ndata: ${JSON.stringify({ connectedAt: new Date().toISOString() })}\n\n`);
   send();
+  sendStatus();
   const eventTimer = setInterval(send, 1_000);
-  const heartbeatTimer = setInterval(() => res.write(`: heartbeat ${Date.now()}\n\n`), 15_000);
+  const heartbeatTimer = setInterval(sendStatus, 15_000);
   req.once('close', () => { clearInterval(eventTimer); clearInterval(heartbeatTimer); });
 }));
