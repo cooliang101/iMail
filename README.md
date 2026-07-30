@@ -310,6 +310,7 @@ server/providers.ts  服务商预设
 
 - `public/brand/imail-logo.png`：1024×1024 透明 Logo 母版
 - `public/brand/imail-app-icon.png`：1024×1024 应用图标
+- `public/favicon.svg`：跟随系统明暗模式的现代浏览器图标
 - `public/favicon.ico`：包含 16 至 256 像素的 Windows / 浏览器图标
 - `public/favicon-16.png`、`favicon-32.png`、`favicon-48.png`：浏览器图标
 - `public/apple-touch-icon.png`：180×180 Apple Touch Icon

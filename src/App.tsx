@@ -6,6 +6,7 @@ import { subscribeSyncEvents } from './sync-events';
 import type { Account, Contact, DeveloperToken, Draft, MailboxRole, Message } from './types';
 import type { AppPreferences, ContextTarget, MailNotification, MessageStats, Notice, ShortcutBindings, WorkspaceFolder } from './app-model';
 import { AccountProviderMark, ProviderIcon, providerLabel } from './components/shared';
+import { BrandLogo } from './components/brand-logo';
 import { AppInput } from './components/form-controls';
 import { applyMessageChanges, applyMessageStatsChanges, messageTotalDelta, VirtualMessageList, MessageReader, type MessageChange } from './features/mail';
 import { AddAccountModal } from './features/accounts';
@@ -439,7 +440,7 @@ function App() {
     {notice && <div className={`toast toast-${notice.kind}`}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
 
     <aside className="account-rail" aria-label="邮箱账户">
-      <button className="brand-mark" aria-label="iMail"><img src="/brand/imail-app-icon.png" alt="" /></button>
+      <button className="brand-mark" aria-label="iMail"><BrandLogo /></button>
       <div className="rail-accounts">
         <button title="聚合所有邮箱" aria-label="聚合所有邮箱" className={`rail-avatar rail-all ${accountFilter === 'all' ? 'active' : ''}`} onClick={() => selectScope('inbox')} onContextMenu={(event) => { event.preventDefault(); setContextTarget({ kind: 'background', x: event.clientX, y: event.clientY }); }}><Tray size={20} /></button>
         {accounts.map((account) =>
