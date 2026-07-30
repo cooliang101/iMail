@@ -1,6 +1,6 @@
 # iMail
 
-iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商的 IMAP/SMTP 邮箱聚合到一个轻量界面，同时提供带范围和过期时间的开发 Token，让本地项目通过统一 API 读取或发送邮件。
+iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商的 IMAP/SMTP 邮箱聚合到一个轻量界面，并通过彼此隔离的 REST API Token 与 MCP 授权码，为本地项目和可信 Agent 提供外部接入能力。
 
 ## 当前能力
 
@@ -28,9 +28,9 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - 附件元数据随正文缓存，文件内容点击时才从源 IMAP 按需下载
 - 联系人档案与邮件发件人共用 SQLite 数据；网站 Logo 获取后作为联系人字段保存，并在邮件列表、阅读页和写信建议中复用
 - 发件人 Logo 使用“子域优先、可注册主域兜底”的两级缓存；子域成功会补齐一级域，子域未命中会直接引用一级域并更新联系人，不触发额外采集
-- 短期开发 Token，支持指定邮箱、最小权限、自动过期和即时撤销
+- 独立的短期 API Token 与 MCP 授权码，使用不同前缀、权限边界、创建流程和凭据列表
 - 面向本地程序的账户、邮件读取和邮件发送 API
-- MCP Streamable HTTP 与 stdio 接入，可信 Agent 可用短期授权码管理账户、邮件、附件、草稿、标签和同步
+- MCP Streamable HTTP 接入，可信 Agent 可用短期授权码管理账户、邮件、附件、草稿、标签和同步
 - 首次启动引导、加载态、空状态、错误提示和响应式布局
 
 ### 平台验收口径
@@ -110,7 +110,7 @@ APP_MASTER_KEY=请替换为64位十六进制值
 
 ## 外部接入
 
-进入界面底部的“外部接入”。“API 网关”标签页用于选择邮箱、API 权限和有效时间；“MCP”标签页用于为可信 Agent 创建独立授权码并查看可复制的接入配置。完整凭据只在创建成功时显示一次，服务端只保存 SHA-256 哈希。
+进入界面底部的“外部接入”。“API 网关”标签页用于选择邮箱、API 权限和有效时间；“MCP”标签页用于为可信 Agent 创建独立授权码、复制 Streamable HTTP 配置，并查看或复制仓库中的原始 MCP 接入文档。API Token 以 `imail_` 开头，MCP 授权码以 `imail_mcp_` 开头；完整凭据只在创建成功时显示一次，服务端只保存 SHA-256 哈希。
 
 基础地址：
 
@@ -209,9 +209,9 @@ Token 有效期范围为 5 分钟至 7 天，且只能访问创建时选中的�
 
 ## MCP Agent 接入
 
-iMail 内置基于官方 TypeScript SDK v2 的 MCP 服务，同时支持 Streamable HTTP 和 stdio。MCP 使用单独的 `mcp:full` 短期授权码；普通 `messages:*` / `accounts:read` Token 无法调用 MCP，避免已有只读 Token 意外获得账户删除、授权码更新或发信能力。
+iMail 内置基于官方 TypeScript SDK v2 的 Streamable HTTP MCP 服务。MCP 使用单独的 `mcp:full` 短期授权码；普通 `messages:*` / `accounts:read` Token 无法调用 MCP，避免已有只读 Token 意外获得账户删除、授权码更新或发信能力。
 
-在“外部接入”的“MCP”标签页点击“创建 MCP 授权码”。生成的授权码以 `imail_mcp_` 开头，只显示一次，服务端仍只保存 SHA-256 哈希。它最长有效 7 天，可以在同一标签页即时撤销。即使尚未接入邮箱，也可以先签发 MCP 授权码，让可信 Agent 通过 `account_add_with_code` 接入第一个邮箱。页面同时提供 Streamable HTTP、stdio 配置、工具速查与安全调用顺序。
+在“外部接入”的“MCP”标签页点击“创建 MCP 授权码”。生成的授权码以 `imail_mcp_` 开头，只显示一次，服务端仍只保存 SHA-256 哈希。它最长有效 7 天，可以在同一标签页即时撤销。即使尚未接入邮箱，也可以先签发 MCP 授权码，让可信 Agent 通过 `account_add_with_code` 接入第一个邮箱。页面同时提供 Streamable HTTP 配置、工具速查、安全调用顺序，以及 [`docs/mcp-integration.md`](docs/mcp-integration.md) 原文的展开与复制功能。
 
 ### Streamable HTTP
 
@@ -233,7 +233,7 @@ Authorization: Bearer imail_mcp_xxx
 {
   "url": "http://127.0.0.1:8787/mcp",
   "headers": {
-    "Authorization": "Bearer ${IMAIL_MCP_AUTH_CODE}"
+    "Authorization": "Bearer imail_mcp_xxx"
   }
 }
 ```
@@ -244,41 +244,14 @@ HTTP MCP 默认只接受 `localhost`、`127.0.0.1` 和 `::1` 的 Host/Origin，�
 MCP_ALLOWED_HOSTS=mail.example.com
 ```
 
-### stdio
-
-只支持 stdio 的本地 Agent 可以直接启动：
-
-```bash
-IMAIL_MCP_AUTH_CODE=imail_mcp_xxx npm run mcp
-```
-
-Windows PowerShell：
-
-```powershell
-$env:IMAIL_MCP_AUTH_CODE='imail_mcp_xxx'
-npm run mcp
-```
-
-通用 stdio 客户端配置示例：
-
-```json
-{
-  "command": "npm",
-  "args": ["run", "mcp"],
-  "cwd": "/absolute/path/to/imail",
-  "env": {
-    "IMAIL_MCP_AUTH_CODE": "imail_mcp_xxx"
-  }
-}
-```
-
 ### MCP 工具
 
 | 领域 | 工具 |
 | --- | --- |
 | 状态 | `imail_status` |
 | 账户 | `accounts_list`、`account_add_with_code`、`account_start_oauth`、`account_reconnect_oauth`、`account_update`、`account_update_authorization_code`、`account_test_connection`、`account_remove` |
-| 同步与邮件 | `mailbox_sync`、`messages_list`、`message_get`、`message_update`、`message_move`、`message_send`、`attachment_download` |
+| 同步 | `mailbox_sync`、`sync_policy_get`、`sync_policy_update` |
+| 邮件与附件 | `messages_list`、`message_get`、`message_update`、`message_move`、`message_send`、`attachment_download` |
 | 草稿 | `drafts_list`、`draft_get`、`draft_save`、`draft_delete` |
 | 整理 | `labels_list`、`notifications_list` |
 
@@ -312,7 +285,7 @@ server/index.ts      服务进程启动入口
 server/app.ts        Express 应用与路由装配
 server/routes/       管理 API 与开发者网关路由
 server/http/         校验、鉴权、响应转换与错误处理
-server/mcp/          MCP HTTP/stdio 传输、授权与完整邮箱工具
+server/mcp/          MCP Streamable HTTP 传输、授权与完整邮箱工具
 server/mail/         IMAP/SMTP 连接、增量同步、远程操作与发送
 server/sync/         持久化调度、任务租约、独立 Worker 与运行状态
 server/oauth/        OAuth 配置、授权流程、身份校验与 Token 刷新

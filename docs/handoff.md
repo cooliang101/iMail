@@ -3,7 +3,6 @@
 ## 当前可用能力
 
 - Streamable HTTP：`POST/GET/DELETE /mcp`，Bearer `mcp:full` 授权。
-- stdio：`npm run mcp`，通过 `IMAIL_MCP_AUTH_CODE` 启动认证。
 - 24 个 MCP 工具覆盖账户接入/授权、同步策略与任务、邮件读写/移动、附件、草稿、标签与通知。
 - MCP 授权码与普通网关 Token 共用哈希、过期和撤销基础设施，但 scope 严格隔离。
 - UI 可在没有邮箱时签发 MCP 授权码，Agent 可以接入第一个授权码型邮箱。
