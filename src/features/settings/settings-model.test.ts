@@ -17,4 +17,11 @@ describe('settings model', () => {
     expect(loadAppPreferences(storage, firstKey).startupView).toBe('starred');
     expect(loadAppPreferences(storage, preferencesStorageKeyFor('second-user')).startupView).toBe('inbox');
   });
+
+  it('loads supported themes and replaces unknown legacy values', () => {
+    const selected = { getItem: () => JSON.stringify({ theme: 'soft-neubrutalism' }) };
+    const legacy = { getItem: () => JSON.stringify({ theme: 'imail-light' }) };
+    expect(loadAppPreferences(selected).theme).toBe('soft-neubrutalism');
+    expect(loadAppPreferences(legacy).theme).toBe('mint-fresh');
+  });
 });

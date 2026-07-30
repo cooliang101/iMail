@@ -1,20 +1,22 @@
 import { useState } from 'react';
-import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, Keyboard, LockKey, SlidersHorizontal, X } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, Keyboard, LockKey, Palette, SlidersHorizontal, X } from '@phosphor-icons/react';
 import type { Account } from '../../types';
 import type { AppPreferences, Notice, ShortcutBindings } from '../../app-model';
 import { Overlay } from '../../components/shared';
 import { AccountSettingsPanel } from '../accounts';
 import { defaultShortcutBindings } from '../shortcuts';
 import { DisplayPanel } from './DisplayPanel';
+import { AppearancePanel } from './AppearancePanel';
 import { GeneralPanel } from './GeneralPanel';
 import { NotificationPanel } from './NotificationPanel';
 import { PrivacyPanel } from './PrivacyPanel';
 import { ShortcutPanel } from './ShortcutPanel';
 
-export type SettingsTab = 'general' | 'accounts' | 'sync' | 'shortcuts' | 'notifications' | 'display' | 'privacy';
+export type SettingsTab = 'general' | 'appearance' | 'accounts' | 'sync' | 'shortcuts' | 'notifications' | 'display' | 'privacy';
 
 const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof Gear }> = [
   { id: 'general', label: '通用', detail: '启动与阅读行为', icon: Gear },
+  { id: 'appearance', label: '主题', detail: '界面风格与色彩', icon: Palette },
   { id: 'accounts', label: '邮箱管理', detail: '连接、授权与工作空间', icon: Envelope },
   { id: 'sync', label: '同步', detail: '频率、范围与状态', icon: SlidersHorizontal },
   { id: 'shortcuts', label: '快捷键', detail: '键盘操作与绑定', icon: Keyboard },
@@ -48,6 +50,7 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
           <button className="settings-close" type="button" aria-label="关闭设置" title="关闭设置" onClick={onClose}><X size={21} /></button>
         </div>
         {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
+        {activeTab === 'appearance' && <AppearancePanel preferences={preferences} onChange={onPreferencesChange} />}
         {(activeTab === 'accounts' || activeTab === 'sync') && <AccountSettingsPanel accounts={accounts} section={activeTab} onAddAccount={onAddAccount} onReload={onReload} setNotice={setNotice} />}
         {activeTab === 'shortcuts' && <ShortcutPanel bindings={bindings} onChange={onBindingsChange} />}
         {activeTab === 'notifications' && <NotificationPanel preferences={preferences} onChange={onPreferencesChange} />}

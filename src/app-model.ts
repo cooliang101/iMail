@@ -10,9 +10,11 @@ export type MessageStats = {
 
 export type MessageBodyView = 'source' | 'rendered';
 export type StartupView = 'inbox' | 'starred';
+export type AppThemeId = 'mint-fresh' | 'tech' | 'business-blue' | 'soft-neubrutalism';
 export type NotificationKind = MailNotification['kind'];
 
 export type AppPreferences = {
+  theme: AppThemeId;
   startupView: StartupView;
   markReadOnOpen: boolean;
   defaultMessageView: MessageBodyView;

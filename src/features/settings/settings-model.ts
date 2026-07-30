@@ -1,10 +1,12 @@
 import type { AppPreferences } from '../../app-model';
+import { defaultThemeId, normalizeThemeId } from '../appearance';
 import { defaultShortcutBindings } from '../shortcuts/shortcut-model';
 
 export const preferencesStorageKey = 'imail.preferences.v1';
 export function preferencesStorageKeyFor(userId: string) { return `${preferencesStorageKey}:${userId}`; }
 
 export const defaultAppPreferences: AppPreferences = {
+  theme: defaultThemeId,
   startupView: 'inbox',
   markReadOnOpen: true,
   defaultMessageView: 'source',
@@ -16,6 +18,7 @@ export function loadAppPreferences(storage: Pick<Storage, 'getItem'> = localStor
   try {
     const saved = JSON.parse(storage.getItem(key) ?? '{}') as Partial<AppPreferences>;
     return {
+      theme: normalizeThemeId(saved.theme),
       startupView: saved.startupView === 'starred' ? 'starred' : 'inbox',
       markReadOnOpen: typeof saved.markReadOnOpen === 'boolean' ? saved.markReadOnOpen : true,
       defaultMessageView: saved.defaultMessageView === 'rendered' ? 'rendered' : 'source',

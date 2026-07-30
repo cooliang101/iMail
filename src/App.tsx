@@ -15,10 +15,12 @@ import { isBrowserRefreshShortcut, isEditableShortcutTarget, loadShortcutBinding
 import { AppContextMenu } from './features/context-menu';
 import { loadAppPreferences, preferencesStorageKeyFor, SettingsModal, type SettingsTab } from './features/settings';
 import { useAuth } from './features/auth';
+import { useAppTheme } from './features/appearance';
 
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
 function App() {
   const { user, logout } = useAuth();
+  const { setThemeId } = useAppTheme();
   const [realAccounts, setRealAccounts] = useState<Account[]>([]);
   const [realMessages, setRealMessages] = useState<Message[]>([]);
   const [tokens, setTokens] = useState<DeveloperToken[]>([]);
@@ -94,6 +96,7 @@ function App() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setThemeId(preferences.theme); }, [preferences.theme]);
   useEffect(() => {
     void api<{ preferences: AppPreferences }>('/api/preferences').then((result) => {
       setPreferences(result.preferences); setShortcutBindings(result.preferences.shortcutBindings); setView(result.preferences.startupView);

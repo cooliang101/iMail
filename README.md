@@ -16,7 +16,8 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - SQLite 本地数据库、外键约束、事务写入与旧 JSON 自动迁移
 - 应用账号注册、密码登录、30 天 HttpOnly 会话与登录页账号切换
 - 邮箱、邮件、联系人、草稿和开发授权码按应用账号强制隔离；未登录 API 统一拒绝访问
-- 设置中心的启动、阅读、通知、邮件展示与快捷键偏好按应用账号同步保存
+- 设置中心的主题、启动、阅读、通知、邮件展示与快捷键偏好按应用账号同步保存
+- 内置经典薄荷清新、霓虹终端科技风、深海蓝图商业风和 Soft Neubrutalism 柔和撞色四套即时切换主题
 - 后端持久化同步策略与独立 Worker；前端关闭后仍按账户频率同步，进程重启后自动恢复到期任务
 - 收件箱 IMAP IDLE 实时唤醒；连接失败时仍由持久化周期轮询兜底
 - 设置页可配置新账户默认策略和账户级频率、文件夹范围、启动补同步、失败重试与通知
@@ -254,6 +255,7 @@ MCP_ALLOWED_HOSTS=mail.example.com
 | 领域 | 工具 |
 | --- | --- |
 | 状态 | `imail_status` |
+| 设置 | `settings_get`、`settings_update` |
 | 账户 | `accounts_list`、`account_add_with_code`、`account_start_oauth`、`account_reconnect_oauth`、`account_update`、`account_update_authorization_code`、`account_test_connection`、`account_remove` |
 | 同步 | `mailbox_sync`、`sync_policy_get`、`sync_policy_update` |
 | 邮件与附件 | `messages_list`、`message_get`、`message_update`、`message_move`、`message_send`、`attachment_download` |
@@ -287,6 +289,8 @@ src/features/accounts/ 邮箱接入、授权与账户设置
 src/features/compose/  写信与草稿工作区
 src/features/organize/ 标签、稍后处理、通知和工作空间
 src/features/developer/ 外部接入、API Token 与 MCP 授权码 UI
+src/features/appearance/ 主题元数据、根主题 Provider 与本地回退
+src/features/settings/ 设置窗口与各偏好面板
 src/app-model.ts     跨 feature 的客户端类型
 server/index.ts      服务进程启动入口
 server/app.ts        Express 应用与路由装配

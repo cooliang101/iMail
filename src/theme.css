@@ -4,7 +4,8 @@
  * docs/style-system.md before adding or changing a token.
  */
 :root,
-[data-theme='imail-light'] {
+[data-theme='imail-light'],
+[data-theme='mint-fresh'] {
   color-scheme: light;
 
   /* Typography */
@@ -156,4 +157,79 @@
   --text-body: var(--font-size-4);
   --leading-compact: var(--line-height-compact);
   --leading-copy: var(--line-height-body);
+}
+
+/* Theme packs override the complete primitive/semantic contract above. */
+[data-theme='business-blue'] {
+  --brand-10: #06172d; --brand-20: #0a2444; --brand-30: #0c345f; --brand-40: #0d467c;
+  --brand-50: #0e5999; --brand-60: #126db5; --brand-70: #1d7fc6; --brand-80: #368fd1;
+  --brand-90: #559fda; --brand-100: #73afe2; --brand-110: #91bfe9; --brand-120: #aecff0;
+  --brand-130: #c9def5; --brand-140: #dfebf9; --brand-150: #eff5fc; --brand-160: #f8fbfe;
+  --neutral-0: #ffffff; --neutral-10: #fbfcfe; --neutral-20: #f6f8fb; --neutral-30: #edf1f6;
+  --neutral-40: #e4e9f0; --neutral-50: #d9e0e9; --neutral-60: #bac5d3; --neutral-70: #929eae;
+  --neutral-80: #6d7989; --neutral-90: #4f5c6d; --neutral-100: #354357; --neutral-110: #213047; --neutral-120: #142238;
+  --color-canvas: #edf1f6; --color-surface: #fbfcfe; --color-surface-subtle: #f6f8fb;
+  --color-surface-raised: #ffffff; --color-surface-sunken: #eef3f8; --color-rail: #102d55;
+  --color-text: #142238; --color-text-strong: #13233a; --color-text-secondary: #6d7989;
+  --color-text-tertiary: #929eae; --color-text-inverse: #f7fbff;
+  --color-border: #d9e0e9; --color-border-strong: #bac5d3;
+  --color-accent: #1d7fc6; --color-accent-hover: #126db5; --color-accent-pressed: #0e5999;
+  --color-accent-subtle: #e7f1fa; --color-accent-subtle-hover: #dcecf8;
+  --color-focus: #368fd1; --color-focus-ring: rgb(29 127 198 / 13%);
+  --shadow-sm: 0 5px 18px rgb(20 48 83 / 8%);
+  --shadow-md: 0 16px 38px rgb(19 47 82 / 14%);
+  --shadow-lg: 0 24px 70px rgb(12 35 66 / 26%);
+}
+
+[data-theme='tech'] {
+  --font-family-display: 'Cascadia Code', 'Segoe UI Variable Display', 'Microsoft YaHei UI', sans-serif;
+  --brand-10: #03171b; --brand-20: #06252b; --brand-30: #07363e; --brand-40: #084953;
+  --brand-50: #075d69; --brand-60: #067381; --brand-70: #078a99; --brand-80: #13a0ae;
+  --brand-90: #2bb4bf; --brand-100: #4ac5ce; --brand-110: #6dd4db; --brand-120: #91e1e6;
+  --brand-130: #b4ecef; --brand-140: #d2f4f6; --brand-150: #e9fafa; --brand-160: #f7fdfd;
+  --neutral-0: #ffffff; --neutral-10: #f9fcfd; --neutral-20: #f3f8f9; --neutral-30: #e9f1f3;
+  --neutral-40: #dce7e9; --neutral-50: #cfdee1; --neutral-60: #aec3c7; --neutral-70: #829da2;
+  --neutral-80: #617b81; --neutral-90: #425f66; --neutral-100: #29464e; --neutral-110: #17343c; --neutral-120: #0b252d;
+  --color-canvas: #e8f1f3; --color-surface: #f8fcfd; --color-surface-subtle: #f0f7f8;
+  --color-surface-raised: #ffffff; --color-surface-sunken: #e5eff1; --color-rail: #071f29;
+  --color-text: #0b252d; --color-text-strong: #061b22; --color-text-secondary: #58737a;
+  --color-text-tertiary: #7b959b; --color-text-inverse: #eaffff;
+  --color-border: #d1e0e3; --color-border-strong: #a6c4c9;
+  --color-accent: #078a99; --color-accent-hover: #067381; --color-accent-pressed: #075d69;
+  --color-accent-subtle: #dff3f4; --color-accent-subtle-hover: #d2edef;
+  --color-focus: #13a0ae; --color-focus-ring: rgb(19 160 174 / 14%);
+  --radius-xs: 0.1875rem; --radius-sm: 0.3125rem; --radius-md: 0.4375rem;
+  --radius-lg: 0.625rem; --radius-xl: 0.75rem;
+  --shadow-sm: 0 6px 18px rgb(4 52 60 / 8%);
+  --shadow-md: 0 18px 42px rgb(3 45 53 / 15%);
+  --shadow-lg: 0 28px 80px rgb(1 29 37 / 31%);
+}
+
+[data-theme='soft-neubrutalism'] {
+  --font-family-display: 'Arial Rounded MT Bold', 'Segoe UI Variable Display', 'Microsoft YaHei UI', sans-serif;
+  --brand-10: #201421; --brand-20: #342036; --brand-30: #4b2e4c; --brand-40: #633d65;
+  --brand-50: #7d4d7f; --brand-60: #985e9a; --brand-70: #aa70ab; --brand-80: #b982ba;
+  --brand-90: #c794c8; --brand-100: #d3a8d3; --brand-110: #debade; --brand-120: #e7cce7;
+  --brand-130: #efddef; --brand-140: #f5eaf5; --brand-150: #faf4fa; --brand-160: #fdfafd;
+  --neutral-0: #fffef9; --neutral-10: #fffaf0; --neutral-20: #fbf5e9; --neutral-30: #f3ecdf;
+  --neutral-40: #eae1d3; --neutral-50: #ded3c5; --neutral-60: #c7bbae; --neutral-70: #9f958c;
+  --neutral-80: #776f6a; --neutral-90: #5a5352; --neutral-100: #474143; --neutral-110: #383238; --neutral-120: #2f2a31;
+  --color-canvas: #efe8db; --color-surface: #fffaf0; --color-surface-subtle: #f6eedf;
+  --color-surface-raised: #fffef9; --color-surface-sunken: #ebe3d6; --color-rail: #34303a;
+  --color-text: #2f2a31; --color-text-strong: #211d23; --color-text-secondary: #6e6566;
+  --color-text-tertiary: #928889; --color-text-inverse: #fffaf0;
+  --color-border: #cfc3b7; --color-border-strong: #34303a;
+  --color-accent: #aa70ab; --color-accent-hover: #985e9a; --color-accent-pressed: #633d65;
+  --color-accent-subtle: #efddef; --color-accent-subtle-hover: #e7cce7;
+  --color-focus: #7d4d7f; --color-focus-ring: rgb(170 112 171 / 18%);
+  --color-info: #527f9c; --color-info-subtle: #dcebf3;
+  --color-warning: #876424; --color-warning-subtle: #fff0bd;
+  --color-danger: #a4535c; --color-danger-subtle: #f8dfe1;
+  --color-success: #397967; --color-success-subtle: #dcefe8;
+  --radius-xs: 0.25rem; --radius-sm: 0.375rem; --radius-md: 0.5rem;
+  --radius-lg: 0.6875rem; --radius-xl: 0.875rem;
+  --shadow-sm: 3px 3px 0 #34303a;
+  --shadow-md: 5px 5px 0 #34303a;
+  --shadow-lg: 8px 8px 0 rgb(52 48 58 / 92%);
+  --ease-standard: cubic-bezier(0.34, 1.56, 0.64, 1);
 }

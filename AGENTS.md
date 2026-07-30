@@ -5,6 +5,7 @@
 - 表单统一使用 `src/components/form-controls.tsx` 的 `AppInput`、`AppSelect`、`AppTextarea` 和 `AppCheckbox`；不要在业务组件中直接新增原生表单控件。
 - 跨 feature 的客户端类型放入 `src/app-model.ts`；邮件领域和服务端共享的数据结构继续使用 `src/types.ts`。
 - feature 可以依赖 `api.ts`、`types.ts` 和 `components/`，不要反向依赖 `App.tsx`。
+- 主题 ID 与回退由 `src/features/appearance/` 维护，Fluent 色阶与 CSS token 分别维护在 `src/theme.ts`、`src/theme.css`；新增主题必须补齐三处并同步设置偏好协议。
 - 保持现有本地优先、安全边界和响应式行为；结构重构不得改变 API 协议。
 - MCP 能力统一放在 `server/mcp/`，账户管理只允许 `mcp:full` 授权码；任何响应都不得暴露邮箱凭据、OAuth Token 或加密字段。
 - 新增邮件或账户管理行为时，同步评估 HTTP API、MCP 工具与 `docs/mcp-integration.md`，避免两个控制面能力漂移。

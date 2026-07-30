@@ -10,7 +10,7 @@
 
 HTTP 会话、API 网关 Token 与 MCP 授权码都会恢复同一个服务端用户上下文。存储层按该上下文过滤 `accounts.user_id`、`developer_tokens.user_id`、`contacts.user_id` 与 `logo_fetch_attempts.user_id`，邮件和草稿通过所属邮箱账户间接隔离。后台同步不依赖浏览器会话，而是按全局唯一邮箱账户 ID 工作；提交联系人快照时重新取得该账户的用户归属。
 
-设置中心使用同一用户上下文，将 `app_preferences_v1` 保存为 `metadata` 中的用户命名空间键。HTTP `preferences` 路由和 MCP `settings_get` / `settings_update` 因此读取各自应用账号的启动、阅读、通知、邮件展示与快捷键设置，不共享全局设置。
+设置中心使用同一用户上下文，将 `app_preferences_v1` 保存为 `metadata` 中的用户命名空间键。HTTP `preferences` 路由和 MCP `settings_get` / `settings_update` 因此读取各自应用账号的主题、启动、阅读、通知、邮件展示与快捷键设置，不共享全局设置。客户端切换主题时，`AppThemeProvider` 同步更新 Fluent 品牌色与根 `data-theme` token；本地 `imail.theme.v1` 仅用于首屏回退，服务端用户偏好仍是跨会话权威来源。主题集合包含经典薄荷清新、霓虹终端、深海蓝图和 Soft Neubrutalism。
 
 旧数据库行在迁移时先标记为 `__legacy__`。第一个成功注册的应用用户在同一事务中接管这些行，并将旧的全局 `app_preferences_v1` 设置迁入其用户命名空间，避免升级后丢失本地数据与偏好；未完成归属的旧 MCP/API 授权码不会被外部入口接受。
 

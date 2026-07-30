@@ -64,12 +64,12 @@ export function createMailMcpServer() {
   });
 
   server.registerTool('settings_get', {
-    title: '读取 iMail 设置', description: '读取启动页面、阅读、通知、邮件展示和快捷键偏好。',
+    title: '读取 iMail 设置', description: '读取主题、启动页面、阅读、通知、邮件展示和快捷键偏好。',
     inputSchema: z.object({}), annotations: { readOnlyHint: true, idempotentHint: true },
   }, async () => output({ preferences: await readAppPreferences() }));
 
   server.registerTool('settings_update', {
-    title: '更新 iMail 设置', description: '更新启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。',
+    title: '更新 iMail 设置', description: '更新主题、启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。',
     inputSchema: appPreferencesUpdateSchema, annotations: { idempotentHint: true },
   }, async (changes) => output({ preferences: await updateAppPreferences(changes) }));
 

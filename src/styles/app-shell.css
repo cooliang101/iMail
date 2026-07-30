@@ -31,6 +31,14 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .app-checkbox .fui-Checkbox__input { inset: 0; width: 22px; height: 22px; }
 
 .app-shell { height: 100dvh; display: grid; grid-template-columns: var(--layout-account-rail) var(--layout-sidebar) minmax(0, 1fr); background: var(--color-canvas); overflow: hidden; transition: grid-template-columns var(--duration-normal) var(--ease-standard); }
+[data-theme='tech'] .workspace { background-color: var(--color-canvas); background-image: linear-gradient(rgb(7 138 153 / 5%) 1px, transparent 1px), linear-gradient(90deg, rgb(7 138 153 / 5%) 1px, transparent 1px); background-size: 24px 24px; }
+[data-theme='tech'] .brand-mark { filter: drop-shadow(0 0 8px rgb(43 180 191 / 42%)); }
+[data-theme='tech'] .compose-button { box-shadow: 0 0 0 1px rgb(74 197 206 / 25%), 0 8px 24px rgb(7 138 153 / 20%); }
+[data-theme='soft-neubrutalism'] .workspace { background-color: var(--color-canvas); background-image: radial-gradient(rgb(52 48 58 / 12%) .8px, transparent .8px); background-size: 14px 14px; }
+[data-theme='soft-neubrutalism'] .account-rail,
+[data-theme='soft-neubrutalism'] .primary-sidebar { border-right: 2px solid var(--color-border-strong); }
+[data-theme='soft-neubrutalism'] .compose-button { border: 2px solid var(--color-border-strong) !important; box-shadow: 3px 3px 0 var(--color-border-strong); }
+[data-theme='soft-neubrutalism'] .compose-button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--color-border-strong); }
 .account-rail { background: var(--color-rail); padding: var(--radius-lg) var(--radius-md); display: flex; flex-direction: column; align-items: center; z-index: var(--z-sticky); }
 .brand-mark, .rail-avatar { border: 0; cursor: pointer; display: grid; place-items: center; transition: transform .15s ease, background .15s ease, opacity .15s ease; }
 .brand-logo { display: block; color: inherit; }

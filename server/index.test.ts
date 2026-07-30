@@ -75,12 +75,12 @@ async function request(route: string, init?: RequestInit) {
 describe('iMail HTTP API', () => {
   it('persists validated application preferences on the server', async () => {
     const initial = await request('/api/preferences');
-    expect(initial.body.preferences).toMatchObject({ startupView: 'inbox', defaultMessageView: 'source' });
+    expect(initial.body.preferences).toMatchObject({ theme: 'mint-fresh', startupView: 'inbox', defaultMessageView: 'source' });
     const updated = await request('/api/preferences', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startupView: 'starred', defaultMessageView: 'rendered', notificationKinds: { snooze: false } }),
+      body: JSON.stringify({ theme: 'tech', startupView: 'starred', defaultMessageView: 'rendered', notificationKinds: { snooze: false } }),
     });
-    expect(updated.body.preferences).toMatchObject({ startupView: 'starred', markReadOnOpen: true, defaultMessageView: 'rendered', notificationKinds: { unread: true, snooze: false, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
+    expect(updated.body.preferences).toMatchObject({ theme: 'tech', startupView: 'starred', markReadOnOpen: true, defaultMessageView: 'rendered', notificationKinds: { unread: true, snooze: false, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
     expect((await request('/api/preferences')).body.preferences).toEqual(updated.body.preferences);
     expect((await request('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startupView: 'invalid' }) })).response.status).toBe(400);
   });
@@ -147,8 +147,8 @@ describe('iMail HTTP API', () => {
     const policyRead = await mcp({ jsonrpc: '2.0', id: 32, method: 'tools/call', params: { name: 'sync_policy_get', arguments: { email: account.email } } });
     expect(policyRead.body.result.structuredContent.accounts[0]).toMatchObject({ accountEmail: account.email, policy: { intervalMinutes: 15 } });
     expect(JSON.stringify(policyRead.body)).not.toContain(account.encryptedSecret);
-    const settingsUpdated = await mcp({ jsonrpc: '2.0', id: 33, method: 'tools/call', params: { name: 'settings_update', arguments: { defaultMessageView: 'rendered', notificationKinds: { unread: false } } } });
-    expect(settingsUpdated.body.result.structuredContent.preferences).toMatchObject({ defaultMessageView: 'rendered', notificationKinds: { unread: false, snooze: true, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
+    const settingsUpdated = await mcp({ jsonrpc: '2.0', id: 33, method: 'tools/call', params: { name: 'settings_update', arguments: { theme: 'soft-neubrutalism', defaultMessageView: 'rendered', notificationKinds: { unread: false } } } });
+    expect(settingsUpdated.body.result.structuredContent.preferences).toMatchObject({ theme: 'soft-neubrutalism', defaultMessageView: 'rendered', notificationKinds: { unread: false, snooze: true, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
     const settingsRead = await mcp({ jsonrpc: '2.0', id: 34, method: 'tools/call', params: { name: 'settings_get', arguments: {} } });
     expect(settingsRead.body.result.structuredContent.preferences).toEqual(settingsUpdated.body.result.structuredContent.preferences);
 

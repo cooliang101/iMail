@@ -10,6 +10,7 @@ const shortcutBindingsSchema = z.object({
 });
 
 export const appPreferencesSchema = z.object({
+  theme: z.enum(['mint-fresh', 'tech', 'business-blue', 'soft-neubrutalism']),
   startupView: z.enum(['inbox', 'starred']),
   markReadOnOpen: z.boolean(),
   defaultMessageView: z.enum(['source', 'rendered']),
@@ -25,7 +26,7 @@ export const appPreferencesUpdateSchema = appPreferencesSchema.partial().extend(
 export type AppPreferences = z.infer<typeof appPreferencesSchema>;
 
 export const defaultAppPreferences: AppPreferences = {
-  startupView: 'inbox', markReadOnOpen: true, defaultMessageView: 'source',
+  theme: 'mint-fresh', startupView: 'inbox', markReadOnOpen: true, defaultMessageView: 'source',
   notificationKinds: { unread: true, snooze: true, error: true },
   shortcutBindings: {
     focusSearch: 'Mod+K', compose: 'C', sync: 'Mod+Shift+R', nextMessage: 'ArrowRight', previousMessage: 'ArrowLeft', reply: 'R', forward: 'F',
