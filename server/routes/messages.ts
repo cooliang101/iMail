@@ -1,12 +1,34 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncRoute } from '../http/async-route.js';
+import { contactLogoKey, contactRootLogoKey } from '../contact-model.js';
 import { mailboxRoleSchema, sendSchema } from '../http/schemas.js';
 import { downloadAttachment, moveRemoteMessage, sendMessage, updateRemoteMessageFlags } from '../mail.js';
 import { senderLogo } from '../sender-logo.js';
 import { getCachedMessage, getMessageStats, listCachedMessages, readStore, updateStore } from '../store.js';
 
 export const messagesRouter = Router();
+
+function logoUrl(address: string) { return `/api/contacts/logo?address=${encodeURIComponent(address)}`; }
+
+function contactView<T extends { address: string; logo?: object }>(contact: T) {
+  return { ...contact, logo: { ...contact.logo, url: logoUrl(contact.address) } };
+}
+
+async function rememberLogo(address: string, logo: Awaited<ReturnType<typeof senderLogo>>) {
+  if (!logo) return;
+  const exactKey = contactLogoKey(address);
+  const rootKey = contactRootLogoKey(address);
+  if (!exactKey || !rootKey) return;
+  await updateStore((data) => {
+    for (const contact of data.contacts ?? []) {
+      const contactExactKey = contactLogoKey(contact.address);
+      const contactRootKey = contactRootLogoKey(contact.address);
+      if (logo.key === rootKey ? contactRootKey !== rootKey : contactExactKey !== exactKey) continue;
+      contact.logo = { key: logo.key, contentType: logo.contentType, sourceUrl: logo.sourceUrl, fetchedAt: logo.fetchedAt };
+    }
+  });
+}
 
 messagesRouter.get('/messages', asyncRoute(async (req, res) => {
   const input = z.object({
@@ -20,7 +42,11 @@ messagesRouter.get('/messages', asyncRoute(async (req, res) => {
     unread: input.unread === 'true', flagged: input.flagged === 'true', hasAttachments: input.hasAttachments === 'true', mailboxRole: input.mailbox || input.mailboxName ? undefined : (input.mailboxRole ?? 'inbox'),
     snoozed: input.snoozed === 'true', label: input.label, limit: input.limit, offset: input.offset,
   });
-  const messages = result.messages.map(({ text: _text, html: _html, ...summary }) => summary);
+  const data = await readStore();
+  const contacts = new Map((data.contacts ?? []).map((contact) => [contact.address.toLocaleLowerCase(), contact]));
+  const messages = result.messages.map(({ text: _text, html: _html, ...summary }) => ({
+    ...summary, from: contactView({ ...summary.from, logo: contacts.get(summary.from.address.toLocaleLowerCase())?.logo }),
+  }));
   res.json({ messages, total: result.total, nextOffset: input.offset + messages.length, hasMore: input.offset + messages.length < result.total });
 }));
 
@@ -28,35 +54,33 @@ messagesRouter.get('/message-stats', asyncRoute(async (_req, res) => res.json(aw
 
 messagesRouter.get('/contacts', asyncRoute(async (_req, res) => {
   const data = await readStore();
-  const ownAddresses = new Set(data.accounts.map((account) => account.email.trim().toLocaleLowerCase()));
-  const contacts = new Map<string, { address: string; name: string; messageCount: number; lastContactAt: string }>();
+  res.json({ contacts: (data.contacts ?? []).map(contactView) });
+}));
 
-  for (const message of data.messages) {
-    const participants = [message.from, ...message.to];
-    const seenInMessage = new Set<string>();
-    for (const participant of participants) {
-      const address = participant.address.trim();
-      const key = address.toLocaleLowerCase();
-      if (!address || ownAddresses.has(key) || seenInMessage.has(key)) continue;
-      seenInMessage.add(key);
-      const current = contacts.get(key);
-      const isLatest = !current || message.date > current.lastContactAt;
-      contacts.set(key, {
-        address: isLatest ? address : current.address,
-        name: isLatest ? (participant.name.trim() || current?.name || '') : current.name,
-        messageCount: (current?.messageCount ?? 0) + 1,
-        lastContactAt: current && current.lastContactAt > message.date ? current.lastContactAt : message.date,
-      });
-    }
-  }
-
-  res.json({ contacts: Array.from(contacts.values()).sort((left, right) => right.lastContactAt.localeCompare(left.lastContactAt) || right.messageCount - left.messageCount || left.address.localeCompare(right.address)) });
+messagesRouter.get('/contacts/logo', asyncRoute(async (req, res) => {
+  const { address } = z.object({ address: z.string().trim().min(3).max(320) }).parse(req.query);
+  const data = await readStore();
+  const normalized = address.toLocaleLowerCase();
+  if (!(data.contacts ?? []).some((contact) => contact.address.toLocaleLowerCase() === normalized)) { res.status(404).end(); return; }
+  const message = data.messages
+    .filter((item) => item.from.address.trim().toLocaleLowerCase() === normalized)
+    .sort((left, right) => right.date.localeCompare(left.date))[0];
+  const logo = await senderLogo(message ?? { from: { name: '', address }, text: '', html: '' });
+  if (!logo) { res.setHeader('Cache-Control', 'private, max-age=3600'); res.status(404).end(); return; }
+  await rememberLogo(address, logo);
+  res.setHeader('Content-Type', logo.contentType);
+  res.setHeader('Content-Length', String(logo.content.length));
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send(logo.content);
 }));
 
 messagesRouter.get('/messages/:id', asyncRoute(async (req, res) => {
   const message = await getCachedMessage(String(req.params.id));
   if (!message) { res.status(404).json({ error: '邮件不存在' }); return; }
-  res.json({ message });
+  const data = await readStore();
+  const logo = (data.contacts ?? []).find((contact) => contact.address.toLocaleLowerCase() === message.from.address.toLocaleLowerCase())?.logo;
+  res.json({ message: { ...message, from: contactView({ ...message.from, logo }) } });
 }));
 
 messagesRouter.get('/messages/:id/sender-logo', asyncRoute(async (req, res) => {
@@ -64,6 +88,7 @@ messagesRouter.get('/messages/:id/sender-logo', asyncRoute(async (req, res) => {
   if (!message) { res.status(404).end(); return; }
   const logo = await senderLogo(message);
   if (!logo) { res.setHeader('Cache-Control', 'private, max-age=3600'); res.status(404).end(); return; }
+  await rememberLogo(message.from.address, logo);
   res.setHeader('Content-Type', logo.contentType);
   res.setHeader('Content-Length', String(logo.content.length));
   res.setHeader('Cache-Control', 'private, max-age=86400');

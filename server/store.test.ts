@@ -51,14 +51,14 @@ afterEach(async () => {
 describe('SQLiteStore', () => {
   it('initializes an empty database', async () => {
     const { store } = await temporaryStore();
-    expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [], drafts: [] });
+    expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [], drafts: [], contacts: [], logoFetchAttempts: [] });
   });
 
   it('round-trips accounts, nested messages, attachments and normalized token relations', async () => {
     const { store } = await temporaryStore();
     const expected = { accounts: [account({ lastSyncAt: '2026-07-28T02:00:00.000Z', groupIcon: 'briefcase' })], messages: [message()], tokens: [token({ lastUsedAt: '2026-07-28T03:00:00.000Z' })], drafts: [] };
     await store.update((data) => { Object.assign(data, expected); });
-    expect(await store.read()).toEqual(expected);
+    expect(await store.read()).toEqual({ ...expected, contacts: [{ address: 'sender@example.com', name: 'Sender', messageCount: 1, lastContactAt: '2026-07-28T01:00:00.000Z' }], logoFetchAttempts: [] });
   });
 
   it('persists records after closing and reopening the database', async () => {
@@ -67,6 +67,17 @@ describe('SQLiteStore', () => {
     store.close(); stores.splice(stores.indexOf(store), 1);
     const reopened = new SQLiteStore(path.join(directory, 'imail.sqlite'), legacyPath); stores.push(reopened);
     expect((await reopened.read()).accounts).toEqual([account()]);
+  });
+
+  it('materializes contacts when opening a database created before the contacts table was populated', async () => {
+    const { store, directory, legacyPath } = await temporaryStore();
+    await store.update((data) => { data.accounts = [account()]; data.messages = [message()]; });
+    store.close(); stores.splice(stores.indexOf(store), 1);
+    const databasePath = path.join(directory, 'imail.sqlite');
+    const { DatabaseSync } = await import('node:sqlite');
+    const database = new DatabaseSync(databasePath); database.exec('DELETE FROM contacts'); database.close();
+    const reopened = new SQLiteStore(databasePath, legacyPath); stores.push(reopened);
+    expect((await reopened.read()).contacts).toEqual([{ address: 'sender@example.com', name: 'Sender', messageCount: 1, lastContactAt: '2026-07-28T01:00:00.000Z' }]);
   });
 
   it('paginates cached messages and applies account, group, search and status filters', async () => {
@@ -158,13 +169,31 @@ describe('SQLiteStore', () => {
     const { store } = await temporaryStore();
     await expect(store.update((data) => { data.messages.push(message({ accountId: 'missing' })); })).rejects.toThrow();
     await expect(store.update((data) => { data.tokens.push(token({ accountIds: ['missing'] })); })).rejects.toThrow();
-    expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [], drafts: [] });
+    expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [], drafts: [], contacts: [], logoFetchAttempts: [] });
+  });
+
+  it('stores logos on contacts and shares one logo reference across a registrable domain', async () => {
+    const { store } = await temporaryStore();
+    await store.update((data) => {
+      data.accounts = [account()];
+      data.messages = [
+        message({ id: 'google-root', uid: 1, from: { name: 'Google', address: 'noreply-accounts@google.com' } }),
+        message({ id: 'google-accounts', uid: 2, from: { name: 'Google Accounts', address: 'no-reply@accounts.google.com' } }),
+      ];
+    });
+    await store.update((data) => {
+      const contact = data.contacts?.find((item) => item.address === 'noreply-accounts@google.com');
+      if (contact) contact.logo = { key: 'domain:google.com', contentType: 'image/png', sourceUrl: 'https://google.com/favicon.ico', fetchedAt: '2026-07-30T00:00:00.000Z' };
+    });
+    const contacts = (await store.read()).contacts ?? [];
+    expect(contacts).toHaveLength(2);
+    expect(contacts.map((contact) => contact.logo?.key)).toEqual(['domain:google.com', 'domain:google.com']);
   });
 
   it('migrates legacy JSON once and preserves it as a migrated backup', async () => {
     const legacy = { accounts: [account()], messages: [message()], tokens: [token()], drafts: [] };
     const { store, directory, legacyPath } = await temporaryStore(legacy);
-    expect(await store.read()).toEqual(legacy);
+    expect(await store.read()).toEqual({ ...legacy, contacts: [{ address: 'sender@example.com', name: 'Sender', messageCount: 1, lastContactAt: '2026-07-28T01:00:00.000Z' }], logoFetchAttempts: [] });
     await expect(readFile(`${legacyPath}.migrated`, 'utf8')).resolves.toContain('owner@example.com');
     store.close(); stores.splice(stores.indexOf(store), 1);
     await writeFile(legacyPath, JSON.stringify({ accounts: [], messages: [], tokens: [] }), 'utf8');

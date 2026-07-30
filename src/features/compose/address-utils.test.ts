@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { invalidAddresses, matchingContacts, selectContact, validAddresses } from './address-utils';
 
 const contacts = [
-  { address: 'alice@example.com', name: 'Alice', messageCount: 4, lastContactAt: '2026-07-29T00:00:00.000Z' },
-  { address: 'bob@example.com', name: 'Bob', messageCount: 2, lastContactAt: '2026-07-28T00:00:00.000Z' },
+  { address: 'alice@example.com', name: 'Alice', messageCount: 4, lastContactAt: '2026-07-29T00:00:00.000Z', logo: { url: '/api/contacts/logo?address=alice%40example.com' } },
+  { address: 'bob@example.com', name: 'Bob', messageCount: 2, lastContactAt: '2026-07-28T00:00:00.000Z', logo: { url: '/api/contacts/logo?address=bob%40example.com' } },
 ];
 
 describe('compose address helpers', () => {

@@ -73,6 +73,29 @@ export type CachedMessage = {
   snoozedUntil?: string;
 };
 
+export type ContactLogo = {
+  key: string;
+  contentType: string;
+  sourceUrl: string;
+  fetchedAt: string;
+};
+
+export type MailContact = {
+  address: string;
+  name: string;
+  messageCount: number;
+  lastContactAt: string;
+  logo?: ContactLogo;
+};
+
+export type LogoFetchAttempt = {
+  target: string;
+  domainKey: string;
+  status: 'success' | 'failed';
+  detail: string;
+  attemptedAt: string;
+};
+
 export type Draft = {
   id: string;
   accountId: string;
@@ -113,4 +136,6 @@ export type StoreData = {
   messages: CachedMessage[];
   tokens: DeveloperToken[];
   drafts?: Draft[];
+  contacts?: MailContact[];
+  logoFetchAttempts?: LogoFetchAttempt[];
 };

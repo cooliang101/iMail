@@ -1,7 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
-import { UserCircle } from '@phosphor-icons/react';
 import type { Contact } from '../../types';
 import { AppInput } from '../../components/form-controls';
+import { SenderAvatar } from '../../components/shared';
 import { matchingContacts, selectContact } from './address-utils';
 
 export function AddressField({ label, value, contacts, placeholder, onChange }: {
@@ -38,7 +38,7 @@ export function AddressField({ label, value, contacts, placeholder, onChange }: 
     <AppInput type="text" inputMode="email" autoComplete="off" value={value} onChange={(event) => { onChange(event.target.value); setActiveIndex(0); }} onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => setFocused(false), 120)} onKeyDown={onKeyDown} placeholder={placeholder} aria-label={label} aria-autocomplete="list" aria-expanded={open} />
     {open && <span className="contact-suggestions" role="listbox" aria-label={`${label}联系人`}>
       {suggestions.map((contact, index) => <button key={contact.address} type="button" role="option" aria-selected={index === activeIndex} className={index === activeIndex ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(contact.address)}>
-        <i><UserCircle size={22} weight="duotone" /></i><span><strong>{contact.name || contact.address}</strong>{contact.name && <small>{contact.address}</small>}</span><em>{contact.messageCount} 封往来</em>
+        <SenderAvatar logo={contact.logo} name={contact.name || contact.address} color="#2b8a78" /><span><strong>{contact.name || contact.address}</strong>{contact.name && <small>{contact.address}</small>}</span><em>{contact.messageCount} 封往来</em>
       </button>)}
     </span>}
   </span></div>;

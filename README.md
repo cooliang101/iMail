@@ -23,6 +23,8 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - 稍后处理，到期前从收件箱隐藏并可随时提前恢复
 - 通知中心集中显示账户连接异常、稍后返回和最近未读邮件
 - 附件元数据随正文缓存，文件内容点击时才从源 IMAP 按需下载
+- 联系人档案与邮件发件人共用 SQLite 数据；网站 Logo 获取后作为联系人字段保存，并在邮件列表、阅读页和写信建议中复用
+- 发件人 Logo 使用“子域优先、可注册主域兜底”的两级缓存；子域成功会补齐一级域，子域未命中会直接引用一级域并更新联系人，不触发额外采集
 - 短期开发 Token，支持指定邮箱、最小权限、自动过期和即时撤销
 - 面向本地程序的账户、邮件读取和邮件发送 API
 - MCP Streamable HTTP 与 stdio 接入，可信 Agent 可用短期授权码管理账户、邮件、附件、草稿、标签和同步
@@ -90,7 +92,7 @@ Yahoo Developer Network：
 
 可用的公开回调地址、scope 与当前配置状态可通过 `GET /api/providers` 查看。生产环境必须设置 HTTPS 的 `OAUTH_CALLBACK_BASE_URL` 和 `FRONTEND_URL`。
 
-账户、邮件缓存、草稿、标签、稍后处理状态和开发 Token 保存在 `.data/imail.sqlite`。附件文件不长期写入数据库，下载时按需从源 IMAP 获取。凭据字段仍使用 AES-256-GCM 加密，加密主密钥默认生成在 `.data/master.key`。也可在 `.env` 中配置数据目录和 32 字节密钥的 64 位十六进制值：
+账户、邮件缓存、联系人档案、Logo 采集记录、草稿、标签、稍后处理状态和开发 Token 保存在 `.data/imail.sqlite`。其中 `contacts` 保存统一联系人资料，`logo_fetch_attempts` 保存不可自动重试的采集审计。Logo 图片内容保存在 `.data/sender-logos/`，联系人记录保存其共享资源键、来源和获取时间；附件文件不长期写入数据库，下载时按需从源 IMAP 获取。凭据字段仍使用 AES-256-GCM 加密，加密主密钥默认生成在 `.data/master.key`。也可在 `.env` 中配置数据目录和 32 字节密钥的 64 位十六进制值：
 
 ```env
 IMAIL_DATA_DIR=.data
@@ -309,6 +311,8 @@ server/mcp/          MCP HTTP/stdio 传输、授权与完整邮箱工具
 server/mail/         IMAP/SMTP 连接、同步、远程操作与发送
 server/oauth/        OAuth 配置、授权流程、身份校验与 Token 刷新
 server/storage/      SQLite schema、数据映射与事务写入
+server/contact-model.ts 联系人聚合与可注册主域 Logo 归并
+server/sender-logo.ts 安全 Logo 发现、缓存与永久采集审计
 server/crypto.ts     本地凭据加密
 server/providers.ts  服务商预设
 .data/               本地数据与密钥，不进入 Git

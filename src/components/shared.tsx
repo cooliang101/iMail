@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { EnvelopeSimple, MicrosoftOutlookLogo } from '@phosphor-icons/react';
 import { siGmail, siIcloud, siQq } from 'simple-icons';
 import type { ProviderId } from '../types';
+import type { ContactLogo } from '../types';
 
 export const providerLabel: Record<ProviderId, string> = { outlook: 'Outlook', gmail: 'Gmail', qq: 'QQ', yahoo: 'Yahoo', hotmail: 'Hotmail', icloud: 'iCloud', custom: 'IMAP' };
 export const providers: Array<{ id: ProviderId; name: string; oauthKey?: 'google' | 'microsoft' | 'yahoo'; helpUrl?: string }> = [
@@ -32,11 +33,12 @@ export function initials(value: string) {
   return (parts.length > 1 ? parts.map((part) => part[0]).join('') : value.slice(0, 2)).toUpperCase();
 }
 
-export function SenderAvatar({ messageId, name, color, large = false }: { messageId: string; name: string; color: string; large?: boolean }) {
+export function SenderAvatar({ logo, name, color, large = false }: { logo: ContactLogo; name: string; color: string; large?: boolean }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [logo.url]);
   return <span className={`sender-avatar ${large ? 'large' : ''}`} style={{ '--avatar-color': color } as CSSProperties}>
     {initials(name)}
-    {!failed && <img src={`/api/messages/${encodeURIComponent(messageId)}/sender-logo`} alt="" loading="lazy" onError={() => setFailed(true)} />}
+    {!failed && <img src={logo.url} alt="" loading="lazy" onError={() => setFailed(true)} />}
   </span>;
 }
 

@@ -10,7 +10,7 @@ import type { CachedMessage, StoreData } from './types.js';
 
 export type { MessageQuery, MessageStats } from './storage/models.js';
 
-const initial: StoreData = { accounts: [], messages: [], tokens: [], drafts: [] };
+const initial: StoreData = { accounts: [], messages: [], tokens: [], drafts: [], contacts: [], logoFetchAttempts: [] };
 
 export class SQLiteStore {
   private readonly db: DatabaseSync;
@@ -23,6 +23,7 @@ export class SQLiteStore {
     if (databasePath !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     ensureSchema(this.db);
     this.migrateLegacyJson();
+    this.materializeContactsForExistingDatabase();
   }
 
   private migrateLegacyJson() {
@@ -38,10 +39,18 @@ export class SQLiteStore {
       messages: Array.isArray(parsed.messages) ? parsed.messages : [],
       tokens: Array.isArray(parsed.tokens) ? parsed.tokens : [],
       drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+      contacts: Array.isArray(parsed.contacts) ? parsed.contacts : [],
+      logoFetchAttempts: Array.isArray(parsed.logoFetchAttempts) ? parsed.logoFetchAttempts : [],
     };
     replaceData(this.db, data, new Date().toISOString());
     const migratedPath = `${this.legacyJsonPath}.migrated`;
     if (!existsSync(migratedPath)) renameSync(this.legacyJsonPath, migratedPath);
+  }
+
+  private materializeContactsForExistingDatabase() {
+    const counts = this.db.prepare('SELECT (SELECT count(*) FROM messages) AS messages, (SELECT count(*) FROM contacts) AS contacts').get() as Row;
+    if (integer(counts, 'messages') === 0 || integer(counts, 'contacts') > 0) return;
+    replaceData(this.db, readSnapshot(this.db));
   }
 
   private all(statement: StatementSync): Row[] { return statement.all() as Row[]; }
