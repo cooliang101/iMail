@@ -5,10 +5,10 @@ import type { ProviderId } from '../types';
 
 export const providerLabel: Record<ProviderId, string> = { outlook: 'Outlook', gmail: 'Gmail', qq: 'QQ', yahoo: 'Yahoo', hotmail: 'Hotmail', icloud: 'iCloud', custom: 'IMAP' };
 export const providers: Array<{ id: ProviderId; name: string; oauthKey?: 'google' | 'microsoft' | 'yahoo'; helpUrl?: string }> = [
-  { id: 'outlook', name: 'Outlook / Microsoft 365', oauthKey: 'microsoft' }, { id: 'gmail', name: 'Gmail', oauthKey: 'google' },
+  { id: 'outlook', name: 'Outlook', oauthKey: 'microsoft' }, { id: 'gmail', name: 'Gmail', oauthKey: 'google' },
   { id: 'qq', name: 'QQ 邮箱' }, { id: 'yahoo', name: 'Yahoo', oauthKey: 'yahoo' },
-  { id: 'hotmail', name: 'Hotmail / Outlook.com', oauthKey: 'microsoft' }, { id: 'icloud', name: 'iCloud' },
-  { id: 'custom', name: '其他 IMAP' },
+  { id: 'hotmail', name: 'Hotmail', oauthKey: 'microsoft' }, { id: 'icloud', name: 'iCloud' },
+  { id: 'custom', name: '更多邮箱' },
 ];
 
 const simpleProviderIcons: Partial<Record<ProviderId, { path: string; hex: string; title: string }>> = {
@@ -22,6 +22,7 @@ export function ProviderIcon({ provider }: { provider: ProviderId }) {
   if (provider === 'yahoo') return <span className="provider-yahoo-glyph" aria-label="Yahoo Logo">Y!</span>;
   return <EnvelopeSimple weight="duotone" aria-label="IMAP 邮箱" />;
 }
+
 
 export function AccountProviderMark({ provider, className = '' }: { provider: ProviderId; className?: string }) {
   return <span className={`account-provider-mark provider-${provider} ${className}`} aria-hidden="true"><ProviderIcon provider={provider} /></span>;
@@ -66,4 +67,3 @@ export function Overlay({ children, onClose, wide = false, dialogClassName = '' 
     <section ref={dialogRef} className={`modal ${wide ? 'modal-wide' : ''} ${dialogClassName}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><span id={titleId} className="sr-only">iMail 对话框</span>{children}</section>
   </div>;
 }
-

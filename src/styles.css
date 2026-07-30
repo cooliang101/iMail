@@ -230,13 +230,13 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .modal-header > div > span, .token-workspace header > div > span { color: var(--accent); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; }
 .modal-header h2 { font: 700 24px/1.2 'Segoe UI Variable Display'; letter-spacing: -.04em; margin: 5px 0; }.modal-header p { color: #7e8e89; font-size: 11px; margin: 0; }
 .modal-header > button { border: 0; background: #edf3f1; border-radius: 9px; padding: 7px; display: grid; cursor: pointer; }
-.provider-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
-.provider-grid button { min-height: 70px; border: 1px solid #dfe8e5; background: #fff; border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; position: relative; font-size: 10px; }
-.provider-grid button:hover, .provider-grid button.selected { border-color: #5db6a3; background: #edf8f5; }.provider-grid button > svg { position: absolute; right: 7px; top: 7px; color: var(--accent); }
+.provider-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin-bottom: 22px; }
+.provider-grid button { aspect-ratio: 1; min-width: 0; border: 1px solid #dfe8e5; background: #fff; border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; position: relative; padding: 10px 6px; color: #4f625c; font-size: 10px; font-weight: 650; transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease; }
+.provider-grid button:hover { border-color: #a8cec5; background: #f7fbfa; box-shadow: 0 8px 22px #173f3512; transform: translateY(-2px); }.provider-grid button.selected { border-color: #5db6a3; background: #edf8f5; box-shadow: inset 0 0 0 1px #5db6a333; }.provider-grid button:active { transform: translateY(0) scale(.98); }.provider-grid button:focus-visible { outline: 3px solid #5db6a333; outline-offset: 2px; }
 .provider-grid button:disabled { cursor: wait; opacity: .58; }
-.provider-grid .oauth-chip { position: absolute; left: 6px; top: 6px; border-radius: 5px; padding: 2px 4px; background: #e5f3ef; color: #277966; font-size: 6px; font-weight: 700; letter-spacing: .04em; }
-.provider-mark { width: 27px; height: 27px; border-radius: 8px; display: grid; place-items: center; font: 700 13px 'Segoe UI Variable Display'; background: #e9f0ee; color: #445b55; font-style: normal; }
-.provider-mark svg { width: 18px; height: 18px; display: block; }
+.provider-grid .provider-selected-check { position: absolute; right: 8px; top: 8px; border-radius: 50%; padding: 2px; background: var(--accent); color: #fff; }
+.provider-mark { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font: 800 18px 'Segoe UI Variable Display'; background: #e9f0ee; color: #445b55; font-style: normal; transition: transform .18s ease; }
+.provider-grid button:hover .provider-mark { transform: scale(1.04); }.provider-mark svg { width: 29px; height: 29px; display: block; }
 .provider-yahoo-glyph { color: #6001d2; font: 800 13px/1 'Segoe UI Variable Display', sans-serif; letter-spacing: -.08em; }
 .provider-outlook { background: #e5f1fa; color: #1677b8; }.provider-gmail { background: #fae9e6; color: #c44835; }.provider-qq { background: #e6f4fa; color: #1686b7; }.provider-yahoo { background: #f0e9fa; color: #7650a8; }.provider-hotmail { background: #e7effa; color: #3e6eb4; }.provider-icloud { background: #edf0f2; color: #67757b; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
@@ -359,7 +359,7 @@ body { font-size: 14px; }
 .modal-wide { width: min(760px, 100%); }
 .modal-header > div > span, .token-workspace header > div > span { font-size: 11px; }
 .modal-header h2 { font-size: 28px; }.modal-header p { font-size: 13px; line-height: 1.55; }
-.provider-grid button { min-height: 78px; font-size: 12px; }.provider-grid .oauth-chip { font-size: 8px; }.provider-mark { width: 32px; height: 32px; }.provider-mark svg { width: 20px; height: 20px; }
+.provider-grid button { font-size: 12px; }.provider-mark { width: 48px; height: 48px; }.provider-mark svg { width: 29px; height: 29px; }
 .form-grid label > span, .token-modal > label > span, fieldset legend { font-size: 12px; }
 .form-grid .app-input, .form-grid .app-select, .compose-row .app-input, .compose-row .app-select, .token-modal .app-input, .token-modal .app-select { height: 44px; font-size: 13px; }
 .provider-tip strong, .oauth-status strong, .oauth-waiting strong { font-size: 13px; }

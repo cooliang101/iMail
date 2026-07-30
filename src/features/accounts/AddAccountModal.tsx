@@ -5,7 +5,7 @@ import { api } from '../../api';
 import { credentialGuideFor, oauthCallbackOrigins } from '../../provider-guides';
 import type { Account, ProviderId } from '../../types';
 import type { Notice } from '../../app-model';
-import { AccountProviderMark, Overlay, ProviderIcon, providerLabel, providers } from '../../components/shared';
+import { Overlay, ProviderIcon, providerLabel, providers } from '../../components/shared';
 import { AppInput, AppSelect, type AppSelectOption } from '../../components/form-controls';
 
 const defaultWorkspaceNames = ['工作', '个人', '对外支持', '开发测试', '同学联系'];
@@ -37,7 +37,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
         setOauthCatalog(result.oauth);
         oauthOriginsRef.current = oauthCallbackOrigins(result.oauth.map((item) => item.redirectUri), window.location.origin);
       })
-      .catch((value) => setError(value instanceof Error ? value.message : '无法读取 OAuth 配置'));
+      .catch(() => setError('暂时无法读取快捷登录配置，请稍后重试。'));
   }, []);
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
       popupRef.current = null;
       if (event.data.success) void onAddedRef.current(event.data.warning ? { warning: event.data.warning } : undefined);
       else {
-        void reconcileOAuthAccount(event.data.message || 'OAuth 登录未完成');
+        void reconcileOAuthAccount(event.data.message || '邮箱登录未完成');
       }
     };
     const watchPopup = window.setInterval(() => {
@@ -108,7 +108,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
         popup.location.replace(result.authorizationUrl);
       } catch (value) {
         popup.close(); popupRef.current = null; setBusy(false);
-        setError(value instanceof Error ? value.message : '无法开始 OAuth 登录');
+        setError(value instanceof Error ? value.message : '无法打开邮箱登录，请稍后重试。');
       }
       return;
     }
@@ -119,16 +119,16 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
     finally { setBusy(false); }
   }
   return <Overlay onClose={onClose} wide><form className="account-modal" onSubmit={submit}>
-    <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>优先使用服务商安全登录，iMail 不会接触你的网页登录密码。</p></div><button type="button" aria-label="关闭添加邮箱窗口" onClick={onClose}><X size={21} /></button></div>
-    <div className="provider-grid">{providers.map((item) => <button type="button" key={item.id} disabled={busy} className={provider === item.id ? 'selected' : ''} onClick={() => { const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(item.id); setManualMode(item.id === 'yahoo' && status?.configured === false); setError(''); }}><i className={`provider-mark provider-${item.id}`}><ProviderIcon provider={item.id} /></i><span>{item.name}</span>{item.oauthKey && <small className="oauth-chip">OAuth</small>}{provider === item.id && <Check size={15} weight="bold" />}</button>)}</div>
+    <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>选择你的邮箱平台，登录后即可在 iMail 中统一收发邮件。</p></div><button type="button" aria-label="关闭添加邮箱窗口" onClick={onClose}><X size={21} /></button></div>
+    <div className="provider-grid" aria-label="选择邮箱平台">{providers.map((item) => <button type="button" key={item.id} disabled={busy} aria-pressed={provider === item.id} className={provider === item.id ? 'selected' : ''} onClick={() => { const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(item.id); setManualMode(item.id === 'yahoo' && status?.configured === false); setError(''); }}><i className={`provider-mark provider-${item.id}`}><ProviderIcon provider={item.id} /></i><span>{item.name}</span>{provider === item.id && <Check className="provider-selected-check" size={16} weight="bold" />}</button>)}</div>
     {usesOAuth ? <>
       <div className="oauth-panel">
-        <div className={`oauth-status ${oauthStatus?.configured ? 'ready' : 'setup'}`}><Key size={21} weight="duotone" /><span><strong>{providerLabel[provider]} 安全登录</strong><small>{oauthStatus?.configured ? 'OAuth 已配置。登录将在服务商官方页面完成，并自动安全刷新授权。' : oauthStatus?.configurationHint || '正在读取 OAuth 配置…'}</small></span></div>
+        <div className={`oauth-status ${oauthStatus?.configured ? 'ready' : 'setup'}`}><Key size={21} weight="duotone" /><span><strong>使用 {providerLabel[provider]} 登录</strong><small>{oauthStatus?.configured ? '你将在服务商官方页面完成登录，iMail 不会接触你的网页登录密码。' : '快捷登录暂时不可用，你可以稍后重试或选择其他连接方式。'}</small></span></div>
         <div className="form-grid oauth-profile"><label><span>显示名称（可选）</span><AppInput name="displayName" placeholder="默认使用账户名称" /></label><label><span>加入工作空间</span><AppSelect name="group" defaultValue="工作" options={workspaceOptions} /></label></div>
-        {provider === 'yahoo' && <div className="oauth-review"><WarningCircle size={17} /><span>Yahoo 的 mail-r/mail-w 权限只对审核通过的应用开放。</span></div>}
+        {provider === 'yahoo' && <div className="oauth-review"><WarningCircle size={17} /><span>若快捷登录暂不可用，可改用 Yahoo 应用专用密码。</span></div>}
         {busy && <div className="oauth-waiting"><span><strong>正在等待 {providerLabel[provider]} 授权</strong><small>如果服务商页面显示配置错误，请关闭授权窗口或结束等待，修正后可以直接重试。</small></span><button type="button" onClick={cancelOAuth}>结束等待</button></div>}
       </div>
-      {credentialGuide && <button type="button" className="manual-switch" onClick={() => setManualMode(true)}>无法使用 OAuth？改用官方应用专用密码</button>}
+      {credentialGuide && <button type="button" className="manual-switch" onClick={() => setManualMode(true)}>改用应用专用密码</button>}
     </> : <>
       {credentialGuide && <section className="credential-guide">
         <div className="credential-guide-heading"><Key size={21} weight="duotone" /><span><strong>{credentialGuide.title}</strong><small>{credentialGuide.description}</small></span><a href={credentialGuide.helpUrl} target="_blank" rel="noreferrer">{credentialGuide.actionLabel}<ArrowRight size={14} /></a></div>
@@ -136,7 +136,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
       </section>}
       <div className="form-grid"><label><span>邮箱地址</span><AppInput name="email" type="email" placeholder="name@example.com" required /></label><label><span>显示名称</span><AppInput name="displayName" placeholder="例如：工作邮箱" required /></label><label><span>工作空间</span><AppSelect name="group" defaultValue="工作" options={workspaceOptions} /></label><label><span>{credentialGuide?.secretLabel || '应用专用密码 / 授权码'}</span><AppInput name="password" type="password" placeholder={credentialGuide?.secretPlaceholder || '不会以明文保存'} required /></label></div>
       {provider !== 'custom' && !credentialGuide && <div className="provider-tip"><Key size={19} /><span><strong>{providerLabel[provider]} 安全提示</strong><small>请使用服务商提供的专用凭据，不要填写网页登录密码。</small></span></div>}
-      {selectedProvider.oauthKey && oauthStatus?.configured && <button type="button" className="manual-switch" onClick={() => setManualMode(false)}>返回 {providerLabel[provider]} OAuth 安全登录</button>}
+      {selectedProvider.oauthKey && oauthStatus?.configured && <button type="button" className="manual-switch" onClick={() => setManualMode(false)}>返回 {providerLabel[provider]} 快捷登录</button>}
     </>}
     {provider === 'custom' && <div className="advanced-settings"><button type="button" onClick={() => setAdvanced(!advanced)}><Gear size={17} />IMAP / SMTP 设置<CaretDown size={15} /></button>{(advanced || provider === 'custom') && <div className="form-grid"><label><span>IMAP 主机</span><AppInput name="imapHost" placeholder="imap.example.com" required /></label><label><span>IMAP 端口</span><AppInput name="imapPort" type="number" defaultValue="993" required /></label><label><span>SMTP 主机</span><AppInput name="smtpHost" placeholder="smtp.example.com" required /></label><label><span>SMTP 端口</span><AppInput name="smtpPort" type="number" defaultValue="465" required /></label></div>}</div>}
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
