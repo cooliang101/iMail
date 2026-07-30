@@ -12,7 +12,7 @@ export type SettingsTab = 'general' | 'accounts' | 'sync' | 'shortcuts' | 'notif
 
 const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof Gear }> = [
   { id: 'general', label: '通用', detail: '启动与阅读行为', icon: Gear },
-  { id: 'accounts', label: '邮箱账号', detail: '连接、授权与工作空间', icon: Envelope },
+  { id: 'accounts', label: '邮箱管理', detail: '连接、授权与工作空间', icon: Envelope },
   { id: 'sync', label: '同步', detail: '频率、范围与状态', icon: SlidersHorizontal },
   { id: 'shortcuts', label: '快捷键', detail: '键盘操作与绑定', icon: Keyboard },
   { id: 'notifications', label: '通知', detail: '选择需要关注的动态', icon: Bell },
@@ -35,9 +35,11 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
   const [activeTab, setActiveTab] = useState(initialTab);
   return <Overlay onClose={onClose} wide dialogClassName="settings-shell">
     <section className="settings-modal">
-      <header className="settings-titlebar"><div><span>iMail 偏好设置</span><h1>设置</h1></div><button type="button" aria-label="关闭设置" onClick={onClose}><X size={21} /></button></header>
       <div className="settings-layout">
-        <nav className="settings-tabs" aria-label="设置分类">{tabs.map((tab) => { const Icon = tab.icon; return <button type="button" key={tab.id} className={activeTab === tab.id ? 'is-active' : ''} aria-current={activeTab === tab.id ? 'page' : undefined} onClick={() => setActiveTab(tab.id)}><Icon size={18} /><span><strong>{tab.label}</strong><small>{tab.detail}</small></span></button>; })}</nav>
+        <aside className="settings-sidebar">
+          <header className="settings-sidebar-header"><div><span>iMail 偏好设置</span><h1>设置</h1></div><button type="button" aria-label="关闭设置" onClick={onClose}><X size={21} /></button></header>
+          <nav className="settings-tabs" aria-label="设置分类">{tabs.map((tab) => { const Icon = tab.icon; return <button type="button" key={tab.id} className={activeTab === tab.id ? 'is-active' : ''} aria-current={activeTab === tab.id ? 'page' : undefined} onClick={() => setActiveTab(tab.id)}><Icon size={18} /><span><strong>{tab.label}</strong><small>{tab.detail}</small></span></button>; })}</nav>
+        </aside>
         <main className="settings-content">
           {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
           {(activeTab === 'accounts' || activeTab === 'sync') && <AccountSettingsPanel accounts={accounts} section={activeTab} onAddAccount={onAddAccount} onReload={onReload} setNotice={setNotice} />}
@@ -107,8 +109,8 @@ function ShortcutPanel({ bindings, onChange }: { bindings: ShortcutBindings; onC
     if (conflict) { setError(`“${shortcutLabel(candidate)}”已用于“${conflict.label}”`); return; }
     setDraft((current) => ({ ...current, [actionId]: candidate })); setRecording(null); setError('');
   }
-  return <section className="settings-feature-panel"><header className="settings-panel-heading"><div><span>键盘效率</span><h2>快捷键</h2><p>点击绑定后按下新组合键；Backspace 清除，Esc 取消录制。</p></div><button type="button" onClick={() => { setDraft({ ...defaultShortcutBindings }); setError(''); }}><ArrowCounterClockwise size={15} />恢复默认</button></header>
+  return <section className="settings-feature-panel"><header className="settings-panel-heading"><div><span>键盘效率</span><h2>快捷键</h2><p>点击绑定后按下新组合键；Backspace 清除，Esc 取消录制。</p></div><div className="settings-heading-actions"><button type="button" onClick={() => { setDraft({ ...defaultShortcutBindings }); setError(''); }}><ArrowCounterClockwise size={15} />恢复默认</button><Button appearance="primary" onClick={() => onChange(draft)}>保存快捷键</Button></div></header>
     <div className="shortcut-groups">{(['global', 'mail'] as const).map((scope) => <section key={scope}><h3>{scope === 'global' ? '全局操作' : '邮件操作'}</h3><div className="shortcut-list">{shortcutDefinitions.filter((item) => item.scope === scope).map((item) => <div className="shortcut-row" key={item.id}><i><Keyboard size={18} /></i><span><strong>{item.label}</strong><small>{item.description}</small></span><button type="button" className={recording === item.id ? 'is-recording' : ''} onClick={() => { setRecording(item.id); setError(''); }} onKeyDown={(event) => capture(event, item.id)}>{recording === item.id ? '请按键…' : <kbd>{shortcutLabel(draft[item.id])}</kbd>}</button></div>)}</div></section>)}</div>
-    {error && <div className="shortcut-error">{error}</div>}<footer className="settings-sticky-actions"><Button appearance="primary" onClick={() => onChange(draft)}>保存快捷键</Button></footer>
+    {error && <div className="shortcut-error">{error}</div>}
   </section>;
 }
