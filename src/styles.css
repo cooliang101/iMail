@@ -221,9 +221,6 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .reader-actions div { display: flex; gap: 3px; }.reader-actions button, .sender-line button { border: 0; background: transparent; color: var(--icon-color, var(--color-text-secondary)); border-radius: 8px; padding: 7px; cursor: pointer; transition: color .16s ease, background .16s ease, transform .16s ease; }
 .reader-actions button:hover, .sender-line button:hover { background: var(--icon-surface, var(--color-surface-sunken)); transform: translateY(-1px); }
 .reader-actions button:disabled { opacity: .28; cursor: default; background: transparent; }
-.reader-actions .reader-body-view-toggle { min-width: 92px; justify-content: center; gap: 6px; margin-right: 5px; border: 1px solid var(--color-border); padding: 6px 9px; background: var(--color-surface-subtle); color: var(--color-accent-pressed); font: 650 10px/1.2 var(--font-family-ui); }
-.reader-actions .reader-body-view-toggle:hover { border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border)); background: var(--color-accent-subtle); }
-.reader-actions .reader-body-view-toggle:active { transform: translateY(0) scale(.98); }
 .reader-scroll { min-height: 0; flex: 1; overflow: auto; scrollbar-gutter: stable; }
 .reader-content { width: min(80%, var(--content-reading-width)); margin: 0 auto; padding: 31px 0 50px; }
 .reader-context { display: flex; gap: 7px; align-items: center; font-size: 9px; color: var(--color-text-tertiary); }
@@ -236,7 +233,10 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .reader-content h1 { font: 700 clamp(22px, 2.5vw, 31px)/1.25 var(--font-family-display); letter-spacing: -.045em; margin: 14px 0 24px; color: var(--color-text-strong); }
 .sender-line { display: grid; grid-template-columns: 39px minmax(0, 1fr) repeat(5, auto); align-items: center; gap: 6px; padding-bottom: 22px; border-bottom: 1px solid var(--color-canvas); }
 .sender-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }.sender-copy strong, .sender-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.sender-line strong { font-size: 11px; }.sender-line small { color: var(--color-text-tertiary); font-size: 9px; }.sender-line time { margin-right: 4px; color: var(--color-text-tertiary); font-size: 9px; white-space: nowrap; }
-.mail-body { color: var(--neutral-100); font-size: 13px; line-height: 1.75; padding: 24px 0; min-height: 190px; }.mail-body p { margin: 0 0 7px; }
+.mail-body { position: relative; color: var(--neutral-100); font-size: 13px; line-height: 1.75; padding: 24px 0; min-height: 190px; }.mail-body.has-view-toggle { padding-top: 52px; }.mail-body p { margin: 0 0 7px; }
+.mail-body-view-action { position: absolute; top: 8px; right: 0; display: flex; justify-content: flex-end; }
+.mail-body-view-action button { min-width: 92px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--color-border); border-radius: 8px; padding: 7px 10px; background: var(--color-surface-subtle); color: var(--color-accent-pressed); font: 650 10px/1.2 var(--font-family-ui); cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.mail-body-view-action button:hover { border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border)); background: var(--color-accent-subtle); transform: translateY(-1px); }.mail-body-view-action button:active { transform: scale(.98); }
 .mail-plain-body { max-width: 72ch; color: var(--neutral-90); font: 400 14px/1.85 var(--font-family-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
 .mail-html-stage { position: relative; min-height: 190px; }
 .mail-html-stage.is-ready { min-height: 0; }
@@ -668,7 +668,7 @@ body { line-height: var(--leading-copy); text-rendering: optimizeLegibility; -we
   .mobile-account-controls strong { font-size: 13px; }.mobile-account-controls small { color: var(--color-text-tertiary); font-size: 12px; line-height: 1.45; }
   .mobile-account-controls > div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .mobile-account-controls > div button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; border: 1px solid var(--color-border); border-radius: 9px; background: #fff; color: var(--neutral-90); font-size: 11px; }
-  .reader-content { width: 100%; padding: 24px 20px 44px; }.reader-actions { padding-inline: 10px; }.reader-actions .reader-body-view-toggle { min-width: 0; }.reader-actions .reader-body-view-toggle span { display: none; }.sender-line { gap: 4px; }.sender-line button { padding: 6px; }
+  .reader-content { width: 100%; padding: 24px 20px 44px; }.reader-actions { padding-inline: 10px; }.mail-body-view-action button { min-width: 0; }.mail-body-view-action button span { display: none; }.sender-line { gap: 4px; }.sender-line button { padding: 6px; }
 }
 @media (max-width: 650px) {
   .credential-guide ol { grid-template-columns: 1fr; }
