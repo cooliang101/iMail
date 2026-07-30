@@ -218,6 +218,10 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .sender-line { display: grid; grid-template-columns: 39px minmax(0, 1fr) repeat(5, auto); align-items: center; gap: 6px; padding-bottom: 22px; border-bottom: 1px solid #edf2f0; }
 .sender-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }.sender-copy strong, .sender-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.sender-line strong { font-size: 11px; }.sender-line small { color: #91a09c; font-size: 9px; }.sender-line time { margin-right: 4px; color: #8a9894; font-size: 9px; white-space: nowrap; }
 .mail-body { color: #384944; font-size: 13px; line-height: 1.75; padding: 24px 0; min-height: 190px; }.mail-body p { margin: 0 0 7px; }
+.mail-body-view-switch { width: fit-content; display: flex; gap: 2px; margin: 0 0 18px auto; border: 1px solid #dfe9e6; border-radius: 9px; padding: 2px; background: #f5f9f8; }
+.mail-body-view-switch button { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 6px; padding: 6px 9px; background: transparent; color: #71827d; font: 650 10px/1.2 'Segoe UI Variable Text'; cursor: pointer; transition: background .16s ease, color .16s ease, box-shadow .16s ease; }
+.mail-body-view-switch button:hover { color: #286f60; }.mail-body-view-switch button.is-active { background: #fff; color: #176e5d; box-shadow: 0 1px 3px #173d3417; }
+.mail-source-body { max-height: 65vh; overflow: auto; margin: 0; border: 1px solid #e3ebe9; border-radius: 10px; padding: 15px 16px; background: #f8faf9; color: #40534d; font: 12px/1.65 'Cascadia Code', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; }
 .mail-html-stage { position: relative; min-height: 190px; }
 .mail-html-stage.is-ready { min-height: 0; }
 .mail-html-frame { position: absolute; inset: 0 auto auto 0; display: block; width: 100%; min-height: 190px; border: 0; visibility: hidden; opacity: 0; pointer-events: none; background: #fff; color-scheme: light; }

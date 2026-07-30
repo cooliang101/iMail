@@ -2,7 +2,7 @@ import { type CSSProperties } from 'react';
 import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowLeft, ArrowRight, Clock, Envelope, File, Star, Tag, Trash } from '@phosphor-icons/react';
 import type { Account, Message } from '../../types';
 import { AccountProviderMark, providerLabel, SenderAvatar } from '../../components/shared';
-import { HtmlEmailBody } from './HtmlEmailBody';
+import { MessageBody } from './MessageBody';
 
 export function MessageReader({ message, account, onReply, onForward, onCloseMobile, onToggleFlag, onArchive, onDelete, onSnooze, onManageLabels, onMarkUnread, onPrevious, onNext, onContextMenu, hasPrevious, hasNext, actionBusy }: {
   message?: Message; account?: Account; onReply: () => void; onForward: () => void; onCloseMobile: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onSnooze: () => void; onManageLabels: () => void; onMarkUnread: () => void; onPrevious: () => void; onNext: () => void; onContextMenu?: (message: Message, point: { x: number; y: number }) => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
@@ -20,9 +20,7 @@ export function MessageReader({ message, account, onReply, onForward, onCloseMob
       <div className={`mail-body ${message.text === undefined ? 'mail-body-loading' : ''}`}>
         {message.text === undefined
           ? <p>正在从本地缓存加载正文…</p>
-          : message.html
-            ? <HtmlEmailBody key={message.id} html={message.html} subject={message.subject} />
-            : message.text.split('\n').map((line, index) => <p key={index}>{line || <br />}</p>)}
+          : <MessageBody key={message.id} text={message.text} html={message.html} subject={message.subject} />}
       </div>
       {message.attachments.length > 0 && <div className="attachments"><p>{message.attachments.length} 个附件 · 点击即可按需从邮箱服务器下载</p>{message.attachments.map((attachment, index) => <a key={`${attachment.filename}-${index}`} href={`/api/messages/${message.id}/attachments/${attachment.index ?? index}`} download={attachment.filename}><File size={23} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{attachment.size < 1024 * 1024 ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : `${(attachment.size / 1024 / 1024).toFixed(1)} MB`}</small></span></a>)}</div>}
     </div></div>
