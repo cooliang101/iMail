@@ -1,5 +1,5 @@
 export type ProviderId = 'outlook' | 'gmail' | 'qq' | 'yahoo' | 'hotmail' | 'icloud' | 'custom';
-export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'trash' | 'custom';
+export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'drafts' | 'trash' | 'junk' | 'custom';
 export type WorkspaceIconId = 'folder' | 'briefcase' | 'building' | 'home' | 'users' | 'code' | 'heart' | 'star';
 
 export type MailboxFolder = {

@@ -69,6 +69,7 @@ Authorization: Bearer imail_mcp_xxx
 - 操作账户前先调用 `accounts_list`，使用邮箱地址定位，不猜内部 ID。
 - 操作邮件前先调用 `messages_list` 或 `message_get`，确认发件人、主题和目标邮箱。
 - `mailbox_sync` 返回 `jobId` 和排队状态；任务由独立 Worker 执行，调用方可用 `sync_policy_get` 查看状态，不应依赖 MCP 连接存活。
+- `mailbox_sync` 和 `messages_list` 的 `mailboxRole` 支持 `inbox`、`sent`、`archive`、`drafts`、`trash`、`junk` 与 `custom`；常见的 Drafts、Deleted Items/Message(s)、Junk/Spam 等无 Special-Use 标记文件夹也会归入对应标准角色。
 - 发送邮件前确认 `accountEmail`、收件人、主题和正文；发送不是幂等操作。
 - `account_remove`、`message_move` 和 `draft_delete` 带 destructive annotation，执行前应获得用户确认。
 - 使用 Gmail、Outlook、Hotmail、QQ、Yahoo 或 iCloud 的应用专用密码/授权码时，把服务商生成的凭据传给 `account_add_with_code.authorizationCode`；Microsoft 账户还必须允许 IMAP/SMTP 密码验证。不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。

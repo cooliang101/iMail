@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@fluentui/react-components';
-import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
+import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, Trash, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
 import { api } from './api';
 import { subscribeSyncEvents } from './sync-events';
 import type { Account, Contact, DeveloperToken, Draft, MailboxRole, Message } from './types';
@@ -11,14 +11,14 @@ import { AppInput } from './components/form-controls';
 import { applyMessageChanges, applyMessageStatsChanges, messageTotalDelta, VirtualMessageList, MessageReader, type MessageChange } from './features/mail';
 import { AddAccountModal } from './features/accounts';
 import { ComposePane, DraftWorkspace, type ComposePaneHandle } from './features/compose';
-import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal } from './features/organize';
+import { isWorkspaceMailbox, LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal } from './features/organize';
 import { CreateApiTokenModal, CreateMcpTokenModal, TokenWorkspace } from './features/developer';
 import { isBrowserRefreshShortcut, isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKeyFor } from './features/shortcuts';
 import { AppContextMenu } from './features/context-menu';
 import { loadAppPreferences, preferencesStorageKeyFor, SettingsModal, type SettingsTab } from './features/settings';
 import { useAuth } from './features/auth';
 
-type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
+type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'trash' | 'junk' | 'folder' | 'drafts' | 'tokens';
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
 function App() {
   const { user, logout } = useAuth();
@@ -120,7 +120,7 @@ function App() {
   const workspaceFolders = useMemo(() => new Map(groups.map((group) => {
     const merged = new Map<string, WorkspaceFolder>();
     for (const account of accounts.filter((item) => item.group === group)) {
-      for (const mailbox of account.mailboxes.filter((item) => item.selectable && !['\\Inbox', '\\Sent', '\\Archive', '\\All'].includes(item.specialUse ?? ''))) {
+      for (const mailbox of account.mailboxes.filter(isWorkspaceMailbox)) {
         const key = mailbox.name.toLocaleLowerCase();
         const current = merged.get(key) ?? { group, name: mailbox.name, unread: 0, targets: [] };
         current.unread += mailbox.unread ?? 0;
@@ -138,7 +138,12 @@ function App() {
     if (view === 'starred') params.set('flagged', 'true');
     if (view === 'folder' && activeMailbox) { params.set('group', activeMailbox.group); params.set('mailboxName', activeMailbox.name); }
     else {
-      const mailboxRole: MailboxRole = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : 'inbox';
+      const mailboxRole: MailboxRole = view === 'sent' ? 'sent'
+        : view === 'archive' ? 'archive'
+          : view === 'drafts' ? 'drafts'
+            : view === 'trash' ? 'trash'
+              : view === 'junk' ? 'junk'
+                : 'inbox';
       params.set('mailboxRole', mailboxRole);
     }
     if (view === 'snoozed') params.set('snoozed', 'true');
@@ -185,7 +190,7 @@ function App() {
   }, [messageQuery, messageRevision]);
 
   useEffect(() => {
-    if ((view !== 'sent' && view !== 'archive') || accounts.length === 0) return;
+    if (!['sent', 'archive', 'drafts', 'trash', 'junk'].includes(view) || accounts.length === 0) return;
     let cancelled = false; setSyncing(true);
     void api(`/api/mailboxes/${view}/sync`, { method: 'POST' })
       .catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
@@ -231,7 +236,9 @@ function App() {
     if (realAccounts.length === 0) { setAddOpen(true); return; }
     setSyncing(true);
     try {
-      const role = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : view === 'inbox' || view === 'starred' || view === 'snoozed' ? 'inbox' : null;
+      const role = ['sent', 'archive', 'drafts', 'trash', 'junk'].includes(view)
+        ? view as Extract<MailboxRole, 'sent' | 'archive' | 'drafts' | 'trash' | 'junk'>
+        : view === 'inbox' || view === 'starred' || view === 'snoozed' ? 'inbox' : null;
       if (view === 'folder' && activeMailbox) await Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) })));
       else if (role) await api(role === 'inbox' ? '/api/sync' : `/api/mailboxes/${role}/sync`, { method: 'POST' });
       setNotice({ kind: 'success', text: '同步任务已加入后端队列，可在“同步设置”查看进度' });
@@ -434,7 +441,7 @@ function App() {
     return () => window.removeEventListener('keydown', onShortcut);
   });
 
-  const scopeTitle = activeMailbox?.name ?? (activeLabel ? `标签 · ${activeLabel}` : view === 'starred' ? '星标邮件' : view === 'sent' ? '已发送' : view === 'snoozed' ? '稍后处理' : view === 'archive' ? '归档' : '统一收件箱');
+  const scopeTitle = activeMailbox?.name ?? (activeLabel ? `标签 · ${activeLabel}` : view === 'starred' ? '星标邮件' : view === 'sent' ? '已发送' : view === 'snoozed' ? '稍后处理' : view === 'archive' ? '归档' : view === 'trash' ? '已删除邮件' : view === 'junk' ? '垃圾邮件' : '统一收件箱');
 
   return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     {notice && <div className={`toast toast-${notice.kind}`}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
@@ -467,6 +474,8 @@ function App() {
         <button data-icon-tone="accent" className={view === 'drafts' ? 'active' : ''} onClick={() => selectScope('drafts')}><PencilSimple size={19} /><span>草稿</span><b>{drafts.length || ''}</b></button>
         <button data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => selectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
         <button data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => selectScope('archive')}><Archive size={19} /><span>归档</span></button>
+        <button data-icon-tone="danger" className={view === 'trash' ? 'active' : ''} onClick={() => selectScope('trash')}><Trash size={19} /><span>已删除邮件</span></button>
+        <button data-icon-tone="warning" className={view === 'junk' ? 'active' : ''} onClick={() => selectScope('junk')}><WarningCircle size={19} /><span>垃圾邮件</span></button>
       </nav>
       <section className="workspace-section"><div className="section-label"><span>工作空间</span><button className="workspace-add" title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => setWorkspaceOpen(null)}><FolderSimplePlus size={16} /></button></div>
         <nav className="nav-block groups workspace-list">
@@ -499,7 +508,7 @@ function App() {
 
       {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
-          {view === 'drafts' ? <DraftWorkspace drafts={drafts} accounts={accounts} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> : <section className="message-pane">
+          {view === 'drafts' ? <DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> : <section className="message-pane">
             <div className="pane-title">
               <div className="pane-heading">
                 {activeAccount && <AccountProviderMark provider={activeAccount.provider} className="pane-provider-mark" />}
@@ -513,7 +522,7 @@ function App() {
             <div className="message-filters"><button className={mailFilter === 'all' ? 'active' : ''} onClick={() => setMailFilter('all')}>全部</button><button className={mailFilter === 'unread' ? 'active' : ''} onClick={() => setMailFilter('unread')}>未读</button><button className={mailFilter === 'attachments' ? 'active' : ''} onClick={() => setMailFilter('attachments')}>有附件</button></div>
             <VirtualMessageList messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={loadMoreMessages} onAddAccount={() => setAddOpen(true)} />
           </section>}
-          {composeMode ? <ComposePane ref={composePaneRef} key={`${composeMode}-${activeDraft?.id ?? selected?.id ?? composeAccountId ?? 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} initialAccountId={composeAccountId} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setComposeAccountId(undefined); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setComposeAccountId(undefined); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' ? <section className="composer-pane composer-welcome"><PencilSimple size={48} weight="duotone" /><h2>选择草稿继续编辑</h2><p>修改会自动保存，也可以直接新建一封邮件。</p><button onClick={() => openCompose(activeAccount?.id)}>新建邮件</button></section> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} defaultBodyView={preferences.defaultMessageView} onReply={() => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
+          {composeMode ? <ComposePane ref={composePaneRef} key={`${composeMode}-${activeDraft?.id ?? selected?.id ?? composeAccountId ?? 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} initialAccountId={composeAccountId} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setComposeAccountId(undefined); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setComposeAccountId(undefined); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' && !selected ? <section className="composer-pane composer-welcome"><PencilSimple size={48} weight="duotone" /><h2>选择草稿继续编辑</h2><p>本地草稿可继续编辑，邮箱草稿可在这里预览。</p><button onClick={() => openCompose(activeAccount?.id)}>新建邮件</button></section> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} defaultBodyView={preferences.defaultMessageView} onReply={() => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}

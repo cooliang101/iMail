@@ -8,7 +8,7 @@ import { address, imapClientFor } from './client.js';
 import { mailboxRoleFor } from './mailbox-role.js';
 
 const specialUseForRole: Partial<Record<MailboxRole, string[]>> = {
-  sent: ['\\Sent'], archive: ['\\Archive', '\\All'], trash: ['\\Trash'],
+  sent: ['\\Sent'], archive: ['\\Archive', '\\All'], drafts: ['\\Drafts'], trash: ['\\Trash'], junk: ['\\Junk'],
 };
 
 function publicMailbox(item: Partial<ListResponse> & { path: string }): MailboxFolder {
@@ -61,8 +61,9 @@ export async function syncMailbox(accountId: string, mailboxRole: MailboxRole = 
       allMailArchive = mailboxRole === 'archive' && target.specialUse === '\\All';
     } else if (mailboxRole !== 'inbox') {
       const specialUses = specialUseForRole[mailboxRole] ?? [];
-      const target = listed.find((item) => specialUses.includes(item.specialUse ?? ''));
-      if (!target) throw new Error(`服务商没有返回${mailboxRole === 'sent' ? '已发送' : mailboxRole === 'archive' ? '归档' : '垃圾箱'}文件夹`);
+      const target = listed.find((item) => specialUses.includes(item.specialUse ?? '') || mailboxRoleFor(item) === mailboxRole);
+      const roleLabel: Partial<Record<MailboxRole, string>> = { sent: '已发送', archive: '归档', drafts: '草稿', trash: '已删除邮件', junk: '垃圾邮件' };
+      if (!target) throw new Error(`服务商没有返回${roleLabel[mailboxRole] ?? mailboxRole}文件夹`);
       mailboxPath = target.path;
       allMailArchive = mailboxRole === 'archive' && target.specialUse === '\\All';
     }
