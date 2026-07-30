@@ -1,4 +1,5 @@
 export type Notice = { kind: 'success' | 'error'; text: string } | null;
+export type AppView = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
 
 export type MessageStats = {
   total: number;

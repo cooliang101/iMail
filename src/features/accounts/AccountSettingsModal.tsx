@@ -1,15 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Button } from '@fluentui/react-components';
-import { ArrowClockwise, CaretDown, Envelope, Key, PencilSimple, SlidersHorizontal, Trash, WarningCircle } from '@phosphor-icons/react';
+import { CaretDown, Envelope, WarningCircle } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { subscribeSyncEvents } from '../../sync-events';
-import { credentialGuideFor, oauthCallbackOrigins } from '../../provider-guides';
+import { oauthCallbackOrigins } from '../../provider-guides';
 import type { Account, AccountSyncStatus, SyncPolicy, SyncWorkerHealth } from '../../types';
 import type { Notice } from '../../app-model';
-import { ProviderIcon, providerLabel } from '../../components/shared';
-import { AppCheckbox, AppInput, AppSelect } from '../../components/form-controls';
-import { SyncPolicyEditor } from './SyncPolicyEditor';
-import { AccountSyncSummary } from './SyncStatusSummary';
+import { AccountSettingsCard } from './AccountSettingsCard';
+import { DefaultSyncPolicyForm } from './DefaultSyncPolicyForm';
 
 export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload, setNotice }: { accounts: Account[]; section: 'accounts' | 'sync'; onAddAccount: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -180,45 +177,14 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
     <header className="settings-panel-heading"><div><span>{section === 'accounts' ? '连接与身份' : '后台同步'}</span><h2>{section === 'accounts' ? '邮箱管理' : '同步'}</h2><p>{section === 'accounts' ? '管理邮箱资料、授权状态与本地连接。' : '设置后台同步频率、范围与失败恢复策略。'}</p></div></header>
     <div className="settings-panel-body">
     {section === 'sync' && workerHealth && <div className={`sync-worker-health ${workerOnline ? 'is-online' : 'is-offline'}`}><span>{workerOnline ? '同步 Worker 运行正常' : '同步 Worker 未运行或心跳已过期'}</span><small>{workerHealth.queuedJobs > 0 ? `${workerHealth.queuedJobs} 个任务正在等待` : '当前没有积压任务'}</small></div>}
-    {section === 'sync' && defaultPolicy && <form className="sync-default-policy" onSubmit={(event) => void updateDefaultSyncPolicy(event)}>
-      <header><span><strong>新账户默认同步策略</strong><small>新接入邮箱自动继承；已有账户仍使用各自设置。</small></span><Button appearance="primary" type="submit" disabled={busyId === 'defaults'}>{busyId === 'defaults' ? '保存中…' : '保存默认值'}</Button></header>
-      <div className="sync-default-fields">
-        <label className="sync-default-toggle"><AppCheckbox name="enabled" defaultChecked={defaultPolicy.enabled} /><span><strong>后端自动同步</strong><small>新账户接入后默认启用</small></span></label>
-        <label className="sync-default-select"><span>同步频率</span><AppSelect name="intervalMinutes" defaultValue={String(defaultPolicy.intervalMinutes)} options={[{ value: '1', label: '每 1 分钟' }, { value: '5', label: '每 5 分钟' }, { value: '15', label: '每 15 分钟' }, { value: '30', label: '每 30 分钟' }, { value: '60', label: '每 60 分钟' }]} /></label>
-        <label className="sync-default-select"><span>同步范围</span><AppSelect name="folderMode" defaultValue={defaultPolicy.folderMode === 'selected' ? 'inbox' : defaultPolicy.folderMode} options={[{ value: 'inbox', label: '仅收件箱' }, { value: 'standard', label: '收件箱、已发送和归档' }]} /></label>
-      </div>
-      <div className="sync-default-options"><label><AppCheckbox name="syncOnStart" defaultChecked={defaultPolicy.syncOnStart} />服务启动后补同步</label><label><AppCheckbox name="retryOnRecovery" defaultChecked={defaultPolicy.retryOnRecovery} />网络恢复后重试</label><label><AppCheckbox name="notifyOnError" defaultChecked={defaultPolicy.notifyOnError} />持续失败时通知</label></div>
-    </form>}
+    {section === 'sync' && defaultPolicy && <DefaultSyncPolicyForm policy={defaultPolicy} busy={busyId === 'defaults'} onSubmit={(event) => void updateDefaultSyncPolicy(event)} />}
     {section === 'sync' && <button type="button" className={`sync-advanced-toggle ${advancedSyncOpen ? 'is-open' : ''}`} aria-expanded={advancedSyncOpen} aria-controls="account-sync-advanced" onClick={() => setAdvancedSyncOpen((open) => !open)}><span><strong>高级设置</strong><small>按邮箱单独配置同步策略</small></span><em>{accounts.length} 个邮箱</em><CaretDown size={18} weight="bold" /></button>}
     {(section === 'accounts' || advancedSyncOpen) && <div id={section === 'sync' ? 'account-sync-advanced' : undefined} className={section === 'sync' ? 'sync-advanced-content' : undefined}>
     {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>接入第一个邮箱后，即可在这里管理账户和同步策略。</p><button type="button" className="settings-primary-action" onClick={onAddAccount}>添加邮箱</button></div> : <div className="settings-account-list">
-      {accounts.map((account) => {
-        const editing = editingId === account.id;
-        const connectionText = account.status === 'connected' ? '连接正常' : account.status === 'syncing' ? '正在同步' : account.lastError || '连接异常';
-        const syncStatus = syncStatuses.find((item) => item.accountId === account.id);
-
-        return <article key={account.id} className={`settings-account-card ${editing ? 'is-editing' : ''} ${syncEditingId === account.id ? 'is-sync-editing' : ''}`}>
-          {section === 'accounts' && editing ? <form className="account-inline-editor" onSubmit={(event) => void updateProfile(event, account)}>
-            <header className="settings-account-summary">
-              <i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i>
-              <span className="account-edit-fields">
-                <label className="account-edit-name"><strong>{providerLabel[account.provider]} ·</strong><span className="sr-only">显示名称</span><AppInput name="displayName" defaultValue={account.displayName} maxLength={80} autoFocus required /></label>
-                <span className="account-edit-meta"><small title={account.email}>{account.email}</small><span aria-hidden="true">·</span><label className="account-edit-workspace"><span className="sr-only">所属工作空间</span><AppSelect name="group" defaultValue={account.group} options={workspaceOptions} /></label></span>
-                <em className={`connection-${account.status}`}>{connectionText}</em>
-              </span>
-            </header>
-            <footer className="settings-account-actions card-editor-actions"><button type="button" onClick={() => setEditingId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '保存中…' : '保存'}</Button></footer>
-          </form> : <>
-            <div className="settings-account-main"><header className="settings-account-summary"><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · {account.group}</small><em className={`connection-${account.status}`}>{connectionText}</em></span></header>
-            {section === 'sync' && syncStatus && <AccountSyncSummary status={syncStatus} />}</div>
-            {section === 'sync' && syncEditingId === account.id && syncStatus ? <SyncPolicyEditor account={account} status={syncStatus} busy={busyId === account.id} onSave={(changes) => updateSyncPolicy(account, changes)} onSync={() => queueSync(account)} onClose={() => setSyncEditingId(null)} />
-              : credentialId === account.id ? <form className="credential-renewal" onSubmit={(event) => void updateCredential(event, account)}><label><span>{credentialGuideFor(account.provider)?.secretLabel || '新的授权码 / 应用专用密码'}</span><AppInput name="password" type="password" placeholder={credentialGuideFor(account.provider)?.secretPlaceholder || '输入新的专用凭据'} autoFocus required /></label><div className="card-editor-actions"><button type="button" onClick={() => setCredentialId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '正在验证…' : '验证并更新'}</Button></div></form>
-              : confirmRemoveId === account.id ? <div className="account-remove-confirm"><span><strong>确认移除这个邮箱？</strong><small>{account.email} 的本地邮件缓存也会删除。</small></span><button type="button" onClick={() => setConfirmRemoveId(null)}>取消</button><button type="button" className="confirm-remove-account" disabled={busyId === account.id} onClick={() => void remove(account)}>{busyId === account.id ? '正在移除…' : '确认移除'}</button></div>
-                : section === 'sync' ? <footer className="settings-account-actions"><button type="button" className="sync-settings-account" disabled={busyId === account.id || !syncStatus} onClick={() => { setCredentialId(null); setConfirmRemoveId(null); setSyncEditingId(account.id); }}><SlidersHorizontal size={15} />配置同步策略</button><button type="button" disabled={busyId === account.id || !syncStatus} onClick={() => void queueSync(account)}><ArrowClockwise size={15} />立即同步</button></footer>
-                  : <footer className="settings-account-actions"><button type="button" className="edit-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setEditingId(account.id); }}><PencilSimple size={15} />编辑信息</button><button type="button" className="retry-account" disabled={busyId === account.id} onClick={() => void retryConnection(account)}><ArrowClockwise size={15} />{busyId === account.id ? '正在检查' : '重试连接'}</button>{account.authMethod === 'oauth2' ? <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => void reconnect(account)}><Key size={15} />重新授权</button> : <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setEditingId(null); setConfirmRemoveId(null); setCredentialId(account.id); }}><Key size={15} />更新凭据</button>}<button type="button" className="remove-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setEditingId(null); setCredentialId(null); setConfirmRemoveId(account.id); }}><Trash size={15} />移除</button></footer>}
-          </>}
-        </article>;
-      })}
+      {accounts.map((account) => <AccountSettingsCard key={account.id} account={account} section={section} syncStatus={syncStatuses.find((item) => item.accountId === account.id)} workspaceOptions={workspaceOptions} busy={busyId === account.id} editing={editingId === account.id} credentialOpen={credentialId === account.id} removeConfirmOpen={confirmRemoveId === account.id} syncEditing={syncEditingId === account.id}
+        onEdit={() => { setSyncEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setEditingId(account.id); }} onCancelEdit={() => setEditingId(null)} onUpdateProfile={(event) => void updateProfile(event, account)} onRetry={() => void retryConnection(account)} onReconnect={() => void reconnect(account)}
+        onOpenCredential={() => { setSyncEditingId(null); setEditingId(null); setConfirmRemoveId(null); setCredentialId(account.id); }} onCloseCredential={() => setCredentialId(null)} onUpdateCredential={(event) => void updateCredential(event, account)} onOpenRemove={() => { setSyncEditingId(null); setEditingId(null); setCredentialId(null); setConfirmRemoveId(account.id); }} onCloseRemove={() => setConfirmRemoveId(null)} onRemove={() => void remove(account)}
+        onOpenSync={() => { setCredentialId(null); setConfirmRemoveId(null); setSyncEditingId(account.id); }} onCloseSync={() => setSyncEditingId(null)} onSaveSync={(changes) => updateSyncPolicy(account, changes)} onQueueSync={() => queueSync(account)} />)}
     </div>}
     </div>}
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}</div>

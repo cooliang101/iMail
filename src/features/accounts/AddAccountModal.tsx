@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@fluentui/react-components';
-import { ArrowClockwise, ArrowRight, CaretDown, Check, Envelope, Gear, Key, Trash, WarningCircle, X } from '@phosphor-icons/react';
+import { WarningCircle, X } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { credentialGuideFor, oauthCallbackOrigins } from '../../provider-guides';
 import type { Account, ProviderId } from '../../types';
 import type { Notice } from '../../app-model';
-import { Overlay, ProviderIcon, providerLabel, providers } from '../../components/shared';
-import { AppInput, AppSelect, type AppSelectOption } from '../../components/form-controls';
+import { Overlay, providerLabel, providers } from '../../components/shared';
+import type { AppSelectOption } from '../../components/form-controls';
+import { AccountConnectionFields } from './AccountConnectionFields';
+import { ProviderPicker } from './ProviderPicker';
 
 const defaultWorkspaceNames = ['工作', '个人', '对外支持', '开发测试', '同学联系'];
 
@@ -120,25 +122,8 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
   }
   return <Overlay onClose={onClose} wide><form className="account-modal" onSubmit={submit}>
     <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>选择你的邮箱平台，登录后即可在 iMail 中统一收发邮件。</p></div><button type="button" aria-label="关闭添加邮箱窗口" onClick={onClose}><X size={21} /></button></div>
-    <div className="provider-grid" aria-label="选择邮箱平台">{providers.map((item) => <button type="button" key={item.id} disabled={busy} aria-pressed={provider === item.id} className={provider === item.id ? 'selected' : ''} onClick={() => { const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(item.id); setManualMode(item.id === 'yahoo' && status?.configured === false); setError(''); }}><i className={`provider-mark provider-${item.id}`}><ProviderIcon provider={item.id} /></i><span>{item.name}</span>{provider === item.id && <Check className="provider-selected-check" size={16} weight="bold" />}</button>)}</div>
-    {usesOAuth ? <>
-      <div className="oauth-panel">
-        <div className={`oauth-status ${oauthStatus?.configured ? 'ready' : 'setup'}`}><Key size={21} weight="duotone" /><span><strong>使用 {providerLabel[provider]} 登录</strong><small>{oauthStatus?.configured ? '你将在服务商官方页面完成登录，iMail 不会接触你的网页登录密码。' : '快捷登录暂时不可用，你可以稍后重试或选择其他连接方式。'}</small></span></div>
-        <div className="form-grid oauth-profile"><label><span>显示名称（可选）</span><AppInput name="displayName" placeholder="默认使用账户名称" /></label><label><span>加入工作空间</span><AppSelect name="group" defaultValue="工作" options={workspaceOptions} /></label></div>
-        {provider === 'yahoo' && <div className="oauth-review"><WarningCircle size={17} /><span>若快捷登录暂不可用，可改用 Yahoo 应用专用密码。</span></div>}
-        {busy && <div className="oauth-waiting"><span><strong>正在等待 {providerLabel[provider]} 授权</strong><small>如果服务商页面显示配置错误，请关闭授权窗口或结束等待，修正后可以直接重试。</small></span><button type="button" onClick={cancelOAuth}>结束等待</button></div>}
-      </div>
-      {credentialGuide && <button type="button" className="manual-switch" onClick={() => setManualMode(true)}>改用应用专用密码</button>}
-    </> : <>
-      {credentialGuide && <section className="credential-guide">
-        <div className="credential-guide-heading"><Key size={21} weight="duotone" /><span><strong>{credentialGuide.title}</strong><small>{credentialGuide.description}</small></span><a href={credentialGuide.helpUrl} target="_blank" rel="noreferrer">{credentialGuide.actionLabel}<ArrowRight size={14} /></a></div>
-        <ol>{credentialGuide.steps.map((step, index) => <li key={step}><b>{index + 1}</b><span>{step}</span></li>)}</ol>
-      </section>}
-      <div className="form-grid"><label><span>邮箱地址</span><AppInput name="email" type="email" placeholder="name@example.com" required /></label><label><span>显示名称</span><AppInput name="displayName" placeholder="例如：工作邮箱" required /></label><label><span>工作空间</span><AppSelect name="group" defaultValue="工作" options={workspaceOptions} /></label><label><span>{credentialGuide?.secretLabel || '应用专用密码 / 授权码'}</span><AppInput name="password" type="password" placeholder={credentialGuide?.secretPlaceholder || '不会以明文保存'} required /></label></div>
-      {provider !== 'custom' && !credentialGuide && <div className="provider-tip"><Key size={19} /><span><strong>{providerLabel[provider]} 安全提示</strong><small>请使用服务商提供的专用凭据，不要填写网页登录密码。</small></span></div>}
-      {selectedProvider.oauthKey && oauthStatus?.configured && <button type="button" className="manual-switch" onClick={() => setManualMode(false)}>返回 {providerLabel[provider]} 快捷登录</button>}
-    </>}
-    {provider === 'custom' && <div className="advanced-settings"><button type="button" onClick={() => setAdvanced(!advanced)}><Gear size={17} />IMAP / SMTP 设置<CaretDown size={15} /></button>{(advanced || provider === 'custom') && <div className="form-grid"><label><span>IMAP 主机</span><AppInput name="imapHost" placeholder="imap.example.com" required /></label><label><span>IMAP 端口</span><AppInput name="imapPort" type="number" defaultValue="993" required /></label><label><span>SMTP 主机</span><AppInput name="smtpHost" placeholder="smtp.example.com" required /></label><label><span>SMTP 端口</span><AppInput name="smtpPort" type="number" defaultValue="465" required /></label></div>}</div>}
+    <ProviderPicker value={provider} busy={busy} onChange={(nextProvider) => { const item = providers.find((candidate) => candidate.id === nextProvider)!; const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(nextProvider); setManualMode(nextProvider === 'yahoo' && status?.configured === false); setError(''); }} />
+    <AccountConnectionFields provider={provider} usesOAuth={usesOAuth} oauthConfigured={oauthStatus?.configured} credentialGuide={credentialGuide} workspaceOptions={workspaceOptions} busy={busy} advanced={advanced} onAdvancedChange={setAdvanced} onManualModeChange={setManualMode} onCancelOAuth={cancelOAuth} />
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
     <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy || (usesOAuth && !oauthStatus?.configured)}>{busy ? (usesOAuth ? '等待授权…' : '正在验证连接…') : error && usesOAuth ? `重新使用 ${providerLabel[provider]} 登录` : usesOAuth ? `使用 ${providerLabel[provider]} 登录` : '验证并添加'}</Button></div>
   </form></Overlay>;

@@ -1,0 +1,249 @@
+/* Readability pass: preserve the compact mail layout while keeping text comfortably legible. */
+body { font-size: 14px; }
+body { line-height: var(--leading-copy); text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+:where(button, input, select, textarea) { line-height: var(--leading-compact); }
+:where(p, small) { text-wrap: pretty; }
+:where(h1, h2, h3) { text-wrap: balance; }
+:where(time, code, kbd, .pane-count) { font-variant-numeric: tabular-nums; }
+.sidebar-heading span, .nav-block b, .section-label, .developer-entry small, .user-strip strong, .user-strip small { font-size: 12px; }
+.nav-block button, .developer-entry { font-size: 14px; }
+.developer-entry strong, .search-box input, .sync-button, .icon-button, .sidebar-trigger { font-size: 13px; }
+.pane-title span, .message-filters button { font-size: 12px; }
+.message-loading, .message-copy small { font-size: 10px; }
+.message-meta strong, .message-copy > b { font-size: 13px; }
+.message-meta time, .message-copy > span:not(.message-meta, .message-account) { font-size: 11px; }
+.reader-context, .sender-line small, .sender-line time { font-size: 11px; }
+.sender-line strong { font-size: 13px; }
+.mail-body { font-size: 14px; }
+.attachments > p, .attachments strong { font-size: 12px; }.attachments small { font-size: 11px; }
+.modal-wide { width: min(760px, 100%); }
+.modal-header > div > span, .token-workspace header > div > span { font-size: 11px; }
+.modal-header h2 { font-size: 28px; }.modal-header p { font-size: 13px; line-height: 1.55; }
+.provider-grid button { font-size: 12px; }.provider-mark { width: 48px; height: 48px; }.provider-mark svg { width: 29px; height: 29px; }
+.form-grid label > span, .token-modal > label > span, fieldset legend { font-size: 12px; }
+.form-grid .app-input, .form-grid .app-select, .compose-row .app-input, .compose-row .app-select, .token-modal .app-input, .token-modal .app-select { height: 44px; font-size: 13px; }
+.provider-tip strong, .oauth-status strong, .oauth-waiting strong { font-size: 13px; }
+.provider-tip small, .oauth-status small, .oauth-waiting small { font-size: 11px; }
+.provider-tip a, .oauth-review, .manual-switch, .advanced-settings > button, .oauth-waiting button { font-size: 11px; }
+.inline-error { font-size: 12px; line-height: 1.5; }
+.modal-footer > button:not([class*='fui']), .modal-footer .fui-Button { font-size: 13px; }
+.settings-account-summary > span strong, .compose-row { font-size: 13px; }.settings-account-summary > span small, .settings-account-summary > span em, .account-auth-kind, .settings-account-actions button { font-size: 11px; }
+.compose-body, .token-workspace header p { font-size: 14px; }
+.endpoint-strip small, .token-title span, .token-item code, .token-item span, .token-time small, .quickstart-title span, .security-note span, .check-row small, .scope-row small { font-size: 11px; }
+.endpoint-strip code, .endpoint-strip button, .token-item strong, .revoke, .quickstart-title strong, .security-note strong, .quickstart > a, .gateway-account-select, .check-row strong, .scope-row strong { font-size: 12px; }
+.quickstart pre, .raw-token code, .raw-token button, .token-created p { font-size: 11px; }
+
+/* Complete typography system: captions never drop below 11px and supporting copy uses 12px. */
+.app-select,
+.search-box kbd,
+.workspace-account-tag,
+.workspace-account-more,
+.message-loading,
+.message-copy small,
+.reader-labels span,
+.shortcut-row kbd,
+.context-menu kbd,
+.account-auth-kind,
+.settings-account-summary > span em,
+.account-sync-summary > header small,
+.mailbox-sync-details article em,
+.notification-list em,
+.draft-account em,
+.draft-main small,
+.workspace-icon-grid button,
+.workspace-help { font-size: var(--text-caption); line-height: 1.4; }
+
+.workspace-account-tag,
+.workspace-account-more { line-height: 16px; padding-inline: 5px; }
+.sender-avatar { font-size: 11px; }
+.sender-avatar.large { font-size: 12px; }
+.message-copy small { margin-top: 6px; }
+.empty-state p,
+.empty-reader p,
+.empty-state > button,
+.reader-context,
+.reader-labels span,
+.shortcut-groups h3,
+.shortcut-row small,
+.shortcut-row kbd,
+.shortcut-error,
+.context-menu button > kbd { font-size: var(--text-secondary); line-height: 1.5; }
+.empty-state h3,
+.empty-reader h2 { font-size: 17px; line-height: 1.3; }
+.empty-state > button { min-height: 36px; padding-inline: 14px; }
+.reader-account { max-width: min(560px, 82%); padding: 5px 9px 5px 6px; }
+.reader-labels span { padding: 5px 9px; }
+.shortcut-groups h3 { letter-spacing: .045em; }
+.shortcut-row { min-height: 68px; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 11px; padding: 10px 11px; }
+.shortcut-row strong { font-size: var(--text-control); line-height: 1.35; }
+.shortcut-row small { white-space: normal; }
+.shortcut-row > button { min-height: 36px; padding-inline: 10px; }
+
+.settings-account-summary > span small,
+.settings-account-summary > span em,
+.account-auth-kind,
+.settings-account-actions button,
+.account-remove-confirm small,
+.sync-worker-health,
+.sync-worker-health small,
+.account-sync-summary > header small,
+.account-sync-times small,
+.account-sync-summary > p,
+.sync-default-policy small,
+.sync-default-policy label,
+.sync-default-policy .app-select,
+.sync-policy-status small,
+.mailbox-sync-empty,
+.mailbox-sync-details > header small,
+.mailbox-sync-details article > header small,
+.mailbox-sync-details article em,
+.mailbox-sync-details dt,
+.mailbox-sync-details dd,
+.mailbox-sync-details article > p,
+.sync-policy-grid > label,
+.sync-toggle small,
+.sync-policy-grid .app-select,
+.sync-folder-options legend,
+.sync-folder-options label > small,
+.sync-policy-options { font-size: var(--text-secondary); line-height: 1.5; }
+.account-remove-confirm strong,
+.account-sync-summary > header strong,
+.account-sync-times strong,
+.sync-default-policy strong,
+.sync-policy-status strong,
+.mailbox-sync-details > header strong,
+.mailbox-sync-details article > header strong,
+.sync-toggle strong { font-size: var(--text-control); line-height: 1.4; }
+.sync-worker-health { min-height: 38px; padding: 9px 12px; }
+.account-sync-times,
+.mailbox-sync-details dl { gap: 9px; }
+.account-sync-times > span,
+.mailbox-sync-details dl div { gap: 3px; }
+.account-sync-summary > p,
+.mailbox-sync-details article > p { white-space: normal; overflow-wrap: anywhere; }
+.sync-default-policy { gap: 12px; padding: 14px 15px; }
+.sync-default-policy .app-select,
+.sync-policy-grid .app-select { min-height: 38px; }
+.sync-policy-status { grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px; }
+.sync-policy-status small,
+.mailbox-sync-details article > header small,
+.sync-folder-options label > small { white-space: normal; }
+.mailbox-sync-details article { padding: 12px; }
+.mailbox-sync-details dl { grid-template-columns: repeat(3, minmax(90px, 1fr)); }
+.sync-folder-options { max-height: 190px; gap: 8px; padding: 11px; }
+
+.composer-header > div span,
+.compose-save-status,
+.contact-suggestions small,
+.contact-suggestions em,
+.composer-attachments small,
+.composer-footer > span,
+.draft-pane-header span,
+.draft-pane-header small,
+.draft-account,
+.draft-account em,
+.draft-main small,
+.snooze-options small,
+.notification-list small,
+.notification-list em,
+.workspace-help { font-size: var(--text-secondary); line-height: 1.5; }
+.contact-suggestions strong,
+.composer-attachments strong,
+.draft-main p,
+.label-options > button,
+.selected-labels > button,
+.label-create button,
+.snooze-options strong,
+.snooze-options .app-input,
+.snooze-clear,
+.notification-list strong,
+.workspace-name > span,
+.workspace-icon-grid button { font-size: var(--text-control); line-height: 1.4; }
+.composer-header > div span,
+.draft-pane-header span { letter-spacing: .06em; }
+.compose-save-status { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.compose-row { min-height: 48px; font-size: var(--text-control); grid-template-columns: 68px minmax(0, 1fr); }
+.contact-suggestions button { min-height: 54px; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; padding: 8px 10px; }
+.contact-suggestions button > span { gap: 3px; }
+.composer-link-popover button { font-size: var(--text-control); }
+.composer-editor .ProseMirror { font-size: var(--text-body); line-height: 1.8; }
+.composer-attachments > span { max-width: 280px; grid-template-columns: 20px minmax(0, 1fr) 28px; gap: 8px; padding: 8px 8px 8px 10px; }
+.compose-empty p,
+.composer-welcome p,
+.draft-empty p,
+.utility-empty p { font-size: var(--text-secondary); line-height: 1.6; }
+.composer-welcome > button,
+.draft-empty button { min-height: 38px; font-size: var(--text-control); padding-inline: 15px; }
+.draft-pane-header { flex-basis: 78px; }
+.draft-main { padding: 13px 11px; gap: 6px; }
+.draft-main strong { font-size: var(--text-control); }
+.label-options > button,
+.selected-labels > button { min-height: 34px; }
+.label-create .app-input { font-size: var(--text-control); }
+.snooze-options > button,
+.snooze-options > label { min-height: 70px; gap: 12px; padding: 12px 14px; }
+.snooze-options .app-input { min-height: 36px; }
+.notification-list > button { min-height: 76px; gap: 12px; padding: 12px 13px; }
+.notification-list span { gap: 4px; }
+.notification-list small { white-space: normal; }
+.workspace-icon-grid button { min-height: 64px; gap: 5px; }
+.workspace-help { line-height: 1.6; }
+.settings-empty p { font-size: var(--text-secondary); line-height: 1.6; }
+.toast { min-height: 38px; font-size: var(--text-secondary); line-height: 1.45; }
+
+.mcp-guide > header { display: flex; justify-content: space-between; gap: 18px; }
+.mcp-guide-grid-single { grid-template-columns: minmax(0, 1fr); }.mcp-guide-grid-single .mcp-config-card { max-width: 720px; }
+
+/* External access is documentation-heavy: keep every instruction readable without browser zoom. */
+.token-workspace > header h1 { font-size: 36px; line-height: 1.08; }.token-workspace > header p { max-width: 650px; font-size: 15px; line-height: 1.7; }.token-workspace > header .fui-Button { min-height: 42px; padding-inline: 16px; font-size: 14px; }
+.access-tabs button { min-width: 205px; padding: 14px 17px 15px; }.access-tabs strong { font-size: 14px; }.access-tabs small { font-size: 12px; line-height: 1.45; }
+.endpoint-strip { padding: 16px 18px; }.endpoint-strip small { font-size: 12px; }.endpoint-strip code { font-size: 14px; line-height: 1.5; }.endpoint-strip button { padding: 9px 12px; font-size: 13px; }
+.token-columns { grid-template-columns: minmax(0, 1fr) 360px; gap: 22px; }.token-title { padding: 20px; }.token-title h2 { font-size: 17px; }.token-title span { font-size: 13px; font-variant-numeric: tabular-nums; }
+.token-empty { padding: 64px 24px; }.token-empty h3 { font-size: 18px; }.token-empty p { max-width: 480px; margin-inline: auto; font-size: 13px; line-height: 1.7; }.token-empty button { margin-top: 8px; font-size: 13px; }
+.token-item { padding: 17px 20px; }.token-item strong { font-size: 14px; }.token-item code, .token-item span, .token-time small { font-size: 12px; line-height: 1.5; }.revoke { font-size: 13px; }
+.quickstart { padding: 21px; }.quickstart-title strong { font-size: 15px; }.quickstart-title span { font-size: 12px; line-height: 1.5; }.mcp-quickstart ol { margin-block: 21px; padding-left: 24px; font-size: 13px; line-height: 1.85; }.mcp-quickstart code { font-size: 12px; }.security-note { gap: 10px; }.security-note strong { font-size: 13px; }.security-note span { font-size: 12px; line-height: 1.65; }
+.mcp-guide { margin-top: 34px; }.mcp-guide > header { margin-bottom: 20px; }.mcp-guide > header > div:first-child > span { font-size: 12px; }.mcp-guide > header h2 { margin-top: 6px; font-size: 27px; }.mcp-guide > header p { max-width: 760px; font-size: 14px; line-height: 1.7; }.mcp-guide-actions button { min-height: 38px; padding: 9px 12px; font-size: 13px; }
+.mcp-raw-markdown > div { padding: 15px 18px; }.mcp-raw-markdown strong { font-size: 14px; }.mcp-raw-markdown span { font-size: 12px; }.mcp-raw-markdown pre { font-size: 13px; line-height: 1.75; }
+.mcp-guide-grid-single .mcp-config-card { max-width: 820px; }.mcp-config-heading { padding: 18px 20px; }.mcp-config-heading strong { font-size: 15px; }.mcp-config-heading span { font-size: 12px; line-height: 1.5; }.mcp-config-heading button { padding: 8px 10px; font-size: 12px; }.mcp-config-card pre { min-height: 0; padding: 22px; font-size: 13px; line-height: 1.75; }.mcp-config-card > p { padding: 15px 20px 18px; font-size: 13px; line-height: 1.65; }
+.mcp-reference-grid { grid-template-columns: minmax(0, 1.35fr) minmax(310px, .65fr); gap: 18px; }.mcp-tool-reference, .mcp-agent-notes { padding: 21px; }.mcp-section-title { margin-bottom: 17px; }.mcp-section-title strong { font-size: 15px; }.mcp-section-title span { font-size: 12px; line-height: 1.5; }.mcp-tool-row { grid-template-columns: 112px minmax(0, 1fr); gap: 16px; padding: 13px 0; }.mcp-tool-row strong { font-size: 13px; }.mcp-tool-row code { font-size: 12px; line-height: 1.8; }.mcp-agent-notes ol { padding-left: 22px; font-size: 13px; line-height: 1.85; }.mcp-agent-notes > p { margin-top: 16px; padding-top: 15px; font-size: 12px; line-height: 1.7; }
+.mcp-access-summary strong { font-size: 14px; }.mcp-access-summary span, .inline-warning { font-size: 12px; }.mcp-access-summary code { font-size: 13px; }
+
+@media (max-width: 1050px) {
+  .app-shell { grid-template-columns: 64px 210px minmax(0, 1fr); }.mail-layout { grid-template-columns: minmax(300px, 350px) minmax(350px, 1fr); }.token-columns, .mcp-reference-grid { grid-template-columns: 1fr; }.quickstart { max-width: none; }.reader-content { width: calc(100% - 32px); }.sender-line time { display: none; }
+}
+@media (max-width: 820px) {
+  .modal.modal-wide.settings-shell { width: 100%; height: calc(100dvh - 24px); }.settings-layout { grid-template-columns: 214px minmax(0, 1fr); }.settings-sidebar-header { padding-inline: 17px 13px; }.settings-tabs { padding-inline: 10px; }.settings-panel-heading { padding-inline: 20px 72px; }.settings-content.has-shortcut-reset .settings-panel-heading { padding-right: 116px; }.settings-panel-body { padding: 20px 20px 26px; }.settings-window-actions { top: 21px; right: 20px; }
+  .app-shell { grid-template-columns: 58px minmax(0, 1fr); }.account-rail { padding-inline: 7px; }.primary-sidebar { position: fixed; z-index: 20; left: 58px; top: 0; bottom: 0; width: 236px; transform: translateX(-110%); box-shadow: 20px 0 60px #10231f33; transition: transform .2s ease; }.primary-sidebar.mobile-open { transform: translateX(0); }.mobile-close, .mobile-sidebar-trigger { display: grid; border: 0; }.desktop-sidebar-trigger { display: none; }.topbar { padding-inline: 10px; }.mail-layout { grid-template-columns: minmax(290px, 340px) minmax(320px, 1fr); }.sender-line time { display: none; }.settings-account-list { grid-template-columns: 1fr; }
+  .sync-default-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }.sync-default-toggle { grid-column: 1 / -1; }
+}
+@media (max-width: 650px) {
+  .overlay { padding: 0; }.modal.modal-wide.settings-shell { height: 100dvh; max-height: 100dvh; border-radius: 0; }.settings-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }.settings-sidebar { grid-template-rows: auto auto; border-right: 0; border-bottom: 1px solid var(--color-border); }.settings-sidebar-header { min-height: 62px; padding: 10px 15px 7px; }.settings-sidebar-header span { display: none; }.settings-sidebar-header h1 { font-size: 22px; }.settings-tabs { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 7px 10px 9px; }.settings-tabs button { width: auto; min-width: max-content; min-height: 42px; grid-template-columns: 20px auto; padding: 7px 10px; }.settings-tabs button > span { display: block; }.settings-tabs small { display: none; }.settings-panel-heading { min-height: 0; gap: 12px; padding: 18px 66px 15px 15px; }.settings-content.has-shortcut-reset .settings-panel-heading { padding-right: 110px; }.settings-panel-body { padding: 18px 15px 24px; }.settings-window-actions { top: 18px; right: 15px; }.settings-panel-heading > small { display: none; }.settings-panel-heading h2 { font-size: 22px; }.settings-panel-heading p { font-size: var(--font-size-2); }.settings-panel-heading > button { padding-inline: 9px; }.display-choice-grid { grid-template-columns: 1fr; }.display-choice-grid > button { min-height: 120px; padding: 16px; }.settings-row { align-items: flex-start; gap: 12px; }.settings-row .app-select-wrap { width: 148px; }.settings-startup-listbox { width: min(148px, calc(100vw - 32px)) !important; max-width: calc(100vw - 32px) !important; }.settings-facts { grid-template-columns: 1fr; }.settings-facts > div:nth-child(even) { border-left: 0; }.settings-facts > div:nth-child(n+2) { border-top: 1px solid var(--color-border); }
+  body { overflow: auto; }.app-shell { grid-template-columns: 1fr; min-height: 100dvh; height: auto; }.account-rail { display: none; }.primary-sidebar { left: 0; }.workspace { padding: 0; }.topbar { position: sticky; top: 0; z-index: 5; border-radius: 0; }.search-box kbd, .sync-button span, .sync-settings-button span { display: none; }.mail-layout { height: calc(100dvh - 62px); display: block; border-radius: 0; }.message-pane { height: 100%; border: 0; }.reader, .composer-pane { display: none; }.mail-layout.mobile-reader-open .message-pane { display: none; }.mail-layout.mobile-reader-open .reader, .mail-layout.mobile-reader-open .composer-pane { display: flex; height: 100%; }.mobile-reader-back { display: inline-flex; }.composer-header { padding-inline: 10px; }.composer-fields { padding-inline: 12px; }.composer-editor { margin-inline: 12px; }.composer-toolbar { overflow-x: auto; }.composer-history { margin-left: 0; }.composer-footer { padding-inline: 12px; }.composer-footer > span { display: none; }.token-workspace { height: auto; min-height: calc(100dvh - 62px); border-radius: 0; padding: 24px 16px; }.token-workspace > header { align-items: flex-start; gap: 18px; }.token-workspace header p { display: none; }.access-tabs { overflow-x: auto; }.access-tabs button { min-width: 150px; }.endpoint-strip code { font-size: 9px; }.token-item { grid-template-columns: 36px 1fr auto; }.token-time { display: none; }.mcp-guide > header { display: grid; }.mcp-guide-actions { width: 100%; overflow-x: auto; }.mcp-guide-grid { grid-template-columns: 1fr; }.mcp-config-card pre { min-height: 0; }.provider-grid { grid-template-columns: repeat(3, 1fr); }.form-grid { grid-template-columns: 1fr; }.modal { max-height: 100dvh; border-radius: 16px; }.account-modal, .token-modal, .account-settings-modal { padding: 20px; }.settings-account-card { grid-template-columns: minmax(0, 1fr); }.settings-account-summary { grid-template-columns: 36px minmax(0, 1fr); }.settings-account-summary > i { width: 36px; height: 36px; }.account-auth-kind { grid-column: 2; justify-self: start; }.settings-account-actions { flex-wrap: wrap; }.settings-account-card > .settings-account-actions { grid-column: 1; justify-content: flex-start; border-top: 1px solid var(--color-border); padding-top: 12px; }.settings-account-actions .remove-account { margin-left: 0; }.account-remove-confirm { align-items: flex-start; flex-wrap: wrap; }.account-remove-confirm > span { flex-basis: 100%; }
+  .endpoint-strip code { font-size: 12px; }
+  .mobile-account-controls { display: grid; gap: 5px; margin: 14px 0 2px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .mobile-account-controls > button { min-width: 0; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 46px; padding: 6px 9px; border: 0; border-radius: 10px; background: transparent; color: var(--neutral-90); text-align: left; }
+  .mobile-account-controls > button.active { background: var(--color-accent-subtle); color: var(--color-accent-pressed); }
+  .mobile-account-controls > button > span { min-width: 0; display: grid; gap: 2px; }
+  .mobile-account-controls strong, .mobile-account-controls small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-account-controls strong { font-size: 13px; }.mobile-account-controls small { color: var(--color-text-tertiary); font-size: 12px; line-height: 1.45; }
+  .mobile-account-controls > div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .mobile-account-controls > div button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; border: 1px solid var(--color-border); border-radius: 9px; background: #fff; color: var(--neutral-90); font-size: 11px; }
+  .reader-content { width: 100%; padding: 24px 20px 44px; }.reader-actions { padding-inline: 10px; }.mail-body-view-action button span { display: none; }.sender-line { gap: 4px; }.sender-line button { padding: 6px; }
+}
+@media (max-width: 650px) {
+  .credential-guide ol { grid-template-columns: 1fr; }
+  .credential-guide-heading { flex-wrap: wrap; }
+  .credential-renewal { grid-template-columns: 1fr 1fr; }.credential-renewal label { grid-column: 1 / -1; }
+  .sync-worker-health { align-items: flex-start; flex-direction: column; }.sync-worker-health small { margin-left: 0; }
+  .sync-default-policy { padding: 14px; }.sync-default-policy > header { align-items: flex-start; }.sync-default-policy > header button { min-height: 34px; padding-inline: 11px; }.sync-default-fields { grid-template-columns: 1fr; }.sync-default-toggle { grid-column: 1; }.sync-default-options { display: grid; grid-template-columns: 1fr; gap: 9px; }.sync-default-options label { min-width: 0; white-space: normal; }
+  .sync-policy-grid { grid-template-columns: 1fr; }.sync-policy-grid .sync-toggle { grid-column: 1; }.sync-policy-actions { flex-wrap: wrap; }.sync-policy-actions button:nth-child(2) { margin-right: 0; }
+  .account-inline-editor { grid-template-columns: minmax(0, 1fr); }.account-inline-editor .card-editor-actions { justify-content: flex-start; border-top: 1px solid var(--color-border); padding-top: 10px; }.account-edit-name .app-input { width: 100%; }.account-edit-workspace { width: min(150px, 42%); }
+}
+@media (min-width: 821px) {
+  .app-shell.sidebar-collapsed { grid-template-columns: 72px 0 minmax(0, 1fr); }
+  .app-shell.sidebar-collapsed .primary-sidebar { overflow: hidden; padding-inline: 0; border-right-color: transparent; opacity: 0; pointer-events: none; }
+}
+@media (min-width: 821px) and (max-width: 1050px) {
+  .app-shell.sidebar-collapsed { grid-template-columns: 64px 0 minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

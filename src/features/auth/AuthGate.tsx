@@ -1,45 +1,27 @@
-import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@fluentui/react-components';
 import { ArrowLeft, LockKey, UserCircle, UserPlus } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { AppInput } from '../../components/form-controls';
 import { BrandLogo } from '../../components/brand-logo';
-
-type User = { id: string; login: string; displayName: string };
-type RememberedUser = Pick<User, 'login' | 'displayName'>;
-type AuthContextValue = { user: User; logout: () => Promise<void> };
-const AuthContext = createContext<AuthContextValue | null>(null);
-const rememberedKey = 'imail.remembered-app-users';
-
-function loadRemembered(): RememberedUser[] {
-  try { return JSON.parse(localStorage.getItem(rememberedKey) ?? '[]') as RememberedUser[]; } catch { return []; }
-}
-function remember(user: User) {
-  const next = [user, ...loadRemembered().filter((item) => item.login.toLowerCase() !== user.login.toLowerCase())].slice(0, 8);
-  localStorage.setItem(rememberedKey, JSON.stringify(next.map(({ login, displayName }) => ({ login, displayName }))));
-}
-
-export function useAuth() {
-  const value = useContext(AuthContext);
-  if (!value) throw new Error('useAuth 必须在 AuthGate 内使用');
-  return value;
-}
+import { AuthContext, type AppUser } from './auth-context';
+import { loadRememberedUsers, rememberUser } from './remembered-users';
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [checking, setChecking] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [selectedLogin, setSelectedLogin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [remembered, setRemembered] = useState(loadRemembered);
+  const [remembered, setRemembered] = useState(loadRememberedUsers);
 
   async function checkSession() {
     try {
-      const status = await api<{ setupRequired: boolean; user: User | null }>('/api/auth/status');
+      const status = await api<{ setupRequired: boolean; user: AppUser | null }>('/api/auth/status');
       setSetupRequired(status.setupRequired); setMode(status.setupRequired ? 'register' : 'login'); setUser(status.user);
-      if (status.user) remember(status.user);
+      if (status.user) rememberUser(status.user);
     } catch { setUser(null); setError('无法连接 iMail 服务'); }
     finally { setChecking(false); }
   }
@@ -60,8 +42,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
     const form = new FormData(event.currentTarget);
     const body = Object.fromEntries(form.entries());
     try {
-      const result = await api<{ user: User }>(mode === 'register' ? '/api/auth/register' : '/api/auth/login', { method: 'POST', body: JSON.stringify(body) });
-      remember(result.user); setRemembered(loadRemembered()); setUser(result.user); setSetupRequired(false);
+      const result = await api<{ user: AppUser }>(mode === 'register' ? '/api/auth/register' : '/api/auth/login', { method: 'POST', body: JSON.stringify(body) });
+      rememberUser(result.user); setRemembered(loadRememberedUsers()); setUser(result.user); setSetupRequired(false);
     } catch (reason) { setError(reason instanceof Error ? reason.message : '操作失败'); }
     finally { setBusy(false); }
   }

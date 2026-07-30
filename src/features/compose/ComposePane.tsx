@@ -8,19 +8,7 @@ import { AppInput, AppSelect } from '../../components/form-controls';
 import { RichTextEditor } from './RichTextEditor';
 import { AddressField } from './AddressField';
 import { addressParts, invalidAddresses, validAddresses } from './address-utils';
-
-function subjectWithPrefix(subject: string, prefix: 'Re' | 'Fwd') { return new RegExp(`^${prefix}:`, 'i').test(subject) ? subject : `${prefix}: ${subject}`; }
-function escapeHtml(value: string) { return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[character] ?? character); }
-function textToHtml(value: string) { return value.split('\n').map((line) => `<p>${line ? escapeHtml(line) : '<br>'}</p>`).join(''); }
-function formatSize(size: number) { return size < 1024 * 1024 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`; }
-function fileAsAttachment(file: File) {
-  return new Promise<DraftAttachment>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve({ id: crypto.randomUUID(), filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size, data: String(reader.result).split(',')[1] ?? '' });
-    reader.onerror = () => reject(new Error(`无法读取 ${file.name}`));
-    reader.readAsDataURL(file);
-  });
-}
+import { fileAsAttachment, formatAttachmentSize, subjectWithPrefix, textToHtml } from './compose-utils';
 
 export type ComposePaneHandle = { close: () => Promise<void> };
 
@@ -110,7 +98,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
         <label className="compose-row"><span>主题</span><AppInput value={subject} onChange={(event) => { setSubject(event.target.value); markDirty(); }} placeholder="邮件主题" /></label>
       </div>
       <RichTextEditor initialHtml={initialHtml} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); markDirty(); }} onAddAttachments={(files) => void addAttachments(files)} onError={setError} />
-      {attachments.length > 0 && <div className="composer-attachments">{attachments.map((attachment) => <span key={attachment.id}><File size={18} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{formatSize(attachment.size)}</small></span><button type="button" title={`移除 ${attachment.filename}`} aria-label={`移除附件 ${attachment.filename}`} onClick={() => { setAttachments((current) => current.filter((item) => item.id !== attachment.id)); markDirty(); }}><Trash size={15} /></button></span>)}</div>}
+      {attachments.length > 0 && <div className="composer-attachments">{attachments.map((attachment) => <span key={attachment.id}><File size={18} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.size)}</small></span><button type="button" title={`移除 ${attachment.filename}`} aria-label={`移除附件 ${attachment.filename}`} onClick={() => { setAttachments((current) => current.filter((item) => item.id !== attachment.id)); markDirty(); }}><Trash size={15} /></button></span>)}</div>}
       {error && <div className="inline-error composer-error"><WarningCircle size={17} />{error}</div>}
       <footer className="composer-footer"><span>关闭写信后仍会保留草稿</span><Button appearance="primary" icon={<PaperPlaneTilt size={17} />} type="submit" disabled={sending}>{sending ? '发送中…' : '发送邮件'}</Button></footer>
     </form>}
