@@ -124,8 +124,7 @@
   --color-rail-control-active-text: #137c68;
   --color-rail-accent: #49d5b7;
   --color-rail-border: #28443d;
-  --color-brand-logo-primary: #f5fffc;
-  --color-brand-logo-accent: #49d5b7;
+  --color-brand-logo: #49d5b7;
   --shadow-rail-control: 0 7px 18px rgb(6 27 23 / 32%);
   --color-overlay-scrim: rgb(16 35 31 / 40%);
   --color-dialog-surface: #fbfdfc;
@@ -211,7 +210,7 @@
   --color-rail-control: #183d69; --color-rail-control-hover: #205083;
   --color-rail-control-active: #e8f3fc; --color-rail-control-active-text: #145f9b;
   --color-rail-accent: #68b7ee; --color-rail-border: #234a76;
-  --color-brand-logo-primary: #f7fbff; --color-brand-logo-accent: #68b7ee;
+  --color-brand-logo: #68b7ee;
   --shadow-rail-control: 0 8px 20px rgb(4 25 52 / 38%);
   --color-overlay-scrim: rgb(16 45 85 / 38%);
   --color-dialog-surface: #f8fbff; --color-dialog-border: #c7d3e0;
@@ -248,7 +247,7 @@
   --color-rail-control: #28343c; --color-rail-control-hover: #35434c;
   --color-rail-control-active: #f4e3d6; --color-rail-control-active-text: #7e3a11;
   --color-rail-accent: #df8143; --color-rail-border: #684329;
-  --color-brand-logo-primary: #f6f9fa; --color-brand-logo-accent: #df8143;
+  --color-brand-logo: #df8143;
   --shadow-rail-control: 0 0 0 1px rgb(223 129 67 / 28%), 0 8px 22px rgb(5 10 13 / 46%);
   --color-overlay-scrim: rgb(17 26 32 / 48%);
   --color-dialog-surface: #eef2f4; --color-dialog-border: #95a4ad;
@@ -291,7 +290,7 @@
   --color-rail-control: #fff4cf; --color-rail-control-hover: #fffaf0;
   --color-rail-control-active: #c9a2ca; --color-rail-control-active-text: #2f2431;
   --color-rail-accent: #8c568e; --color-rail-border: #34303a;
-  --color-brand-logo-primary: #34303a; --color-brand-logo-accent: #8c568e;
+  --color-brand-logo: #8c568e;
   --shadow-rail-control: 3px 3px 0 #34303a;
   --color-overlay-scrim: rgb(52 48 58 / 40%);
   --color-dialog-surface: #fff8e9; --color-dialog-border: #34303a;

@@ -106,7 +106,7 @@
 - `--color-surface-sunken`：搜索框、代码外围等内嵌表面。
 - `--color-rail`：账户轨的主题表面；多数主题使用深色，柔和粗野主义使用带深色描边的暖黄表面。
 
-账户轨的文字、弱图标、控制面、选中面、强调标记与边界分别使用 `--color-rail-text/muted/control/control-hover/control-active/control-active-text/accent/border`，悬浮层次使用 `--shadow-rail-control`。品牌 SVG 的结构主色与信号强调色分别使用 `--color-brand-logo-primary/accent`；内置主题必须显式定义，自定义主题从 `rail` 的可读反色与 `accent` 自动派生。账户头像仍保留用户身份色，但选中轮廓和左侧标记必须跟随主题；禁止在账户轨组件中写死某套主题的薄荷色。
+账户轨的文字、弱图标、控制面、选中面、强调标记与边界分别使用 `--color-rail-text/muted/control/control-hover/control-active/control-active-text/accent/border`，悬浮层次使用 `--shadow-rail-control`。品牌 SVG 的完整图形统一使用 `--color-brand-logo`；内置主题必须显式定义，自定义主题从 `accent` 自动派生。账户头像仍保留用户身份色，但选中轮廓和左侧标记必须跟随主题；禁止在账户轨组件中写死某套主题的薄荷色。
 
 不要通过“白卡片 + 边框 + 阴影”同时叠加来制造层级。常规容器优先使用背景差；输入与分隔使用边框；菜单、弹窗等真正浮层才使用阴影。
 

@@ -79,7 +79,7 @@ export function customThemeCssVariables(theme: CustomThemeDefinition): CSSProper
     '--color-rail-control': mixHex(theme.rail, contrastText(theme.rail), .1), '--color-rail-control-hover': mixHex(theme.rail, contrastText(theme.rail), .16),
     '--color-rail-control-active': theme.accentSubtle, '--color-rail-control-active-text': contrastText(theme.accentSubtle),
     '--color-rail-accent': theme.accent, '--color-rail-border': mixHex(theme.rail, theme.accent, .28),
-    '--color-brand-logo-primary': contrastText(theme.rail), '--color-brand-logo-accent': theme.accent,
+    '--color-brand-logo': theme.accent,
     '--shadow-rail-control': theme.shadow === 'none' ? 'none' : theme.shadow === 'offset' ? `3px 3px 0 ${theme.text}` : `0 7px 18px ${shadowColor}52`,
     '--color-overlay-scrim': `${theme.rail}66`, '--color-dialog-surface': mixHex(theme.surface, theme.canvas, .08),
     '--color-dialog-border': borderStrong, '--color-dialog-control': raised,
