@@ -6,6 +6,7 @@ import type { CachedMessage, MailAccount, StoreData, SyncPolicy } from '../types
 import type { SyncExecutionResult } from '../mail.js';
 import { enqueueDueSyncs, targetsForPolicy } from './scheduler.js';
 import { SyncStore } from './store.js';
+import { SQLiteStore } from '../store.js';
 import { executeSyncJob } from './worker-runtime.js';
 import { startIdleWatchers } from './idle.js';
 import { EventEmitter } from 'node:events';
@@ -16,7 +17,11 @@ const stores: SyncStore[] = [];
 async function temporarySyncStore() {
   const directory = await mkdtemp(path.join(tmpdir(), 'imail-sync-'));
   directories.push(directory);
-  const store = new SyncStore(path.join(directory, 'imail.sqlite'));
+  const databasePath = path.join(directory, 'imail.sqlite');
+  const primary = new SQLiteStore(databasePath);
+  await primary.update((snapshot) => { snapshot.accounts = [account()]; });
+  primary.close();
+  const store = new SyncStore(databasePath);
   stores.push(store);
   return store;
 }

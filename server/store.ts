@@ -64,6 +64,11 @@ export class SQLiteStore {
     return readSnapshot(this.db, currentUserId());
   }
 
+  async readAll(): Promise<StoreData> {
+    await this.queue;
+    return readSnapshot(this.db);
+  }
+
   async listMessages(input: MessageQuery): Promise<{ messages: CachedMessage[]; total: number }> {
     await this.queue;
     const where: string[] = [];
@@ -162,11 +167,14 @@ export class SQLiteStore {
   }
 
   async update(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> {
+    return this.updateWithUser(currentUserId(), mutator);
+  }
+
+  private async updateWithUser(userId: string | undefined, mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> {
     let output = structuredClone(initial);
     const operation = this.queue.catch(() => undefined).then(async () => {
       this.db.exec('BEGIN IMMEDIATE');
       try {
-        const userId = currentUserId();
         const data = readSnapshot(this.db, userId);
         const before = structuredClone(data);
         await mutator(data);
@@ -174,10 +182,7 @@ export class SQLiteStore {
         else replaceData(this.db, data, undefined, false);
         this.db.exec('COMMIT');
         output = data;
-      } catch (error) {
-        this.db.exec('ROLLBACK');
-        throw error;
-      }
+      } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     });
     this.queue = operation.then(() => undefined, () => undefined);
     await operation;
@@ -187,6 +192,14 @@ export class SQLiteStore {
   async setAccountSyncStatus(accountId: string, status: 'connected' | 'syncing' | 'error', lastError?: string) {
     const operation = this.queue.catch(() => undefined).then(() => {
       this.db.prepare('UPDATE accounts SET status = ?, last_error = ? WHERE id = ?').run(status, lastError ?? null, accountId);
+    });
+    this.queue = operation.then(() => undefined, () => undefined);
+    await operation;
+  }
+
+  async setAccountEncryptedSecret(accountId: string, encryptedSecret: string) {
+    const operation = this.queue.catch(() => undefined).then(() => {
+      this.db.prepare('UPDATE accounts SET encrypted_secret = ? WHERE id = ?').run(encryptedSecret, accountId);
     });
     this.queue = operation.then(() => undefined, () => undefined);
     await operation;
@@ -292,16 +305,24 @@ function configuredStore() {
   return defaultStore;
 }
 
-export function readStore(): Promise<StoreData> { return configuredStore().read(); }
-export function updateStore(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> { return configuredStore().update(mutator); }
-export function listCachedMessages(input: MessageQuery) { return configuredStore().listMessages(input); }
-export function getCachedMessage(id: string) { return configuredStore().getMessage(id); }
-export function getMessageStats() { return configuredStore().messageStats(); }
-export function getMetadata(key: string) { return configuredStore().getMetadata(userMetadataKey(key)); }
-export function setMetadata(key: string, value: string) { return configuredStore().setMetadata(userMetadataKey(key), value); }
+function requireUserScope() {
+  const userId = currentUserId();
+  if (!userId) throw new Error('用户存储操作缺少明确的用户上下文');
+  return userId;
+}
+
+export function readStore(): Promise<StoreData> { requireUserScope(); return configuredStore().read(); }
+export function readAllStore(): Promise<StoreData> { return configuredStore().readAll(); }
+export function updateStore(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> { requireUserScope(); return configuredStore().update(mutator); }
+export function listCachedMessages(input: MessageQuery) { requireUserScope(); return configuredStore().listMessages(input); }
+export function getCachedMessage(id: string) { requireUserScope(); return configuredStore().getMessage(id); }
+export function getMessageStats() { requireUserScope(); return configuredStore().messageStats(); }
+export function getMetadata(key: string) { requireUserScope(); return configuredStore().getMetadata(userMetadataKey(key)); }
+export function setMetadata(key: string, value: string) { requireUserScope(); return configuredStore().setMetadata(userMetadataKey(key), value); }
 export function getDeveloperTokenByHash(tokenHash: string) { return configuredStore().developerTokenByHash(tokenHash); }
 export function touchDeveloperToken(id: string, usedAt: string) { return configuredStore().touchDeveloperToken(id, usedAt); }
 export function setAccountSyncStatus(accountId: string, status: 'connected' | 'syncing' | 'error', lastError?: string) { return configuredStore().setAccountSyncStatus(accountId, status, lastError); }
+export function setAccountEncryptedSecret(accountId: string, encryptedSecret: string) { return configuredStore().setAccountEncryptedSecret(accountId, encryptedSecret); }
 export function commitMailboxSync(input: MailboxSyncCommit) { return configuredStore().commitMailboxSync(input); }
 export function closeStore() {
   for (const close of [...auxiliaryStoreClosers]) close();

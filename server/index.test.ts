@@ -19,6 +19,7 @@ let directory: string;
 let server: Server;
 let baseUrl: string;
 let updateStore: typeof import('./store.js')['updateStore'];
+let updateAppStore: typeof import('./store.js')['updateStore'];
 let closeStore: typeof import('./store.js')['closeStore'];
 let getSyncStore: typeof import('./sync/store.js')['getSyncStore'];
 let withUserContext: typeof import('./auth/context.js')['withUserContext'];
@@ -41,6 +42,7 @@ beforeAll(async () => {
   closeStore = store.closeStore;
   getSyncStore = syncStore.getSyncStore;
   withUserContext = authContext.withUserContext;
+  updateAppStore = (mutator) => withUserContext(appUserId, () => updateStore(mutator));
   server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
@@ -173,7 +175,7 @@ describe('iMail HTTP API', () => {
     const gatewayPreferences = await request('/api/preferences');
     expect(gatewayPreferences.body.preferences).not.toHaveProperty('customTheme');
 
-    await updateStore((data) => { data.messages = [{
+    await updateAppStore((data) => { data.messages = [{
       id: 'mcp-message', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 42,
       from: { name: 'Agent Sender', address: 'sender@example.com' }, to: [{ name: 'Owner', address: account.email }],
       subject: 'MCP test', preview: 'Cached preview', text: 'Cached body', html: '<p>Cached body</p>', date: '2026-07-29T12:00:00.000Z',
@@ -212,6 +214,18 @@ describe('iMail HTTP API', () => {
     expect(result.body.accounts[0]).toMatchObject({ id: account.id, email: account.email, authMethod: 'oauth2' });
     expect(JSON.stringify(result.body)).not.toContain('must-never-leak');
     expect(result.body.accounts[0]).not.toHaveProperty('encryptedSecret');
+  });
+
+  it('returns a stable conflict for a duplicate mailbox account', async () => {
+    const result = await request('/api/accounts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: account.provider, email: account.email, displayName: account.displayName, group: account.group,
+        color: account.color, password: 'duplicate-password', settings: account.settings,
+      }),
+    });
+    expect(result.response.status).toBe(409);
+    expect(result.body).toEqual({ error: '这个邮箱已经添加' });
   });
 
   it('persists backend sync policy and queues work without executing IMAP in the request', async () => {
@@ -354,7 +368,7 @@ describe('iMail HTTP API', () => {
   });
 
   it('returns paged summaries and loads a single message body on demand', async () => {
-    await updateStore((data) => { data.messages = [{
+    await updateAppStore((data) => { data.messages = [{
       id: 'message-lazy', accountId: account.id, mailbox: 'INBOX', uid: 8, from: { name: 'Sender', address: 'sender@example.com' }, to: [],
       subject: 'Lazy body', preview: 'Preview', text: 'Full body', html: '<p>Full body</p>', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [],
     }]; });
@@ -387,7 +401,7 @@ describe('iMail HTTP API', () => {
   });
 
   it('builds a contact library from every cached sender and recipient', async () => {
-    await updateStore((data) => { data.messages = [
+    await updateAppStore((data) => { data.messages = [
       { id: 'received-1', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 12, from: { name: 'Alice', address: 'Alice@example.com' }, to: [{ name: 'Owner', address: account.email }], subject: 'Received', preview: '', text: '', date: '2026-07-29T02:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [] },
       { id: 'sent-1', accountId: account.id, mailbox: 'Sent', mailboxRole: 'sent', uid: 13, from: { name: 'Owner', address: account.email }, to: [{ name: 'Alice Zhang', address: 'alice@example.com' }, { name: 'Bob', address: 'bob@example.com' }], subject: 'Sent', preview: '', text: '', date: '2026-07-29T03:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [] },
     ]; });
@@ -413,7 +427,7 @@ describe('iMail HTTP API', () => {
     const updatedDraft = await request(`/api/drafts/${draftId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: account.id, to: [], cc: [], subject: 'Updated draft', text: '' }) });
     expect(updatedDraft.body.draft.subject).toBe('Updated draft');
 
-    await updateStore((data) => { data.messages = [{ id: 'organize-me', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 10, from: { name: 'Sender', address: 'sender@example.com' }, to: [], subject: 'Organize', preview: '', text: 'Body', date: '2026-07-29T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [], labels: [] }]; });
+    await updateAppStore((data) => { data.messages = [{ id: 'organize-me', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 10, from: { name: 'Sender', address: 'sender@example.com' }, to: [], subject: 'Organize', preview: '', text: 'Body', date: '2026-07-29T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [], labels: [] }]; });
     const organized = await request('/api/messages/organize-me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ labels: ['客户'], snoozedUntil: '2999-01-01T09:00:00.000Z' }) });
     expect(organized.body.message).toMatchObject({ labels: ['客户'], snoozedUntil: '2999-01-01T09:00:00.000Z' });
     expect(organized.body.message.from.logo.url).toBe('/api/contacts/logo?address=sender%40example.com');
@@ -436,7 +450,7 @@ describe('iMail HTTP API', () => {
   });
 
   it('lets a developer token select a mailbox by email without exposing internal account IDs', async () => {
-    await updateStore((data) => { data.messages = [
+    await updateAppStore((data) => { data.messages = [
       { id: 'message-new', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 11, from: { name: 'Alice', address: 'alice@example.com' }, to: [], subject: 'Newest gateway message', preview: 'Newest preview', text: 'Newest body', date: '2026-07-29T02:00:00.000Z', unread: true, flagged: false, hasAttachments: true, attachments: [{ filename: 'report.txt', contentType: 'text/plain', size: 5, index: 0 }], labels: [] },
       { id: 'message-dev', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 9, from: { name: 'Sender', address: 'sender@example.com' }, to: [], subject: 'Gateway message', preview: 'Preview', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [], labels: [] },
       { id: 'message-old', accountId: account.id, mailbox: 'Sent', mailboxRole: 'sent', uid: 7, from: { name: 'Owner', address: account.email }, to: [], subject: 'Old sent message', preview: 'Sent', text: 'Sent body', date: '2026-07-27T00:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [], labels: [] },
@@ -503,7 +517,7 @@ describe('iMail HTTP API', () => {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Delete test', scopes: ['accounts:read'], mailboxes: [account.email], ttlSeconds: 3600 }),
     });
-    await updateStore((data) => { data.messages.push({
+    await updateAppStore((data) => { data.messages.push({
       id: 'message-1', accountId: account.id, mailbox: 'INBOX', uid: 1, from: { name: '', address: 'sender@example.com' }, to: [],
       subject: 'Subject', preview: '', text: '', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [],
     }); });

@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { z } from 'zod';
+import { AppError } from '../domain/errors.js';
 
 export class GatewayError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string, public readonly details?: unknown) {
@@ -28,6 +29,10 @@ export const gatewayRequestContext: RequestHandler = (req, res, next) => {
 };
 
 export const gatewayErrorHandler: ErrorRequestHandler = (error: unknown, _req, res, _next) => {
+  if (error instanceof AppError) {
+    sendGatewayError(res, error.status, error.code, error.message);
+    return;
+  }
   if (error instanceof GatewayError) {
     sendGatewayError(res, error.status, error.code, error.message, error.details);
     return;

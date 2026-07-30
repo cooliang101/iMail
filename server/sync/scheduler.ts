@@ -1,5 +1,5 @@
 import type { MailAccount, MailboxRole, SyncJobReason, SyncPolicy } from '../types.js';
-import { readStore } from '../store.js';
+import { readAllStore } from '../store.js';
 import { getSyncStore, type SyncStore } from './store.js';
 import { canonicalSyncTarget } from '../mail/mailbox-role.js';
 
@@ -28,7 +28,7 @@ function stateForTarget(states: ReturnType<SyncStore['listMailboxStates']>, targ
       ?? states.find((state) => state.mailboxRole === target.mailboxRole);
 }
 
-export async function enqueueDueSyncs(reason: SyncJobReason = 'scheduled', syncStore = getSyncStore(), now = new Date(), loadStore = readStore) {
+export async function enqueueDueSyncs(reason: SyncJobReason = 'scheduled', syncStore = getSyncStore(), now = new Date(), loadStore = readAllStore) {
   const { accounts } = await loadStore();
   const nowIso = now.toISOString();
   const jobs = [];

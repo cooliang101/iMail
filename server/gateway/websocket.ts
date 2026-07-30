@@ -3,8 +3,8 @@ import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer } from 'ws';
 import { authenticateToken } from '../tokens.js';
 import type { DeveloperToken } from '../types.js';
-import { gatewayEvents, type GatewayMessageCreatedEvent } from './events.js';
 import { getSyncStore } from '../sync/store.js';
+import type { integrationMessageSummary } from '../domain/message-views.js';
 
 const EVENTS_PATH = '/gateway/v1/events';
 const AUTH_TIMEOUT_MS = 5_000;
@@ -20,6 +20,14 @@ type Session = {
   authTimer: NodeJS.Timeout;
 };
 
+type GatewayMessageCreatedEvent = {
+  id: string;
+  type: 'message.created';
+  occurredAt: string;
+  accountId: string;
+  data: { message: ReturnType<typeof integrationMessageSummary> };
+};
+
 function bearer(value: string | string[] | undefined) {
   const header = Array.isArray(value) ? value[0] : value;
   return header?.replace(/^Bearer\s+/i, '');
@@ -29,7 +37,7 @@ function send(socket: WebSocket, value: unknown) {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
 }
 
-export function attachGatewayWebSocket(server: Server, _deprecatedOptions: Record<string, unknown> = {}) {
+export function attachGatewayWebSocket(server: Server, options: { eventPollIntervalMs?: number } = {}) {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = new Set<Session>();
 
@@ -99,7 +107,6 @@ export function attachGatewayWebSocket(server: Server, _deprecatedOptions: Recor
       }).catch(() => session.socket.close(1011, 'Event delivery failed'));
     }
   };
-  const unsubscribe = gatewayEvents.subscribe(deliver);
   let eventCursor = getSyncStore().latestEventId();
   const eventTimer = setInterval(() => {
     for (const event of getSyncStore().listEvents(eventCursor)) {
@@ -107,7 +114,7 @@ export function attachGatewayWebSocket(server: Server, _deprecatedOptions: Recor
       if (event.type !== 'message.created') continue;
       deliver({ id: String(event.id), type: 'message.created', occurredAt: event.createdAt, accountId: event.accountId, data: event.payload as GatewayMessageCreatedEvent['data'] });
     }
-  }, 1_000);
+  }, options.eventPollIntervalMs ?? 1_000);
   eventTimer.unref();
 
   const heartbeatTimer = setInterval(() => {
@@ -122,7 +129,6 @@ export function attachGatewayWebSocket(server: Server, _deprecatedOptions: Recor
   const close = () => {
     clearInterval(heartbeatTimer);
     clearInterval(eventTimer);
-    unsubscribe();
     server.off('upgrade', onUpgrade);
     for (const session of sessions) session.socket.terminate();
     wss.close();

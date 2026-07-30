@@ -14,7 +14,8 @@ let otherAccount: MailAccount;
 let rawToken: string;
 let updateStore: typeof import('../store.js')['updateStore'];
 let closeStore: typeof import('../store.js')['closeStore'];
-let gatewayEvents: typeof import('./events.js')['gatewayEvents'];
+let getSyncStore: typeof import('../sync/store.js')['getSyncStore'];
+let withUserContext: typeof import('../auth/context.js')['withUserContext'];
 
 function nextJson(socket: WebSocket) {
   return new Promise<any>((resolve, reject) => {
@@ -36,23 +37,23 @@ beforeAll(async () => {
   process.env.IMAIL_DATA_DIR = directory;
   process.env.APP_MASTER_KEY = '33'.repeat(32);
   vi.resetModules();
-  const [{ createApp }, store, tokens, websocket, events] = await Promise.all([
-    import('../app.js'), import('../store.js'), import('../tokens.js'), import('./websocket.js'), import('./events.js'),
+  const [{ createApp }, store, tokens, websocket, syncStore] = await Promise.all([
+    import('../app.js'), import('../store.js'), import('../tokens.js'), import('./websocket.js'), import('../sync/store.js'),
   ]);
   updateStore = store.updateStore;
   closeStore = store.closeStore;
-  gatewayEvents = events.gatewayEvents;
+  getSyncStore = syncStore.getSyncStore;
   account = {
     id: crypto.randomUUID(), provider: 'gmail', email: 'owner@example.com', displayName: 'Owner', group: '个人', color: '#168f78',
     settings: { imapHost: 'imap.gmail.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.gmail.com', smtpPort: 465, smtpSecure: true },
     encryptedSecret: 'cipher', createdAt: new Date().toISOString(), lastSyncAt: new Date().toISOString(), status: 'connected',
   };
   otherAccount = { ...account, id: crypto.randomUUID(), email: 'other@example.com' };
-  const { withUserContext } = await import('../auth/context.js');
+  ({ withUserContext } = await import('../auth/context.js'));
   await withUserContext('websocket-test-user', () => updateStore((data) => { data.accounts = [account, otherAccount]; data.messages = []; data.tokens = []; }));
   rawToken = (await withUserContext('websocket-test-user', () => tokens.issueToken({ name: 'WebSocket test', scopes: ['messages:read'], accountIds: [account.id], ttlSeconds: 3600 }))).raw;
   server = createServer(createApp());
-  websocket.attachGatewayWebSocket(server, { syncIntervalMs: 60_000, sync: vi.fn(async () => ({ synced: 0 })) });
+  websocket.attachGatewayWebSocket(server, { eventPollIntervalMs: 10 });
   server.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
@@ -74,9 +75,9 @@ describe('developer gateway WebSocket', () => {
     socket.send(JSON.stringify({ type: 'authenticate', token: rawToken }));
     await expect(nextJson(socket)).resolves.toMatchObject({ type: 'connected', occurredAt: expect.any(String) });
 
-    gatewayEvents.publishMessageCreated(otherAccount, [message(otherAccount.id, 'not-authorized')]);
+    getSyncStore().recordMessageCreated(otherAccount, [message(otherAccount.id, 'not-authorized')]);
     const received = nextJson(socket);
-    gatewayEvents.publishMessageCreated(account, [message(account.id, 'authorized-message')]);
+    getSyncStore().recordMessageCreated(account, [message(account.id, 'authorized-message')]);
     await expect(received).resolves.toMatchObject({
       id: expect.any(String), type: 'message.created', occurredAt: expect.any(String),
       data: { message: { id: 'authorized-message', accountEmail: account.email, subject: 'A new message' } },
@@ -88,9 +89,9 @@ describe('developer gateway WebSocket', () => {
   it('accepts an Authorization header and disconnects a revoked token', async () => {
     const socket = new WebSocket(websocketUrl, { headers: { Authorization: `Bearer ${rawToken}` } });
     await expect(nextJson(socket)).resolves.toMatchObject({ type: 'connected' });
-    await updateStore((data) => { data.tokens = []; });
+    await withUserContext('websocket-test-user', () => updateStore((data) => { data.tokens = []; }));
     const closed = new Promise<number>((resolve) => socket.once('close', resolve));
-    gatewayEvents.publishMessageCreated(account, [message(account.id, 'after-revoke')]);
+    getSyncStore().recordMessageCreated(account, [message(account.id, 'after-revoke')]);
     await expect(closed).resolves.toBe(1008);
   });
 });

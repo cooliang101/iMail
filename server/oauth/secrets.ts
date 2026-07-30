@@ -1,5 +1,5 @@
 import { decryptSecret, encryptSecret } from '../crypto.js';
-import { updateStore } from '../store.js';
+import { setAccountEncryptedSecret, setAccountSyncStatus } from '../store.js';
 import type { AccountSecret, MailAccount } from '../types.js';
 import { tokenRequest, tokenToSecret } from './client.js';
 import { providerConfig } from './config.js';
@@ -11,18 +11,12 @@ export async function validateStoredAccountConnection(account: MailAccount): Pro
     const { testAccount } = await import('../mail.js');
     await testAccount(account);
     const connected: MailAccount = { ...account, status: 'connected', lastError: undefined };
-    await updateStore((data) => {
-      const current = data.accounts.find((item) => item.id === account.id);
-      if (current) { current.status = 'connected'; current.lastError = undefined; }
-    });
+    await setAccountSyncStatus(account.id, 'connected');
     return connected;
   } catch (error) {
     const lastError = error instanceof Error ? error.message : '邮箱连接验证失败';
     const failed: MailAccount = { ...account, status: 'error', lastError };
-    await updateStore((data) => {
-      const current = data.accounts.find((item) => item.id === account.id);
-      if (current) { current.status = 'error'; current.lastError = lastError; }
-    });
+    await setAccountSyncStatus(account.id, 'error', lastError);
     return failed;
   }
 }
@@ -33,10 +27,7 @@ async function refreshAccountSecret(account: MailAccount, secret: AccountSecret)
   if (!config.configured) throw new Error(`OAuth Token 已过期。${config.configurationHint}`);
   const token = await tokenRequest(config, new URLSearchParams({ grant_type: 'refresh_token', refresh_token: secret.refreshToken }));
   const refreshed = tokenToSecret(config, token, secret.refreshToken);
-  await updateStore(async (data) => {
-    const current = data.accounts.find((item) => item.id === account.id);
-    if (current) current.encryptedSecret = await encryptSecret(refreshed);
-  });
+  await setAccountEncryptedSecret(account.id, await encryptSecret(refreshed));
   return refreshed;
 }
 

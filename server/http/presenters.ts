@@ -1,4 +1,5 @@
 import type { CachedMessage, DeveloperToken, MailAccount } from '../types.js';
+import { clientMessageSummary } from '../domain/message-views.js';
 
 export function publicAccount(account: MailAccount) {
   const { encryptedSecret: _secret, ...safe } = account;
@@ -13,12 +14,5 @@ export function publicDeveloperToken(token: DeveloperToken, accounts: MailAccoun
 }
 
 export function publicMessageSummary(message: CachedMessage) {
-  const { uid: _uid, messageId: _messageId, text: _text, html: _html, ...summary } = message;
-  return {
-    ...summary,
-    mailboxRole: summary.mailboxRole ?? 'inbox',
-    attachments: summary.attachments.map((attachment, index) => ({ ...attachment, index: attachment.index ?? index })),
-    labels: summary.labels ?? [],
-    from: { ...summary.from, logo: { url: `/api/contacts/logo?address=${encodeURIComponent(summary.from.address)}` } },
-  };
+  return clientMessageSummary(message);
 }

@@ -295,8 +295,9 @@ src/app-model.ts     跨 feature 的客户端类型
 server/index.ts      服务进程启动入口
 server/app.ts        Express 应用与路由装配
 server/routes/       管理 API 与开发者网关路由
+server/domain/       HTTP、MCP 与后台任务共享的领域服务和错误模型
 server/http/         校验、鉴权、响应转换与错误处理
-server/mcp/          MCP Streamable HTTP 传输、授权与完整邮箱工具
+server/mcp/          MCP Streamable HTTP 传输、授权、装配与领域工具
 server/mail/         IMAP/SMTP 连接、增量同步、远程操作与发送
 server/sync/         持久化调度、任务租约、独立 Worker 与运行状态
 server/oauth/        OAuth 配置、授权流程、身份校验与 Token 刷新

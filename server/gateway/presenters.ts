@@ -1,4 +1,5 @@
 import type { CachedMessage, MailAccount } from '../types.js';
+import { integrationMessageSummary } from '../domain/message-views.js';
 
 export function gatewayMailbox(account: MailAccount) {
   return {
@@ -11,29 +12,10 @@ export function gatewayMailbox(account: MailAccount) {
   };
 }
 
-function messageBase(message: CachedMessage, accountEmail: string) {
-  return {
-    id: message.id,
-    accountEmail,
-    folder: message.mailbox,
-    mailboxRole: message.mailboxRole ?? 'inbox',
-    from: message.from,
-    to: message.to,
-    subject: message.subject,
-    preview: message.preview,
-    date: message.date,
-    unread: message.unread,
-    flagged: message.flagged,
-    hasAttachments: message.hasAttachments,
-    attachments: message.attachments.map(({ filename, contentType, size, index }, fallbackIndex) => ({ filename, contentType, size, index: index ?? fallbackIndex })),
-    labels: message.labels ?? [],
-  };
-}
-
 export function gatewayMessageSummary(message: CachedMessage, accountEmail: string) {
-  return messageBase(message, accountEmail);
+  return integrationMessageSummary(message, accountEmail);
 }
 
 export function gatewayMessageDetail(message: CachedMessage, accountEmail: string) {
-  return { ...messageBase(message, accountEmail), text: message.text, ...(message.html ? { html: message.html } : {}) };
+  return { ...integrationMessageSummary(message, accountEmail), text: message.text, ...(message.html ? { html: message.html } : {}) };
 }

@@ -11,6 +11,14 @@ const state = vi.hoisted(() => ({
 vi.mock('./store.js', () => ({
   readStore: vi.fn(async () => state.store),
   updateStore: vi.fn(async (updater: (data: StoreData) => unknown) => updater(state.store)),
+  setAccountSyncStatus: vi.fn(async (accountId: string, status: MailAccount['status'], lastError?: string) => {
+    const account = state.store.accounts.find((item) => item.id === accountId);
+    if (account) { account.status = status; account.lastError = lastError; }
+  }),
+  setAccountEncryptedSecret: vi.fn(async (accountId: string, encryptedSecret: string) => {
+    const account = state.store.accounts.find((item) => item.id === accountId);
+    if (account) account.encryptedSecret = encryptedSecret;
+  }),
 }));
 
 vi.mock('./crypto.js', () => ({

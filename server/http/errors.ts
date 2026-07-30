@@ -1,9 +1,14 @@
 import type { ErrorRequestHandler } from 'express';
 import { z } from 'zod';
+import { AppError } from '../domain/errors.js';
 
 export const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _next) => {
   if (error instanceof z.ZodError) {
     res.status(400).json({ error: error.issues.map((issue) => issue.message).join('；') });
+    return;
+  }
+  if (error instanceof AppError) {
+    res.status(error.status).json({ error: error.message });
     return;
   }
   const detail = (error instanceof Error ? error.stack || error.message : String(error))

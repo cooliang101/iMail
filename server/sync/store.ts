@@ -8,8 +8,7 @@ import type {
   CachedMessage, MailAccount, MailboxRole, MailboxSyncState, SyncConnectionStatus, SyncEvent, SyncFolderMode,
   SyncJob, SyncJobReason, SyncPolicy, SyncPolicySettings, SyncState,
 } from '../types.js';
-import { gatewayMessageSummary } from '../gateway/presenters.js';
-import { publicMessageSummary } from '../http/presenters.js';
+import { clientMessageSummary, integrationMessageSummary } from '../domain/message-views.js';
 import { currentUserId } from '../auth/context.js';
 
 type Row = Record<string, string | number | bigint | null>;
@@ -235,8 +234,8 @@ export class SyncStore {
       this.insertEvent('sync.completed', job.accountId, job.id, {
         mailbox: result.mailbox, mailboxRole: job.mailboxRole, synced: result.synced, created: result.created, updated: result.updated, deleted: result.deleted,
         messageChanges: (result.messageChanges ?? []).map((change) => ({
-          ...(change.before ? { before: publicMessageSummary(change.before) } : {}),
-          ...(change.after ? { after: publicMessageSummary(change.after) } : {}),
+          ...(change.before ? { before: clientMessageSummary(change.before) } : {}),
+          ...(change.after ? { after: clientMessageSummary(change.after) } : {}),
         })),
       }, nowIso);
       this.db.exec('COMMIT');
@@ -309,7 +308,7 @@ export class SyncStore {
     const now = new Date().toISOString();
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      for (const message of messages) this.insertEvent('message.created', account.id, undefined, { message: gatewayMessageSummary(message, account.email) }, now);
+      for (const message of messages) this.insertEvent('message.created', account.id, undefined, { message: integrationMessageSummary(message, account.email) }, now);
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }

@@ -5,6 +5,7 @@ import { tokenSchema } from '../http/schemas.js';
 import { readStore, updateStore } from '../store.js';
 import { issueToken } from '../tokens.js';
 import type { TokenScope } from '../types.js';
+import { invalid } from '../domain/errors.js';
 
 export const developerTokensRouter = Router();
 
@@ -18,7 +19,7 @@ developerTokensRouter.post('/developer-tokens', asyncRoute(async (req, res) => {
   const data = await readStore();
   const requestedMailboxes = new Set(input.mailboxes.map((email) => email.toLowerCase()));
   const accounts = data.accounts.filter((account) => requestedMailboxes.has(account.email.toLowerCase()));
-  if (accounts.length !== requestedMailboxes.size) throw new Error('包含不存在的邮箱账户');
+  if (accounts.length !== requestedMailboxes.size) throw invalid('TOKEN_MAILBOX_NOT_FOUND', '包含不存在的邮箱账户');
   const scopes: TokenScope[] = input.scopes.includes('mcp:full') ? ['mcp:full'] : input.scopes as TokenScope[];
   const accountIds = scopes.includes('mcp:full') ? data.accounts.map((account) => account.id) : accounts.map((account) => account.id);
   const result = await issueToken({ name: input.name, scopes, accountIds, ttlSeconds: input.ttlSeconds });

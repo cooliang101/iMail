@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { FetchMessageObject, ListResponse } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { commitMailboxSync, readStore, setAccountSyncStatus } from '../store.js';
+import { commitMailboxSync, readAllStore, setAccountSyncStatus } from '../store.js';
 import type { CachedMessage, MailboxFolder, MailboxMessageChange, MailboxRole } from '../types.js';
-import { gatewayEvents } from '../gateway/events.js';
 import { address, imapClientFor } from './client.js';
 import { mailboxRoleFor } from './mailbox-role.js';
 
@@ -40,7 +39,7 @@ export type SyncExecutionResult = {
 };
 
 export async function syncMailbox(accountId: string, mailboxRole: MailboxRole = 'inbox', requestedMailbox?: string, cursor?: SyncCursor): Promise<SyncExecutionResult> {
-  const store = await readStore();
+  const store = await readAllStore();
   const account = store.accounts.find((item) => item.id === accountId);
   if (!account) throw new Error('邮箱账户不存在');
   const previouslySynced = Boolean(account.lastSyncAt);
@@ -143,7 +142,6 @@ export async function syncMailbox(accountId: string, mailboxRole: MailboxRole = 
       accountId, mailbox: mailboxPath, mailboxRole, incoming, removedUids: [...removedUids], uidValidityChanged,
       flagUpdates: [...flagUpdates].map(([uid, flags]) => ({ uid, ...flags })), folders, completedAt: new Date().toISOString(),
     });
-    if (previouslySynced && createdMessages.length > 0) gatewayEvents.publishMessageCreated(account, createdMessages);
     return {
       synced: incoming.length, created: createdMessages.length, updated: updatedCount, deleted: uidValidityChanged ? cached.length : removedUids.size,
       mailbox: mailboxPath, mailboxRole, uidValidity, highestModseq, lastSeenUid,

@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { buildNotifications } from '../domain/notifications.js';
+import { notFound } from '../domain/errors.js';
 import { asyncRoute } from '../http/async-route.js';
 import { contactLogoKey, contactRootLogoKey } from '../contact-model.js';
 import { mailboxRoleSchema, sendSchema } from '../http/schemas.js';
@@ -102,7 +104,7 @@ messagesRouter.patch('/messages/:id', asyncRoute(async (req, res) => {
   let updated;
   await updateStore((data) => {
     updated = data.messages.find((item) => item.id === req.params.id);
-    if (!updated) throw new Error('邮件不存在');
+    if (!updated) throw notFound('MESSAGE_NOT_FOUND', '邮件不存在');
     Object.assign(updated, input, { snoozedUntil: input.snoozedUntil ?? undefined });
   });
   const data = await readStore();
@@ -116,7 +118,7 @@ messagesRouter.post('/messages/:id/move', asyncRoute(async (req, res) => {
   let moved;
   await updateStore((data) => {
     moved = data.messages.find((item) => item.id === req.params.id);
-    if (!moved) throw new Error('邮件不存在');
+    if (!moved) throw notFound('MESSAGE_NOT_FOUND', '邮件不存在');
     moved.mailbox = result.mailbox; moved.mailboxRole = destination;
     if (result.uid) moved.uid = result.uid;
     moved.snoozedUntil = undefined;
@@ -142,11 +144,7 @@ messagesRouter.get('/labels', asyncRoute(async (_req, res) => {
 }));
 
 messagesRouter.get('/notifications', asyncRoute(async (_req, res) => {
-  const data = await readStore(); const now = new Date().toISOString();
-  const connection = data.accounts.filter((item) => item.status === 'error').map((account) => ({ id: `account-${account.id}`, kind: 'error', title: `${account.displayName} 连接异常`, detail: account.lastError || account.email, date: account.lastSyncAt || account.createdAt, accountId: account.id }));
-  const returned = data.messages.filter((item) => item.snoozedUntil && item.snoozedUntil <= now).slice(0, 20).map((message) => ({ id: `snooze-${message.id}`, kind: 'snooze', title: message.subject, detail: '稍后处理的邮件已返回收件箱', date: message.snoozedUntil!, messageId: message.id, accountId: message.accountId }));
-  const unread = data.messages.filter((item) => (item.mailboxRole ?? 'inbox') === 'inbox' && item.unread && (!item.snoozedUntil || item.snoozedUntil <= now)).slice(0, 20).map((message) => ({ id: `unread-${message.id}`, kind: 'unread', title: message.subject, detail: message.from.name || message.from.address, date: message.date, messageId: message.id, accountId: message.accountId }));
-  res.json({ notifications: [...connection, ...returned, ...unread].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30) });
+  res.json({ notifications: buildNotifications(await readStore()) });
 }));
 
 messagesRouter.post('/send', asyncRoute(async (req, res) => {

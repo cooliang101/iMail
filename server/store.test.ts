@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SQLiteStore } from './store.js';
+import { SQLiteStore, listCachedMessages, readStore, updateStore } from './store.js';
 import { withUserContext } from './auth/context.js';
 import type { CachedMessage, DeveloperToken, MailAccount, StoreData } from './types.js';
 
@@ -50,6 +50,12 @@ afterEach(async () => {
 });
 
 describe('SQLiteStore', () => {
+  it('rejects public user-scoped storage operations without an explicit context', () => {
+    expect(() => readStore()).toThrow('用户存储操作缺少明确的用户上下文');
+    expect(() => updateStore(() => undefined)).toThrow('用户存储操作缺少明确的用户上下文');
+    expect(() => listCachedMessages({ limit: 10, offset: 0 })).toThrow('用户存储操作缺少明确的用户上下文');
+  });
+
   it('initializes an empty database', async () => {
     const { store } = await temporaryStore();
     expect(await store.read()).toEqual({ accounts: [], messages: [], tokens: [], drafts: [], contacts: [], logoFetchAttempts: [] });
@@ -86,6 +92,13 @@ describe('SQLiteStore', () => {
     await withUserContext('user-a', () => store.update((data) => { data.accounts.push(account()); }));
     await withUserContext('user-b', () => store.update((data) => { data.accounts.push(account({ id: 'account-b' })); }));
     expect((await withUserContext('user-b', () => store.read())).accounts[0].email).toBe(account().email);
+    const migrated = new DatabaseSync(databasePath);
+    expect((migrated.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('3');
+    for (const table of ['sync_policies', 'mailbox_sync_states', 'sync_jobs', 'sync_events']) {
+      expect((migrated.prepare(`PRAGMA foreign_key_list(${table})`).all() as Array<{ table: string; from: string; on_delete: string }>))
+        .toEqual(expect.arrayContaining([expect.objectContaining({ table: 'accounts', from: 'account_id', on_delete: 'CASCADE' })]));
+    }
+    migrated.close();
   });
 
   it('persists metadata independently from snapshot updates', async () => {

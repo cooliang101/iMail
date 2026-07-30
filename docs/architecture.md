@@ -10,6 +10,8 @@
 
 HTTP 会话、API 网关 Token 与 MCP 授权码都会恢复同一个服务端用户上下文。存储层按该上下文过滤 `accounts.user_id`、`developer_tokens.user_id`、`contacts.user_id` 与 `logo_fetch_attempts.user_id`，邮件和草稿通过所属邮箱账户间接隔离。后台同步不依赖浏览器会话，而是按全局唯一邮箱账户 ID 工作；提交联系人快照时重新取得该账户的用户归属。
 
+用户作用域存储门面缺少上下文时直接失败，不再回退到全量数据。Worker、调度器和 IDLE 监听必须通过名称明确的 `readAllStore` 进入全局读取作用域；后台 OAuth 刷新只允许按全局唯一账户 ID 定向更新状态或密钥，不提供通用全局快照写入，避免普通请求因上下文遗漏跨租户读取。
+
 设置中心使用同一用户上下文，将 `app_preferences_v1` 保存为 `metadata` 中的用户命名空间键。HTTP `preferences` 路由和 MCP `settings_get` / `settings_update` 继续负责内置主题、启动、阅读、通知、邮件展示与快捷键设置。自定义主题不扩展 HTTP schema：客户端以用户作用域的本地偏好保存完整安全令牌，向 `/api/preferences` 发送时剔除 `customTheme`，选择 `custom` 时也不发送主题 ID。MCP 的 `theme_custom_get` / `theme_custom_update` 使用独立的用户命名空间键 `mcp_custom_theme_v1`，返回的 JSON 可导入客户端，但不会经 HTTP 网关自动下发。
 
 客户端切换主题时，`AppThemeProvider` 同步更新 Fluent 品牌色、根 `data-theme` 与运行时 CSS token。四套内置主题继续来自静态色阶；`custom` 只接受名称、九个六位十六进制颜色、圆角/阴影/字体枚举，由 `theme-runtime.ts` 派生完整中性色阶、品牌色阶和语义 token，不执行任意 CSS、URL 或脚本。
@@ -35,6 +37,8 @@ IMAP providers ◄────────────────────�
 - `server/sync/worker.ts`：独立进程入口和信号关闭。
 - `server/routes/sync.ts`：策略、状态、任务查询和前端 SSE 通知。客户端复用单个 SSE 连接；`sync.completed` 携带经过裁剪的邮件摘要增量，前端直接合并新增、标记变化与删除；`sync.status` 在连接、任务状态变化和 Worker 心跳时推送完整运行状态，设置页不再查询 `api/messages` 或 `api/sync-status`。默认策略仍按需单独读取，不参与轮询。浏览器场景是单向服务端推送，因此无需额外引入 MQTT broker。
 
+同步执行只把安全裁剪后的领域事件写入 SQLite。SSE 和开发者 WebSocket 从同一持久化事件日志读取，避免独立 Worker 无法触达进程内事件总线，也避免同一封新邮件被内存总线和数据库重复投递。
+
 同步游标按账户和真实邮箱文件夹保存，包括 `UIDVALIDITY`、最后 UID 与 `HIGHESTMODSEQ`。UIDVALIDITY 改变时只重建对应文件夹；支持 CONDSTORE 时按 modseq 获取标记变化，同时显式检查已缓存 UID 是否仍存在。API 的“立即同步”和 MCP `mailbox_sync` 都只创建持久化任务。
 
 领域更新在 `BEGIN IMMEDIATE` 内读取当前用户快照并计算差异，只对新增、变化或删除的记录执行 SQL；不会因更新一个标签或授权码使用时间重写整份邮件缓存。Token 鉴权使用独立哈希查询和轻量 `last_used_at` 更新。API 与 Worker 的跨进程写入由 SQLite 串行化，同步控制表继续使用细粒度 SQL 事务。
@@ -59,7 +63,9 @@ Agent
 ### 模块职责
 
 - `server/mcp/http.ts`：Host/Origin 防护、Bearer 授权码认证、Express 与 Web Standard MCP 响应流转换。
-- `server/mcp/server.ts`：注册工具、Zod 参数模型、structured content 和 destructive/read-only annotations。
+- `server/mcp/server.ts`：装配设置、同步和邮件工具及各领域注册器。
+- `server/mcp/tools/`：按账户、草稿等领域注册工具；参数模型和业务行为复用 `server/domain/`。
+- `server/domain/`：HTTP 与 MCP 共享的账户、草稿、通知服务、领域错误和安全响应视图。
 - `server/mcp/custom-theme.ts`：校验并按应用用户保存 MCP 自定义主题令牌；与 HTTP preferences schema 隔离。
 - `server/tokens.ts`：生成高熵授权码、SHA-256 哈希、常量时间比较、过期与撤销检查。
 

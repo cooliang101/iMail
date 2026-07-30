@@ -1,16 +1,11 @@
 import { z } from 'zod';
+import {
+  accountColorSchema, appPasswordSchema, DEFAULT_ACCOUNT_COLOR, mailboxRoleSchema, mailSettingsSchema,
+  oauthProviderSchema, providerSchema, workspaceIconSchema,
+} from '../domain/schemas.js';
 
-export const providerSchema = z.enum(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
-export const workspaceIconSchema = z.enum(['folder', 'briefcase', 'building', 'home', 'users', 'code', 'heart', 'star']);
-
-export const settingsSchema = z.object({
-  imapHost: z.string().min(1),
-  imapPort: z.number().int().min(1).max(65535),
-  imapSecure: z.boolean(),
-  smtpHost: z.string().min(1),
-  smtpPort: z.number().int().min(1).max(65535),
-  smtpSecure: z.boolean(),
-});
+export { mailboxRoleSchema, providerSchema, workspaceIconSchema };
+export const settingsSchema = mailSettingsSchema;
 
 export const accountSchema = z.object({
   provider: providerSchema,
@@ -18,20 +13,18 @@ export const accountSchema = z.object({
   displayName: z.string().min(1).max(80),
   group: z.string().min(1).max(40).default('个人'),
   groupIcon: workspaceIconSchema.default('folder'),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#17a887'),
-  password: z.string().optional(),
-  accessToken: z.string().optional(),
+  color: accountColorSchema.default(DEFAULT_ACCOUNT_COLOR),
+  password: appPasswordSchema.optional(),
+  accessToken: z.string().min(1).max(8192).optional(),
   settings: settingsSchema.optional(),
 }).refine((value) => Boolean(value.password || value.accessToken), '请填写应用专用密码或 OAuth Access Token');
 
 export const oauthStartSchema = z.object({
-  provider: z.enum(['outlook', 'gmail', 'yahoo', 'hotmail']),
+  provider: oauthProviderSchema,
   displayName: z.string().max(80).optional(),
   group: z.string().min(1).max(40).default('个人'),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#168f78'),
+  color: accountColorSchema.default(DEFAULT_ACCOUNT_COLOR),
 });
-
-export const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'drafts', 'trash', 'junk', 'custom']);
 
 const draftAttachmentSchema = z.object({
   id: z.string().min(1).max(100),

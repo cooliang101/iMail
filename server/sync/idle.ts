@@ -1,15 +1,15 @@
 import type { ImapFlow } from 'imapflow';
 import { imapClientFor } from '../mail/client.js';
-import { readStore } from '../store.js';
+import { readAllStore } from '../store.js';
 import { getSyncStore, type SyncStore } from './store.js';
 
 type Watcher = { client?: ImapFlow; closing: boolean };
 
-export function startIdleWatchers(options: { syncStore?: SyncStore; reconcileIntervalMs?: number; loadStore?: typeof readStore; createClient?: typeof imapClientFor; autoStart?: boolean } = {}) {
+export function startIdleWatchers(options: { syncStore?: SyncStore; reconcileIntervalMs?: number; loadStore?: typeof readAllStore; createClient?: typeof imapClientFor; autoStart?: boolean } = {}) {
   const syncStore = options.syncStore ?? getSyncStore();
   const reconcileIntervalMs = Math.max(5_000, options.reconcileIntervalMs ?? Number(process.env.IMAIL_SYNC_IDLE_RECONCILE_MS ?? 30_000));
   const enabled = process.env.IMAIL_SYNC_IDLE_ENABLED !== 'false';
-  const loadStore = options.loadStore ?? readStore;
+  const loadStore = options.loadStore ?? readAllStore;
   const createClient = options.createClient ?? imapClientFor;
   const watchers = new Map<string, Watcher>();
   let closed = false;
@@ -22,7 +22,7 @@ export function startIdleWatchers(options: { syncStore?: SyncStore; reconcileInt
     await watcher.client?.logout().catch(() => undefined);
   };
 
-  const connect = async (account: Awaited<ReturnType<typeof readStore>>['accounts'][number]) => {
+  const connect = async (account: Awaited<ReturnType<typeof readAllStore>>['accounts'][number]) => {
     if (watchers.has(account.id) || closed) return;
     const watcher: Watcher = { closing: false }; watchers.set(account.id, watcher);
     try {

@@ -1,6 +1,6 @@
 import { hostname } from 'node:os';
 import { syncMailbox } from '../mail.js';
-import { readStore } from '../store.js';
+import { readAllStore } from '../store.js';
 import type { MailboxSyncState, SyncJob } from '../types.js';
 import { startScheduler } from './scheduler.js';
 import { getSyncStore, type SyncStore } from './store.js';
@@ -28,8 +28,8 @@ function classifyFailure(error: unknown) {
   return { code, message, authRequired };
 }
 
-export async function executeSyncJob(job: SyncJob, workerId: string, syncStore: SyncStore, leaseMs: number, dependencies: { loadStore?: typeof readStore; runSync?: typeof syncMailbox } = {}) {
-  const loadStore = dependencies.loadStore ?? readStore;
+export async function executeSyncJob(job: SyncJob, workerId: string, syncStore: SyncStore, leaseMs: number, dependencies: { loadStore?: typeof readAllStore; runSync?: typeof syncMailbox } = {}) {
+  const loadStore = dependencies.loadStore ?? readAllStore;
   const data = await loadStore();
   const account = data.accounts.find((item) => item.id === job.accountId);
   const mailboxKey = targetKey(job);
