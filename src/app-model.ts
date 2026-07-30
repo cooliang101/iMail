@@ -1,5 +1,17 @@
 export type Notice = { kind: 'success' | 'error'; text: string } | null;
 
+export type MessageBodyView = 'source' | 'rendered';
+export type StartupView = 'inbox' | 'starred';
+export type NotificationKind = MailNotification['kind'];
+
+export type AppPreferences = {
+  startupView: StartupView;
+  markReadOnOpen: boolean;
+  defaultMessageView: MessageBodyView;
+  notificationKinds: Record<NotificationKind, boolean>;
+  shortcutBindings: ShortcutBindings;
+};
+
 export type ShortcutActionId = 'focusSearch' | 'compose' | 'sync' | 'nextMessage' | 'previousMessage' | 'reply' | 'forward' | 'toggleStar' | 'markUnread' | 'archive' | 'delete' | 'openShortcutSettings';
 export type ShortcutBindings = Record<ShortcutActionId, string>;
 

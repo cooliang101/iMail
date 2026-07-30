@@ -54,6 +54,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await updateStore((data) => { data.accounts = [account]; data.messages = []; data.tokens = []; data.drafts = []; });
   getSyncStore().deleteAccountData(account.id); getSyncStore().ensurePolicy(account.id);
+  await request('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startupView: 'inbox', markReadOnOpen: true, defaultMessageView: 'source', notificationKinds: { unread: true, snooze: true, error: true } }) });
 });
 
 async function request(route: string, init?: RequestInit) {
@@ -63,6 +64,18 @@ async function request(route: string, init?: RequestInit) {
 }
 
 describe('iMail HTTP API', () => {
+  it('persists validated application preferences on the server', async () => {
+    const initial = await request('/api/preferences');
+    expect(initial.body.preferences).toMatchObject({ startupView: 'inbox', defaultMessageView: 'source' });
+    const updated = await request('/api/preferences', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startupView: 'starred', defaultMessageView: 'rendered', notificationKinds: { snooze: false } }),
+    });
+    expect(updated.body.preferences).toMatchObject({ startupView: 'starred', markReadOnOpen: true, defaultMessageView: 'rendered', notificationKinds: { unread: true, snooze: false, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
+    expect((await request('/api/preferences')).body.preferences).toEqual(updated.body.preferences);
+    expect((await request('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startupView: 'invalid' }) })).response.status).toBe(400);
+  });
+
   it('serves a full mail-management MCP endpoint only to mcp:full authorization codes', async () => {
     const ordinary = await request('/api/developer-tokens', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -94,7 +107,7 @@ describe('iMail HTTP API', () => {
     const listed = await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     const toolNames = listed.body.result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toEqual(expect.arrayContaining([
-      'accounts_list', 'account_add_with_code', 'account_start_oauth', 'account_update_authorization_code', 'account_remove',
+      'settings_get', 'settings_update', 'accounts_list', 'account_add_with_code', 'account_start_oauth', 'account_update_authorization_code', 'account_remove',
       'mailbox_sync', 'sync_policy_get', 'sync_policy_update', 'messages_list', 'message_get', 'message_update', 'message_move', 'message_send', 'attachment_download',
       'drafts_list', 'draft_get', 'draft_save', 'draft_delete', 'labels_list', 'notifications_list',
     ]));
@@ -106,6 +119,10 @@ describe('iMail HTTP API', () => {
     const policyRead = await mcp({ jsonrpc: '2.0', id: 32, method: 'tools/call', params: { name: 'sync_policy_get', arguments: { email: account.email } } });
     expect(policyRead.body.result.structuredContent.accounts[0]).toMatchObject({ accountEmail: account.email, policy: { intervalMinutes: 15 } });
     expect(JSON.stringify(policyRead.body)).not.toContain(account.encryptedSecret);
+    const settingsUpdated = await mcp({ jsonrpc: '2.0', id: 33, method: 'tools/call', params: { name: 'settings_update', arguments: { defaultMessageView: 'rendered', notificationKinds: { unread: false } } } });
+    expect(settingsUpdated.body.result.structuredContent.preferences).toMatchObject({ defaultMessageView: 'rendered', notificationKinds: { unread: false, snooze: true, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
+    const settingsRead = await mcp({ jsonrpc: '2.0', id: 34, method: 'tools/call', params: { name: 'settings_get', arguments: {} } });
+    expect(settingsRead.body.result.structuredContent.preferences).toEqual(settingsUpdated.body.result.structuredContent.preferences);
 
     await updateStore((data) => { data.messages = [{
       id: 'mcp-message', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 42,

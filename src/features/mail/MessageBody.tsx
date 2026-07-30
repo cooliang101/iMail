@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Code, Eye } from '@phosphor-icons/react';
 import { HtmlEmailBody } from './HtmlEmailBody';
+import type { MessageBodyView } from '../../app-model';
 
-type BodyView = 'source' | 'rendered';
-
-export function MessageBody({ text, html, subject }: { text: string; html?: string; subject: string }) {
-  const [view, setView] = useState<BodyView>('source');
+export function MessageBody({ text, html, subject, defaultView }: { text: string; html?: string; subject: string; defaultView: MessageBodyView }) {
+  const [view, setView] = useState<MessageBodyView>(defaultView);
   const source = html || text;
 
   return <>

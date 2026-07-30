@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@fluentui/react-components';
-import { ArrowClockwise, Envelope, Key, PencilSimple, SlidersHorizontal, Trash, WarningCircle, X } from '@phosphor-icons/react';
+import { ArrowClockwise, Envelope, Key, PencilSimple, SlidersHorizontal, Trash, WarningCircle } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { credentialGuideFor, oauthCallbackOrigins } from '../../provider-guides';
 import type { Account, AccountSyncStatus, SyncPolicy, SyncWorkerHealth } from '../../types';
 import type { Notice } from '../../app-model';
-import { Overlay, ProviderIcon, providerLabel } from '../../components/shared';
+import { ProviderIcon, providerLabel } from '../../components/shared';
 import { AppCheckbox, AppInput, AppSelect } from '../../components/form-controls';
 import { SyncPolicyEditor } from './SyncPolicyEditor';
 import { AccountSyncSummary } from './SyncStatusSummary';
 
-export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }: { accounts: Account[]; onClose: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
+export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload, setNotice }: { accounts: Account[]; section: 'accounts' | 'sync'; onAddAccount: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [credentialId, setCredentialId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -22,6 +22,10 @@ export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }:
   const [error, setError] = useState('');
   const popupRef = useRef<Window | null>(null);
   const oauthOriginsRef = useRef(oauthCallbackOrigins(['http://localhost:8787/api/oauth'], window.location.origin));
+
+  useEffect(() => {
+    setCredentialId(null); setEditingId(null); setSyncEditingId(null); setConfirmRemoveId(null); setError('');
+  }, [section]);
 
   useEffect(() => {
     void api<{ oauth: Array<{ redirectUri: string }> }>('/api/providers').then((result) => {
@@ -162,10 +166,10 @@ export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }:
 
   const workerOnline = workerHealth?.workers.some((worker) => Date.now() - new Date(worker.heartbeatAt).getTime() < 30_000) ?? false;
 
-  return <Overlay onClose={onClose} wide dialogClassName="account-settings-shell"><section className="account-settings-modal">
-    <div className="modal-header"><div><span>账户资料与授权</span><h2>邮箱设置</h2><p>编辑显示名称和工作空间，检查连接或更新账户授权。</p></div><button type="button" aria-label="关闭邮箱设置" onClick={onClose}><X size={21} /></button></div>
-    {workerHealth && <div className={`sync-worker-health ${workerOnline ? 'is-online' : 'is-offline'}`}><span>{workerOnline ? '同步 Worker 运行正常' : '同步 Worker 未运行或心跳已过期'}</span><small>{workerHealth.queuedJobs > 0 ? `${workerHealth.queuedJobs} 个任务正在等待` : '当前没有积压任务'}</small></div>}
-    {defaultPolicy && <form className="sync-default-policy" onSubmit={(event) => void updateDefaultSyncPolicy(event)}>
+  return <section className="settings-feature-panel">
+    <header className="settings-panel-heading"><div><span>{section === 'accounts' ? '连接与身份' : '后台同步'}</span><h2>{section === 'accounts' ? '邮箱账号' : '同步'}</h2><p>{section === 'accounts' ? '管理邮箱资料、授权状态与本地连接。' : '设置后台同步频率、范围与失败恢复策略。'}</p></div>{section === 'accounts' && <button type="button" className="settings-primary-action" onClick={onAddAccount}>添加邮箱</button>}</header>
+    {section === 'sync' && workerHealth && <div className={`sync-worker-health ${workerOnline ? 'is-online' : 'is-offline'}`}><span>{workerOnline ? '同步 Worker 运行正常' : '同步 Worker 未运行或心跳已过期'}</span><small>{workerHealth.queuedJobs > 0 ? `${workerHealth.queuedJobs} 个任务正在等待` : '当前没有积压任务'}</small></div>}
+    {section === 'sync' && defaultPolicy && <form className="sync-default-policy" onSubmit={(event) => void updateDefaultSyncPolicy(event)}>
       <header><span><strong>新账户默认同步策略</strong><small>新接入邮箱自动继承；已有账户仍使用各自设置。</small></span><Button appearance="primary" type="submit" disabled={busyId === 'defaults'}>{busyId === 'defaults' ? '保存中…' : '保存默认值'}</Button></header>
       <div className="sync-default-fields">
         <label className="sync-default-toggle"><AppCheckbox name="enabled" defaultChecked={defaultPolicy.enabled} /><span><strong>后端自动同步</strong><small>新账户接入后默认启用</small></span></label>
@@ -174,7 +178,7 @@ export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }:
       </div>
       <div className="sync-default-options"><label><AppCheckbox name="syncOnStart" defaultChecked={defaultPolicy.syncOnStart} />服务启动后补同步</label><label><AppCheckbox name="retryOnRecovery" defaultChecked={defaultPolicy.retryOnRecovery} />网络恢复后重试</label><label><AppCheckbox name="notifyOnError" defaultChecked={defaultPolicy.notifyOnError} />持续失败时通知</label></div>
     </form>}
-    {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>关闭设置后，点击左侧的加号接入第一个邮箱。</p></div> : <div className="settings-account-list">
+    {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>接入第一个邮箱后，即可在这里管理账户和同步策略。</p><button type="button" className="settings-primary-action" onClick={onAddAccount}>添加邮箱</button></div> : <div className="settings-account-list">
       {accounts.map((account) => {
         const editing = editingId === account.id;
         const connectionText = account.status === 'connected' ? '连接正常' : account.status === 'syncing' ? '正在同步' : account.lastError || '连接异常';
@@ -182,7 +186,7 @@ export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }:
         const syncStatus = syncStatuses.find((item) => item.accountId === account.id);
 
         return <article key={account.id} className={`settings-account-card ${editing ? 'is-editing' : ''} ${syncEditingId === account.id ? 'is-sync-editing' : ''}`}>
-          {editing ? <form className="account-inline-editor" onSubmit={(event) => void updateProfile(event, account)}>
+          {section === 'accounts' && editing ? <form className="account-inline-editor" onSubmit={(event) => void updateProfile(event, account)}>
             <header className="settings-account-summary">
               <i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i>
               <span>
@@ -195,16 +199,16 @@ export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }:
             <footer className="settings-account-actions card-editor-actions"><button type="button" onClick={() => setEditingId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '保存中…' : '保存修改'}</Button></footer>
           </form> : <>
             <header className="settings-account-summary"><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · {account.group}</small><em className={`connection-${account.status}`}>{connectionText}</em></span><small className="account-auth-kind">{authText}</small></header>
-            {syncStatus && <AccountSyncSummary status={syncStatus} />}
-            {syncEditingId === account.id && syncStatus ? <SyncPolicyEditor account={account} status={syncStatus} busy={busyId === account.id} onSave={(changes) => updateSyncPolicy(account, changes)} onSync={() => queueSync(account)} onClose={() => setSyncEditingId(null)} />
+            {section === 'sync' && syncStatus && <AccountSyncSummary status={syncStatus} />}
+            {section === 'sync' && syncEditingId === account.id && syncStatus ? <SyncPolicyEditor account={account} status={syncStatus} busy={busyId === account.id} onSave={(changes) => updateSyncPolicy(account, changes)} onSync={() => queueSync(account)} onClose={() => setSyncEditingId(null)} />
               : credentialId === account.id ? <form className="credential-renewal" onSubmit={(event) => void updateCredential(event, account)}><label><span>{credentialGuideFor(account.provider)?.secretLabel || '新的授权码 / 应用专用密码'}</span><AppInput name="password" type="password" placeholder={credentialGuideFor(account.provider)?.secretPlaceholder || '输入新的专用凭据'} autoFocus required /></label><div className="card-editor-actions"><button type="button" onClick={() => setCredentialId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '正在验证…' : '验证并更新'}</Button></div></form>
               : confirmRemoveId === account.id ? <div className="account-remove-confirm"><span><strong>确认移除这个邮箱？</strong><small>{account.email} 的本地邮件缓存也会删除。</small></span><button type="button" onClick={() => setConfirmRemoveId(null)}>取消</button><button type="button" className="confirm-remove-account" disabled={busyId === account.id} onClick={() => void remove(account)}>{busyId === account.id ? '正在移除…' : '确认移除'}</button></div>
-                : <footer className="settings-account-actions"><button type="button" className="sync-settings-account" disabled={busyId === account.id || !syncStatus} onClick={() => { setCredentialId(null); setConfirmRemoveId(null); setSyncEditingId(account.id); }}><SlidersHorizontal size={15} />同步设置</button><button type="button" className="edit-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setEditingId(account.id); }}><PencilSimple size={15} />编辑信息</button><button type="button" className="retry-account" disabled={busyId === account.id} onClick={() => void retryConnection(account)}><ArrowClockwise size={15} />{busyId === account.id ? '正在检查' : '重试连接'}</button>{account.authMethod === 'oauth2' ? <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => void reconnect(account)}><Key size={15} />重新授权</button> : <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setEditingId(null); setConfirmRemoveId(null); setCredentialId(account.id); }}><Key size={15} />更新凭据</button>}<button type="button" className="remove-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setEditingId(null); setCredentialId(null); setConfirmRemoveId(account.id); }}><Trash size={15} />移除</button></footer>}
+                : section === 'sync' ? <footer className="settings-account-actions"><button type="button" className="sync-settings-account" disabled={busyId === account.id || !syncStatus} onClick={() => { setCredentialId(null); setConfirmRemoveId(null); setSyncEditingId(account.id); }}><SlidersHorizontal size={15} />配置同步策略</button><button type="button" disabled={busyId === account.id || !syncStatus} onClick={() => void queueSync(account)}><ArrowClockwise size={15} />立即同步</button></footer>
+                  : <footer className="settings-account-actions"><button type="button" className="edit-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setEditingId(account.id); }}><PencilSimple size={15} />编辑信息</button><button type="button" className="retry-account" disabled={busyId === account.id} onClick={() => void retryConnection(account)}><ArrowClockwise size={15} />{busyId === account.id ? '正在检查' : '重试连接'}</button>{account.authMethod === 'oauth2' ? <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => void reconnect(account)}><Key size={15} />重新授权</button> : <button type="button" className="reconnect-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setEditingId(null); setConfirmRemoveId(null); setCredentialId(account.id); }}><Key size={15} />更新凭据</button>}<button type="button" className="remove-account" disabled={busyId === account.id} onClick={() => { setSyncEditingId(null); setEditingId(null); setCredentialId(null); setConfirmRemoveId(account.id); }}><Trash size={15} />移除</button></footer>}
           </>}
         </article>;
       })}
     </div>}
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
-    <div className="modal-footer"><Button appearance="primary" onClick={onClose}>完成</Button></div>
-  </section></Overlay>;
+  </section>;
 }
