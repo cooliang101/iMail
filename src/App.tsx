@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@fluentui/react-components';
-import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Keyboard, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
+import { Archive, ArrowClockwise, ArrowRight, Bell, CaretDown, Check, Clock, Code, FolderSimplePlus, Gear, Keyboard, Tray, MagnifyingGlass, PaperPlaneTilt, PencilSimple, Plus, SidebarSimple, SlidersHorizontal, Star, Tag, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
 import { api } from './api';
 import type { Account, Contact, DeveloperToken, Draft, MailboxRole, Message } from './types';
 import type { ContextTarget, MailNotification, Notice, ShortcutBindings, WorkspaceFolder } from './app-model';
@@ -216,7 +216,7 @@ function App() {
       const role = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : view === 'inbox' || view === 'starred' || view === 'snoozed' ? 'inbox' : null;
       if (view === 'folder' && activeMailbox) await Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) })));
       else if (role) await api(role === 'inbox' ? '/api/sync' : `/api/mailboxes/${role}/sync`, { method: 'POST' });
-      setNotice({ kind: 'success', text: '同步任务已加入后端队列' });
+      setNotice({ kind: 'success', text: '同步任务已加入后端队列，可在“同步设置”查看进度' });
     }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '同步失败' }); }
     finally { setSyncing(false); }
@@ -459,7 +459,10 @@ function App() {
         <button className="sidebar-trigger desktop-sidebar-trigger" title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((current) => !current)}><SidebarSimple size={20} /></button>
         <button className="sidebar-trigger mobile-sidebar-trigger" title="打开侧栏" aria-label="打开侧栏" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><SidebarSimple size={20} /></button>
         <AppInput className="search-box" contentBefore={<MagnifyingGlass size={18} />} contentAfter={<kbd>{shortcutLabel(shortcutBindings.focusSearch)}</kbd>} ref={searchInputRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前范围内的邮件" aria-label="搜索当前范围内的邮件" />
-        <button data-icon-tone="primary" className={`sync-button ${syncing ? 'is-syncing' : ''}`} onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '同步中' : '同步'}</span></button>
+        <div className="topbar-sync-controls">
+          <button data-icon-tone="primary" className={`sync-button ${syncing ? 'is-syncing' : ''}`} title="立即同步当前范围" onClick={() => void syncAll()}><ArrowClockwise size={18} /><span>{syncing ? '已入队' : '立即同步'}</span></button>
+          <button data-icon-tone="info" className="sync-settings-button" title="查看同步状态与设置" onClick={() => setSettingsOpen(true)}><SlidersHorizontal size={18} /><span>同步设置</span></button>
+        </div>
         <button data-icon-tone="accent" className="icon-button" title="快捷键设置" aria-label="打开快捷键设置" onClick={() => setShortcutSettingsOpen(true)}><Keyboard size={19} /></button>
         <button data-icon-tone="info" className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
       </header>

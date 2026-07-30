@@ -3,6 +3,7 @@ import { ArrowClockwise, CheckCircle, WarningCircle } from '@phosphor-icons/reac
 import { useState, type FormEvent } from 'react';
 import { AppCheckbox, AppSelect } from '../../components/form-controls';
 import type { Account, AccountSyncStatus } from '../../types';
+import { MailboxSyncDetails } from './SyncStatusSummary';
 
 function latest(values: Array<string | undefined>) { return values.filter((value): value is string => Boolean(value)).sort().at(-1); }
 function earliest(values: Array<string | undefined>) { return values.filter((value): value is string => Boolean(value)).sort().at(0); }
@@ -38,6 +39,7 @@ export function SyncPolicyEditor({ account, status, busy, onSave, onSync, onClos
       <div><strong>{failure ? failure.connectionStatus === 'authRequired' ? '需要重新授权' : '同步遇到问题' : running ? '同步任务执行中' : status.policy.enabled ? '后端自动同步已启用' : '自动同步已暂停'}</strong>
         <small>{failure?.lastErrorMessage ?? `上次成功：${displayTime(lastSuccess)} · 下次计划：${status.policy.enabled ? displayTime(nextSync) : '已暂停'}`}</small></div>
     </div>
+    <MailboxSyncDetails account={account} status={status} />
     <div className="sync-policy-grid">
       <label className="sync-toggle"><AppCheckbox name="enabled" defaultChecked={status.policy.enabled} /><span><strong>后端自动同步</strong><small>前端关闭后仍按策略执行</small></span></label>
       <label><span>同步频率</span><AppSelect name="intervalMinutes" defaultValue={String(status.policy.intervalMinutes)} options={[
