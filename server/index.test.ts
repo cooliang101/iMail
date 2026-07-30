@@ -181,7 +181,8 @@ describe('iMail HTTP API', () => {
     expect(providers.body.providers.map((item: { id: string }) => item.id)).toEqual(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
     expect(providers.body.oauth).toHaveLength(3);
     expect(providers.body.providers.find((item: { id: string }) => item.id === 'qq')).toMatchObject({ authMode: 'authorization-code', oauthProvider: null });
-    expect(providers.body.providers.find((item: { id: string }) => item.id === 'hotmail')).toMatchObject({ authMode: 'oauth2', oauthTenant: 'consumers', fallbackAuthMode: null });
+    expect(providers.body.providers.find((item: { id: string }) => item.id === 'outlook')).toMatchObject({ authMode: 'oauth2', oauthProvider: 'microsoft', fallbackAuthMode: 'app-password', helpUrl: expect.stringMatching(/^https:\/\//) });
+    expect(providers.body.providers.find((item: { id: string }) => item.id === 'hotmail')).toMatchObject({ authMode: 'oauth2', oauthTenant: 'consumers', fallbackAuthMode: 'app-password', helpUrl: expect.stringMatching(/^https:\/\//) });
   });
 
   it('never exposes encrypted mailbox credentials', async () => {

@@ -11,6 +11,15 @@ export type CredentialGuide = {
 };
 
 const guides: Partial<Record<ProviderId, CredentialGuide>> = {
+  outlook: {
+    title: '使用 Microsoft 应用专用密码',
+    description: '仅适用于已开启两步验证、且账户或组织仍允许 IMAP/SMTP 密码验证的 Microsoft 账户。',
+    secretLabel: 'Microsoft 应用专用密码',
+    secretPlaceholder: '粘贴 Microsoft 生成的应用密码',
+    actionLabel: '查看 Microsoft 官方说明',
+    helpUrl: 'https://support.microsoft.com/account-billing/manage-app-passwords-for-two-step-verification-d6dc8c6d-4bf7-4851-ad95-6d07799387e9',
+    steps: ['为 Microsoft 账户开启两步验证', '在安全设置中创建新的应用密码', '确认组织允许 IMAP 与 SMTP AUTH，然后粘贴生成的密码'],
+  },
   gmail: {
     title: '使用 Google 应用专用密码',
     description: '仅在 Google 账户已开启两步验证、且当前无法使用 OAuth 时使用。',
@@ -46,6 +55,15 @@ const guides: Partial<Record<ProviderId, CredentialGuide>> = {
     actionLabel: '打开 Apple 账户',
     helpUrl: 'https://account.apple.com/account/manage',
     steps: ['确认 Apple 账户已开启双重认证', '进入“登录与安全 → App 专用密码”并创建 iMail 密码', '复制生成的密码并粘贴到下方'],
+  },
+  hotmail: {
+    title: '使用 Microsoft 应用专用密码',
+    description: '仅适用于已开启两步验证、且账户仍允许 IMAP/SMTP 密码验证的 Outlook.com 个人账户。',
+    secretLabel: 'Microsoft 应用专用密码',
+    secretPlaceholder: '粘贴 Microsoft 生成的应用密码',
+    actionLabel: '查看 Microsoft 官方说明',
+    helpUrl: 'https://support.microsoft.com/account-billing/manage-app-passwords-for-two-step-verification-d6dc8c6d-4bf7-4851-ad95-6d07799387e9',
+    steps: ['为 Microsoft 个人账户开启两步验证', '在高级安全选项中创建新的应用密码', '复制生成的密码并粘贴到下方'],
   },
 };
 

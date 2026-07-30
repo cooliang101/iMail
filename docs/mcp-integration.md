@@ -71,7 +71,7 @@ Authorization: Bearer imail_mcp_xxx
 - `mailbox_sync` 返回 `jobId` 和排队状态；任务由独立 Worker 执行，调用方可用 `sync_policy_get` 查看状态，不应依赖 MCP 连接存活。
 - 发送邮件前确认 `accountEmail`、收件人、主题和正文；发送不是幂等操作。
 - `account_remove`、`message_move` 和 `draft_delete` 带 destructive annotation，执行前应获得用户确认。
-- 添加 QQ、iCloud 等账户时，把服务商生成的授权码传给 `account_add_with_code.authorizationCode`；不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。
+- 使用 Gmail、Outlook、Hotmail、QQ、Yahoo 或 iCloud 的应用专用密码/授权码时，把服务商生成的凭据传给 `account_add_with_code.authorizationCode`；Microsoft 账户还必须允许 IMAP/SMTP 密码验证。不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。
 
 ## 5. 安全约束
 
