@@ -73,9 +73,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return <main className="auth-page">
     <section className="auth-brand-panel">
       <img src="/brand/imail-app-icon.png" alt="iMail" />
-      <span>LOCAL-FIRST MAIL</span>
-      <h1>你的邮件，<br />只属于你的账号。</h1>
-      <p>应用账号将邮箱、邮件、草稿和访问令牌隔离开来。邮件凭据仍只在本机加密保存。</p>
+      <span>ONE APP · EVERY INBOX</span>
+      <h1>一个应用，<br />所有邮箱，<br />通用规则。</h1>
+      <p>把多个邮箱放进一个工作区，统一查看、统一处理、统一设置。邮件凭据仍只在本机加密保存。</p>
     </section>
     <section className="auth-card-wrap">
       <div className="auth-card">
