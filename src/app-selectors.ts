@@ -1,11 +1,12 @@
 import type { Account, MailboxRole } from './types';
 import type { AppView, WorkspaceFolder } from './app-model';
+import { isWorkspaceMailbox } from './features/organize';
 
 export function buildWorkspaceFolders(accounts: Account[], groups: string[]) {
   return new Map(groups.map((group) => {
     const merged = new Map<string, WorkspaceFolder>();
     for (const account of accounts.filter((item) => item.group === group)) {
-      for (const mailbox of account.mailboxes.filter((item) => item.selectable && !['\\Inbox', '\\Sent', '\\Archive', '\\All'].includes(item.specialUse ?? ''))) {
+      for (const mailbox of account.mailboxes.filter(isWorkspaceMailbox)) {
         const key = mailbox.name.toLocaleLowerCase();
         const current = merged.get(key) ?? { group, name: mailbox.name, unread: 0, targets: [] };
         current.unread += mailbox.unread ?? 0;
@@ -27,7 +28,12 @@ export function buildMessageQuery({ accountFilter, groupFilter, search, view, ma
   if (view === 'starred') params.set('flagged', 'true');
   if (view === 'folder' && activeMailbox) { params.set('group', activeMailbox.group); params.set('mailboxName', activeMailbox.name); }
   else {
-    const mailboxRole: MailboxRole = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : 'inbox';
+    const mailboxRole: MailboxRole = view === 'sent' ? 'sent'
+      : view === 'archive' ? 'archive'
+        : view === 'drafts' ? 'drafts'
+          : view === 'trash' ? 'trash'
+            : view === 'junk' ? 'junk'
+              : 'inbox';
     params.set('mailboxRole', mailboxRole);
   }
   if (view === 'snoozed') params.set('snoozed', 'true');

@@ -14,7 +14,7 @@ import { canonicalSyncTarget } from '../mail/mailbox-role.js';
 import { appPreferencesUpdateSchema, readAppPreferences, updateAppPreferences } from '../preferences.js';
 
 const providerSchema = z.enum(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
-const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash', 'custom']);
+const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'drafts', 'trash', 'junk', 'custom']);
 const workspaceIconSchema = z.enum(['folder', 'briefcase', 'building', 'home', 'users', 'code', 'heart', 'star']);
 const settingsSchema = z.object({
   imapHost: z.string().min(1), imapPort: z.number().int().min(1).max(65535), imapSecure: z.boolean(),

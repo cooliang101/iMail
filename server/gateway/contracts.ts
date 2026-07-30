@@ -6,7 +6,7 @@ export const gatewayMessageQuerySchema = z.object({
   mailbox: z.string().email().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
   cursor: z.string().min(1).max(1000).optional(),
-  mailboxRole: z.enum(['inbox', 'sent', 'archive', 'trash', 'custom']).optional(),
+  mailboxRole: z.enum(['inbox', 'sent', 'archive', 'drafts', 'trash', 'junk', 'custom']).optional(),
   unread: booleanQuery.optional(),
   since: z.string().datetime({ offset: true }).optional(),
   before: z.string().datetime({ offset: true }).optional(),

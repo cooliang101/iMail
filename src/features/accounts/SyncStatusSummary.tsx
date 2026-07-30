@@ -48,7 +48,7 @@ export function AccountSyncSummary({ status }: { status: AccountSyncStatus }) {
   </div>;
 }
 
-const roleLabels: Record<MailboxRole, string> = { inbox: '收件箱', sent: '已发送', archive: '归档', trash: '垃圾箱', custom: '自定义文件夹' };
+const roleLabels: Record<MailboxRole, string> = { inbox: '收件箱', sent: '已发送', archive: '归档', drafts: '草稿', trash: '已删除邮件', junk: '垃圾邮件', custom: '自定义文件夹' };
 
 function mailboxName(account: Account, state: MailboxSyncState) {
   return account.mailboxes.find((mailbox) => mailbox.path === state.mailbox)?.name

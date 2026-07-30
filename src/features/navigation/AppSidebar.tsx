@@ -1,5 +1,5 @@
 import { Button } from '@fluentui/react-components';
-import { Archive, ArrowRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Tray, UserCircle, X } from '@phosphor-icons/react';
+import { Archive, ArrowRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Trash, Tray, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
 import type { Account } from '../../types';
 import type { AppView, ContextTarget, MessageStats, WorkspaceFolder } from '../../app-model';
 import { WorkspaceFolderItem, WorkspaceIcon } from '../organize';
@@ -28,6 +28,8 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
       <button data-icon-tone="accent" className={view === 'drafts' ? 'active' : ''} onClick={() => onSelectScope('drafts')}><PencilSimple size={19} /><span>草稿</span><b>{draftsCount || ''}</b></button>
       <button data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => onSelectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
       <button data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => onSelectScope('archive')}><Archive size={19} /><span>归档</span></button>
+      <button data-icon-tone="danger" className={view === 'trash' ? 'active' : ''} onClick={() => onSelectScope('trash')}><Trash size={19} /><span>已删除邮件</span></button>
+      <button data-icon-tone="warning" className={view === 'junk' ? 'active' : ''} onClick={() => onSelectScope('junk')}><WarningCircle size={19} /><span>垃圾邮件</span></button>
     </nav>
     <section className="workspace-section"><div className="section-label"><span>工作空间</span><button className="workspace-add" title="新增或整理工作空间" aria-label="新增工作空间" onClick={() => onEditWorkspace(null)}><FolderSimplePlus size={16} /></button></div>
       <nav className="nav-block groups workspace-list">{groups.map((group) => {
