@@ -165,7 +165,15 @@ export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }:
   return <Overlay onClose={onClose} wide dialogClassName="account-settings-shell"><section className="account-settings-modal">
     <div className="modal-header"><div><span>账户资料与授权</span><h2>邮箱设置</h2><p>编辑显示名称和工作空间，检查连接或更新账户授权。</p></div><button type="button" aria-label="关闭邮箱设置" onClick={onClose}><X size={21} /></button></div>
     {workerHealth && <div className={`sync-worker-health ${workerOnline ? 'is-online' : 'is-offline'}`}><span>{workerOnline ? '同步 Worker 运行正常' : '同步 Worker 未运行或心跳已过期'}</span><small>{workerHealth.queuedJobs > 0 ? `${workerHealth.queuedJobs} 个任务正在等待` : '当前没有积压任务'}</small></div>}
-    {defaultPolicy && <form className="sync-default-policy" onSubmit={(event) => void updateDefaultSyncPolicy(event)}><header><span><strong>新账户默认同步策略</strong><small>新接入邮箱自动继承；已有账户仍使用各自设置。</small></span><Button appearance="primary" type="submit" disabled={busyId === 'defaults'}>{busyId === 'defaults' ? '保存中…' : '保存默认值'}</Button></header><div><label><AppCheckbox name="enabled" defaultChecked={defaultPolicy.enabled} />自动同步</label><label><span>频率</span><AppSelect name="intervalMinutes" defaultValue={String(defaultPolicy.intervalMinutes)} options={[{ value: '1', label: '1 分钟' }, { value: '5', label: '5 分钟' }, { value: '15', label: '15 分钟' }, { value: '30', label: '30 分钟' }, { value: '60', label: '60 分钟' }]} /></label><label><span>范围</span><AppSelect name="folderMode" defaultValue={defaultPolicy.folderMode === 'selected' ? 'inbox' : defaultPolicy.folderMode} options={[{ value: 'inbox', label: '仅收件箱' }, { value: 'standard', label: '标准文件夹' }]} /></label><label><AppCheckbox name="syncOnStart" defaultChecked={defaultPolicy.syncOnStart} />启动补同步</label><label><AppCheckbox name="retryOnRecovery" defaultChecked={defaultPolicy.retryOnRecovery} />网络恢复重试</label><label><AppCheckbox name="notifyOnError" defaultChecked={defaultPolicy.notifyOnError} />失败通知</label></div></form>}
+    {defaultPolicy && <form className="sync-default-policy" onSubmit={(event) => void updateDefaultSyncPolicy(event)}>
+      <header><span><strong>新账户默认同步策略</strong><small>新接入邮箱自动继承；已有账户仍使用各自设置。</small></span><Button appearance="primary" type="submit" disabled={busyId === 'defaults'}>{busyId === 'defaults' ? '保存中…' : '保存默认值'}</Button></header>
+      <div className="sync-default-fields">
+        <label className="sync-default-toggle"><AppCheckbox name="enabled" defaultChecked={defaultPolicy.enabled} /><span><strong>后端自动同步</strong><small>新账户接入后默认启用</small></span></label>
+        <label className="sync-default-select"><span>同步频率</span><AppSelect name="intervalMinutes" defaultValue={String(defaultPolicy.intervalMinutes)} options={[{ value: '1', label: '每 1 分钟' }, { value: '5', label: '每 5 分钟' }, { value: '15', label: '每 15 分钟' }, { value: '30', label: '每 30 分钟' }, { value: '60', label: '每 60 分钟' }]} /></label>
+        <label className="sync-default-select"><span>同步范围</span><AppSelect name="folderMode" defaultValue={defaultPolicy.folderMode === 'selected' ? 'inbox' : defaultPolicy.folderMode} options={[{ value: 'inbox', label: '仅收件箱' }, { value: 'standard', label: '收件箱、已发送和归档' }]} /></label>
+      </div>
+      <div className="sync-default-options"><label><AppCheckbox name="syncOnStart" defaultChecked={defaultPolicy.syncOnStart} />服务启动后补同步</label><label><AppCheckbox name="retryOnRecovery" defaultChecked={defaultPolicy.retryOnRecovery} />网络恢复后重试</label><label><AppCheckbox name="notifyOnError" defaultChecked={defaultPolicy.notifyOnError} />持续失败时通知</label></div>
+    </form>}
     {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>关闭设置后，点击左侧的加号接入第一个邮箱。</p></div> : <div className="settings-account-list">
       {accounts.map((account) => {
         const editing = editingId === account.id;
@@ -173,7 +181,7 @@ export function AccountSettingsModal({ accounts, onClose, onReload, setNotice }:
         const authText = account.authMethod === 'oauth2' ? 'OAuth 2.0' : '授权码 / 专用密码';
         const syncStatus = syncStatuses.find((item) => item.accountId === account.id);
 
-        return <article key={account.id} className={`settings-account-card ${editing ? 'is-editing' : ''}`}>
+        return <article key={account.id} className={`settings-account-card ${editing ? 'is-editing' : ''} ${syncEditingId === account.id ? 'is-sync-editing' : ''}`}>
           {editing ? <form className="account-inline-editor" onSubmit={(event) => void updateProfile(event, account)}>
             <header className="settings-account-summary">
               <i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i>
