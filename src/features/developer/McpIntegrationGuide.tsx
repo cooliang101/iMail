@@ -9,29 +9,16 @@ const httpConfig = [
   '    "imail": {',
   '      "url": "http://127.0.0.1:8787/mcp",',
   '      "headers": {',
-  '        "Authorization": "Bearer ${IMAIL_MCP_AUTH_CODE}"',
+  '        "Authorization": "Bearer imail_mcp_xxx"',
   '      }',
   '    }',
   '  }',
   '}',
 ].join('\n');
 
-const stdioConfig = `{
-  "mcpServers": {
-    "imail": {
-      "command": "npm",
-      "args": ["run", "mcp"],
-      "cwd": "C:/path/to/imail",
-      "env": {
-        "IMAIL_MCP_AUTH_CODE": "imail_mcp_xxx"
-      }
-    }
-  }
-}`;
-
 const toolGroups = [
   { name: '状态与账户', tools: 'imail_status · accounts_list · account_add_with_code · account_start_oauth · account_reconnect_oauth · account_update · account_update_authorization_code · account_test_connection · account_remove' },
-  { name: '同步与邮件', tools: 'mailbox_sync · messages_list · message_get · message_update · message_move · message_send' },
+  { name: '同步与邮件', tools: 'mailbox_sync · sync_policy_get · sync_policy_update · messages_list · message_get · message_update · message_move · message_send' },
   { name: '附件与草稿', tools: 'attachment_download · drafts_list · draft_get · draft_save · draft_delete' },
   { name: '整理', tools: 'labels_list · notifications_list' },
 ];
@@ -45,11 +32,10 @@ export function McpIntegrationGuide({ setNotice }: { setNotice: (notice: Notice)
   }
 
   return <section className="mcp-guide" aria-labelledby="mcp-guide-title">
-    <header><div><span>Agent 接入文档</span><h2 id="mcp-guide-title">创建后即可连接</h2><p>选择一种传输方式，将刚创建的 <code>imail_mcp_</code> 授权码交给 MCP 客户端。工具发现与调用由客户端完成。</p></div><div className="mcp-guide-actions"><button aria-expanded={rawVisible} aria-controls="mcp-raw-markdown" onClick={() => setRawVisible((value) => !value)}><Code size={16} />{rawVisible ? '收起原文' : '查看原文'}</button><button onClick={() => void copy(mcpGuideMarkdown, '文档')}><Copy size={16} />复制</button></div></header>
+    <header><div><span>Agent 接入文档</span><h2 id="mcp-guide-title">创建后即可连接</h2><p>复制下方配置，将刚创建的 <code>imail_mcp_</code> 授权码交给 MCP 客户端。工具发现与调用由客户端完成。</p></div><div className="mcp-guide-actions"><button aria-expanded={rawVisible} aria-controls="mcp-raw-markdown" onClick={() => setRawVisible((value) => !value)}><Code size={16} />{rawVisible ? '收起原文' : '查看原文'}</button><button onClick={() => void copy(mcpGuideMarkdown, '文档')}><Copy size={16} />复制</button></div></header>
     {rawVisible && <article className="mcp-raw-markdown" id="mcp-raw-markdown"><div><strong>docs/mcp-integration.md</strong><span>以下内容与仓库源文件保持一致</span></div><pre><code>{mcpGuideMarkdown}</code></pre></article>}
-    <div className="mcp-guide-grid">
-      <article className="mcp-config-card"><div className="mcp-config-heading"><div><strong>Streamable HTTP</strong><span>推荐用于同一设备上的 Agent</span></div><button onClick={() => void copy(httpConfig, 'HTTP 配置')}><Copy size={15} />复制配置</button></div><pre><code>{httpConfig}</code></pre><p>先在 Agent 运行环境设置 <code>IMAIL_MCP_AUTH_CODE</code>，值为刚创建的完整授权码。</p></article>
-      <article className="mcp-config-card"><div className="mcp-config-heading"><div><strong>stdio</strong><span>适合由 Agent 启动本地进程</span></div><button onClick={() => void copy(stdioConfig, 'stdio 配置')}><Copy size={15} />复制配置</button></div><pre><code>{stdioConfig}</code></pre><p>把 <code>cwd</code> 改为 iMail 项目的绝对路径；Windows 路径建议使用正斜杠。</p></article>
+    <div className="mcp-guide-grid mcp-guide-grid-single">
+      <article className="mcp-config-card"><div className="mcp-config-heading"><div><strong>Streamable HTTP</strong><span>标准 MCP 客户端配置</span></div><button onClick={() => void copy(httpConfig, 'HTTP 配置')}><Copy size={15} />复制配置</button></div><pre><code>{httpConfig}</code></pre><p>将示例中的 <code>imail_mcp_xxx</code> 替换为刚创建的完整授权码。</p></article>
     </div>
     <div className="mcp-reference-grid">
       <article className="mcp-tool-reference"><div className="mcp-section-title"><Terminal size={19} /><div><strong>可调用工具</strong><span>连接后由 Agent 自动发现</span></div></div>{toolGroups.map((group) => <div className="mcp-tool-row" key={group.name}><strong>{group.name}</strong><code>{group.tools}</code></div>)}</article>

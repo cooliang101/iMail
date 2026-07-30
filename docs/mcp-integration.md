@@ -1,6 +1,6 @@
 # MCP 接入指南
 
-iMail 为可信 Agent 提供 Streamable HTTP 与 stdio 两种 MCP 接入。两者暴露同一组工具，并使用“外部接入”页面签发的短期 `mcp:full` 授权码。普通 API 网关 Token 不能调用 MCP。
+iMail 为可信 Agent 提供 Streamable HTTP MCP 接入，使用“外部接入”页面签发的短期 `mcp:full` 授权码。普通 API 网关 Token 不能调用 MCP。
 
 ## 1. 签发授权码
 
@@ -26,38 +26,16 @@ Authorization: Bearer imail_mcp_xxx
 {
   "url": "http://127.0.0.1:8787/mcp",
   "headers": {
-    "Authorization": "Bearer ${IMAIL_MCP_AUTH_CODE}"
+    "Authorization": "Bearer imail_mcp_xxx"
   }
 }
 ```
+
+将示例值替换为创建后只显示一次的完整 MCP 授权码。
 
 服务兼容 2025-era 客户端，并支持 SDK v2 的 2026-07-28 协议。旧协议调用可能使用 SSE 格式返回单次结果；客户端应交给 MCP SDK 处理，不要自行假定响应一定是普通 JSON。
 
-## 3. stdio
-
-本地进程型 Agent 使用：
-
-```powershell
-$env:IMAIL_MCP_AUTH_CODE='imail_mcp_xxx'
-npm run mcp
-```
-
-通用配置：
-
-```json
-{
-  "command": "npm",
-  "args": ["run", "mcp"],
-  "cwd": "C:/absolute/path/to/imail",
-  "env": {
-    "IMAIL_MCP_AUTH_CODE": "imail_mcp_xxx"
-  }
-}
-```
-
-stdio 进程只向 stdout 写 MCP 帧，诊断写 stderr。启动时会验证授权码；无效、过期、撤销或缺少 `mcp:full` 权限时立即失败。
-
-## 4. 工具速查
+## 3. 工具速查
 
 | 领域 | 工具 | 说明 |
 | --- | --- | --- |
@@ -83,7 +61,7 @@ stdio 进程只向 stdout 写 MCP 帧，诊断写 stderr。启动时会验证授
 | 草稿 | `draft_save` / `draft_delete` | 新建、覆盖或删除本地草稿 |
 | 整理 | `labels_list` / `notifications_list` | 标签与连接/未读/稍后通知 |
 
-## 5. 推荐工作流
+## 4. 推荐工作流
 
 - 操作账户前先调用 `accounts_list`，使用邮箱地址定位，不猜内部 ID。
 - 操作邮件前先调用 `messages_list` 或 `message_get`，确认发件人、主题和目标邮箱。
@@ -92,11 +70,11 @@ stdio 进程只向 stdout 写 MCP 帧，诊断写 stderr。启动时会验证授
 - `account_remove`、`message_move` 和 `draft_delete` 带 destructive annotation，执行前应获得用户确认。
 - 添加 QQ、iCloud 等账户时，把服务商生成的授权码传给 `account_add_with_code.authorizationCode`；不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。
 
-## 6. 安全约束
+## 5. 安全约束
 
 - MCP 响应不返回邮箱授权码、密码、OAuth Token、主密钥或 `encryptedSecret`。
 - HTTP 默认限制 Host/Origin 为回环地址；远程部署必须配置 HTTPS 和 `MCP_ALLOWED_HOSTS`。
 - 附件上传总大小限制 15 MB，工具参数和邮件正文继续受现有 Zod 限制。
-- 授权码撤销或过期后，后续 HTTP 请求和新 stdio 进程都会拒绝认证。
+- 授权码撤销或过期后，后续 HTTP 请求会立即拒绝认证。
 
 更多运维和冒烟检查见 [operator-runbook.md](operator-runbook.md)，内部实现见 [architecture.md](architecture.md)。

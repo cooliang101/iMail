@@ -8,7 +8,7 @@ app.ts                   Express 应用装配、中间件和路由挂载
 routes/                  按资源拆分的 HTTP 路由
 http/                    参数模型、鉴权、响应转换和错误处理
 gateway/                 开发者网关契约、服务、错误模型与轻量文档页
-mcp/                     MCP HTTP/stdio 传输、认证和邮箱控制工具
+mcp/                     MCP Streamable HTTP 传输、认证和邮箱控制工具
 mail/                    IMAP/SMTP 连接、同步、远程操作和发送
 oauth/                   服务商配置、OAuth 客户端、授权流程和密钥刷新
 storage/                 SQLite schema、行转换、快照和事务写入

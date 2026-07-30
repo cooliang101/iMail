@@ -33,8 +33,8 @@ MCP 是现有本地邮件能力上的受控适配层，不建立第二份邮件�
 
 ```text
 Agent
-  ├─ Streamable HTTP /mcp ─ Bearer imail_mcp_* ─┐
-  └─ stdio npm run mcp ─ IMAIL_MCP_AUTH_CODE ───┤
+  │
+  └─ Streamable HTTP /mcp ─ Bearer imail_mcp_* ─┐
                                                 ▼
                                      server/mcp/server.ts
                                                 │
@@ -47,7 +47,6 @@ Agent
 ### 模块职责
 
 - `server/mcp/http.ts`：Host/Origin 防护、Bearer 授权码认证、Express 与 Web Standard MCP 响应流转换。
-- `server/mcp/stdio.ts`：从环境变量读取授权码，认证后启动 stdio MCP。
 - `server/mcp/server.ts`：注册工具、Zod 参数模型、structured content 和 destructive/read-only annotations。
 - `server/tokens.ts`：生成高熵授权码、SHA-256 哈希、常量时间比较、过期与撤销检查。
 
@@ -64,8 +63,6 @@ Agent
 3. 官方 MCP SDK 的 per-request factory 创建服务实例并完成协议分派。
 4. 工具调用既有 `mail`、`oauth`、`store` 和加密能力。
 5. 返回文本内容与 `structuredContent`；JSON 序列化会剔除 `undefined`，凭据字段从不进入返回对象。
-
-stdio 在启动阶段完成同一项 Token 验证，之后由进程生命周期和 MCP 传输保护连接。授权码到期不会中断已经启动的 stdio 进程；需要严格即时撤销时应使用 HTTP，或在撤销后终止该 stdio 子进程。
 
 ### 安全取舍
 

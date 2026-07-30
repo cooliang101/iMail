@@ -5,7 +5,6 @@
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `MCP_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | HTTP MCP 允许的 Host 与 Origin 主机名，逗号分隔 |
-| `IMAIL_MCP_AUTH_CODE` | 无 | 仅 stdio 启动使用的 `mcp:full` 授权码 |
 | `HOST` | `127.0.0.1` | iMail API 监听地址；远程监听会扩大所有 API 的暴露面 |
 | `PORT` | `8787` | API 与 `/mcp` 端口 |
 | `IMAIL_SYNC_WORKER_MODE` | `child` | `child` 由 API 启动器监管；`external` 由外部管理器运行；`disabled` 仅用于诊断 |
@@ -31,13 +30,6 @@ npm run dev
 $env:IMAIL_SYNC_WORKER_MODE='external'
 npm start
 npm run worker
-```
-
-stdio：
-
-```powershell
-$env:IMAIL_MCP_AUTH_CODE='imail_mcp_xxx'
-npm run mcp
 ```
 
 ## 冒烟检查
@@ -92,12 +84,6 @@ npm audit --omit=dev
 - IPv6 回环可写 `::1` 或 `[::1]`。
 - 远程主机名必须显式加入 allowlist；同时启用 HTTPS。
 
-### stdio 启动即退出
-
-- 确认环境变量对启动 `npm` 的同一进程可见。
-- 授权码必须来自当前 `IMAIL_DATA_DIR` 对应的数据库。
-- 诊断只写 stderr；不要把应用日志写入 stdout，否则会破坏 MCP 帧。
-
 ### 工具返回邮箱协议错误
 
 - `IMAP 验证失败` / `SMTP 验证失败` 来自既有协议适配层。
@@ -106,4 +92,4 @@ npm audit --omit=dev
 
 ## 撤销与轮换
 
-MCP 授权码最长 7 天。建议每个 Agent 单独签发并使用可识别名称；任务结束立即撤销。HTTP 每次请求都会重新验证，撤销即时生效。stdio 在启动时验证一次，撤销后还需终止已运行的 stdio 进程。
+MCP 授权码最长 7 天。建议每个 Agent 单独签发并使用可识别名称；任务结束立即撤销。Streamable HTTP 每次请求都会重新验证，撤销即时生效。
