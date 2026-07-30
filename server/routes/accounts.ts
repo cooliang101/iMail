@@ -10,6 +10,7 @@ import { settingsFor } from '../providers.js';
 import { readStore, updateStore } from '../store.js';
 import type { MailAccount, MailboxRole, MailSettings, ProviderId } from '../types.js';
 import { getSyncStore } from '../sync/store.js';
+import { canonicalSyncTarget } from '../mail/mailbox-role.js';
 import { z } from 'zod';
 
 export const accountsRouter = Router();
@@ -119,8 +120,10 @@ accountsRouter.post('/accounts/:id/mailboxes/:role/sync', asyncRoute(async (req,
 accountsRouter.post('/accounts/:id/mailboxes/sync', asyncRoute(async (req, res) => {
   const input = z.object({ mailbox: z.string().trim().min(1).max(500) }).parse(req.body);
   const accountId = String(req.params.id);
-  if (!await accountExists(accountId)) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
-  res.json(queuedResult(accountId, 'custom', input.mailbox));
+  const account = (await readStore()).accounts.find((item) => item.id === accountId);
+  if (!account) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
+  const target = canonicalSyncTarget(account, 'custom', input.mailbox);
+  res.json(queuedResult(accountId, target.mailboxRole, target.mailbox));
 }));
 
 accountsRouter.post('/mailboxes/:role/sync', asyncRoute(async (req, res) => {

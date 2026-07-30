@@ -5,6 +5,7 @@ import { commitMailboxSync, readStore, setAccountSyncStatus } from '../store.js'
 import type { CachedMessage, MailboxFolder, MailboxRole } from '../types.js';
 import { gatewayEvents } from '../gateway/events.js';
 import { address, imapClientFor } from './client.js';
+import { mailboxRoleFor } from './mailbox-role.js';
 
 const specialUseForRole: Partial<Record<MailboxRole, string[]>> = {
   sent: ['\\Sent'], archive: ['\\Archive', '\\All'], trash: ['\\Trash'],
@@ -21,14 +22,6 @@ function publicMailbox(item: Partial<ListResponse> & { path: string }): MailboxF
     total: item.status?.messages,
     unread: item.status?.unseen,
   };
-}
-
-function roleForMailbox(item: Partial<ListResponse> | undefined): MailboxRole {
-  if (!item || item.path?.toUpperCase() === 'INBOX' || item.specialUse === '\\Inbox') return 'inbox';
-  if (item.specialUse === '\\Sent') return 'sent';
-  if (item.specialUse === '\\Archive' || item.specialUse === '\\All') return 'archive';
-  if (item.specialUse === '\\Trash') return 'trash';
-  return 'custom';
 }
 
 export type SyncCursor = { uidValidity?: string; lastSeenUid?: number; highestModseq?: string };
@@ -63,7 +56,7 @@ export async function syncMailbox(accountId: string, mailboxRole: MailboxRole = 
       const target = listed.find((item) => item.path === requestedMailbox);
       if (!target || target.flags?.has('\\Noselect')) throw new Error('邮箱文件夹不存在或不可选择');
       mailboxPath = target.path;
-      mailboxRole = roleForMailbox(target);
+      mailboxRole = mailboxRoleFor(target);
       allMailArchive = mailboxRole === 'archive' && target.specialUse === '\\All';
     } else if (mailboxRole !== 'inbox') {
       const specialUses = specialUseForRole[mailboxRole] ?? [];

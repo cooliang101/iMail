@@ -13,7 +13,7 @@ type Actions = {
 };
 
 export function AppContextMenu({ target, bindings, messages, accounts, activeAccountId, actions, onClose }: { target: ContextTarget; bindings: ShortcutBindings; messages: Message[]; accounts: Account[]; activeAccountId?: string; actions: Actions; onClose: () => void }) {
-  const shortcut = (id: keyof ShortcutBindings) => shortcutLabel(bindings[id]);
+  const shortcut = (id: keyof ShortcutBindings) => bindings[id] ? shortcutLabel(bindings[id]) : undefined;
   let label = '当前页面';
   let items: ContextMenuItem[] = [];
 

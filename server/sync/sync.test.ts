@@ -47,8 +47,11 @@ describe('persistent synchronization control plane', () => {
 
   it('deduplicates active jobs and reclaims an expired lease', async () => {
     const store = await temporarySyncStore();
-    const first = store.enqueueJob({ accountId: account().id, reason: 'manual', priority: 100 });
+    const future = new Date(Date.now() + 60_000).toISOString();
+    const first = store.enqueueJob({ accountId: account().id, reason: 'scheduled', notBefore: future });
     expect(store.enqueueJob({ accountId: account().id, reason: 'manual', priority: 100 }).id).toBe(first.id);
+    expect(store.getJob(first.id)).toMatchObject({ priority: 100 });
+    expect(new Date(store.getJob(first.id)!.notBefore).getTime()).toBeLessThan(new Date(future).getTime());
     const base = new Date();
     const claimed = store.claimNextJob('worker-a', 10_000, base)!;
     expect(claimed).toMatchObject({ id: first.id, status: 'running', lockedBy: 'worker-a', attempts: 1 });
@@ -85,10 +88,14 @@ describe('persistent synchronization control plane', () => {
   });
 
   it('expands standard and selected folder policies into explicit task targets', async () => {
-    const configured = account(); configured.mailboxes = [{ path: 'Projects', name: 'Projects', delimiter: '/', selectable: true, subscribed: true }];
+    const configured = account(); configured.mailboxes = [
+      { path: 'Projects', name: 'Projects', delimiter: '/', selectable: true, subscribed: true },
+      { path: 'Sent', name: 'Sent', delimiter: '/', specialUse: '\\Sent', selectable: true, subscribed: true },
+    ];
     const base: Omit<SyncPolicy, 'folderMode'> = { accountId: configured.id, enabled: true, intervalMinutes: 5, selectedMailboxes: [], syncOnStart: true, retryOnRecovery: true, notifyOnError: true, updatedAt: new Date().toISOString() };
     expect(targetsForPolicy(configured, { ...base, folderMode: 'standard' })).toEqual([{ mailboxRole: 'inbox' }, { mailboxRole: 'sent' }, { mailboxRole: 'archive' }]);
     expect(targetsForPolicy(configured, { ...base, folderMode: 'selected', selectedMailboxes: ['Projects', 'Missing'] })).toEqual([{ mailboxRole: 'inbox' }, { mailbox: 'Projects', mailboxRole: 'custom' }]);
+    expect(targetsForPolicy(configured, { ...base, folderMode: 'selected', selectedMailboxes: ['Sent'] })).toEqual([{ mailboxRole: 'inbox' }, { mailboxRole: 'sent' }]);
   });
 
   it('pauses authentication failures instead of retrying forever', async () => {

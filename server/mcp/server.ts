@@ -10,6 +10,7 @@ import { gatewayMessageDetail, gatewayMessageSummary } from '../gateway/presente
 import { getCachedMessage, getMessageStats, listCachedMessages, readStore, updateStore } from '../store.js';
 import type { Draft, MailAccount, MailSettings, ProviderId } from '../types.js';
 import { getSyncStore } from '../sync/store.js';
+import { canonicalSyncTarget } from '../mail/mailbox-role.js';
 
 const providerSchema = z.enum(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
 const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash', 'custom']);
@@ -173,7 +174,8 @@ export function createMailMcpServer() {
     const accounts = email ? [accountByEmail(data, email)] : data.accounts;
     const syncStore = getSyncStore();
     const results = accounts.map((account) => {
-      const job = syncStore.enqueueJob({ accountId: account.id, mailbox: mailboxPath, mailboxRole: mailboxPath ? 'custom' : mailboxRole, reason: 'manual', priority: 100 });
+      const target = canonicalSyncTarget(account, mailboxRole, mailboxPath);
+      const job = syncStore.enqueueJob({ accountId: account.id, ...target, reason: 'manual', priority: 100 });
       return { accountEmail: account.email, status: 'queued', synced: 0, jobId: job.id };
     });
     return output({ results });

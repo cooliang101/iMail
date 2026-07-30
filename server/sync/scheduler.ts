@@ -1,6 +1,7 @@
 import type { MailAccount, MailboxRole, SyncJobReason, SyncPolicy } from '../types.js';
 import { readStore } from '../store.js';
 import { getSyncStore, type SyncStore } from './store.js';
+import { canonicalSyncTarget } from '../mail/mailbox-role.js';
 
 export type SyncTarget = { mailbox?: string; mailboxRole: MailboxRole };
 
@@ -10,7 +11,11 @@ export function targetsForPolicy(account: MailAccount, policy: SyncPolicy): Sync
   if (policy.folderMode === 'selected') {
     for (const mailbox of policy.selectedMailboxes) {
       const folder = account.mailboxes?.find((item) => item.path === mailbox && item.selectable);
-      if (folder && !targets.some((item) => item.mailbox === folder.path)) targets.push({ mailbox: folder.path, mailboxRole: 'custom' });
+      if (folder) {
+        const target = canonicalSyncTarget(account, 'custom', folder.path);
+        const key = target.mailbox ?? `@role:${target.mailboxRole}`;
+        if (!targets.some((item) => (item.mailbox ?? `@role:${item.mailboxRole}`) === key)) targets.push(target);
+      }
     }
   }
   return targets;
