@@ -114,6 +114,20 @@ export class SQLiteStore {
     return { total: integer(overall, 'total'), unread: integer(overall, 'unread'), byAccount, byGroup };
   }
 
+  async getMetadata(key: string): Promise<string | undefined> {
+    await this.queue;
+    const row = this.db.prepare('SELECT value FROM metadata WHERE key = ?').get(key) as Row | undefined;
+    return row ? text(row, 'value') : undefined;
+  }
+
+  async setMetadata(key: string, value: string): Promise<void> {
+    const operation = this.queue.catch(() => undefined).then(() => {
+      this.db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
+    });
+    this.queue = operation.then(() => undefined, () => undefined);
+    await operation;
+  }
+
   async update(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> {
     let output = structuredClone(initial);
     const operation = this.queue.catch(() => undefined).then(async () => {
@@ -226,6 +240,8 @@ export function updateStore(mutator: (data: StoreData) => void | Promise<void>):
 export function listCachedMessages(input: MessageQuery) { return configuredStore().listMessages(input); }
 export function getCachedMessage(id: string) { return configuredStore().getMessage(id); }
 export function getMessageStats() { return configuredStore().messageStats(); }
+export function getMetadata(key: string) { return configuredStore().getMetadata(key); }
+export function setMetadata(key: string, value: string) { return configuredStore().setMetadata(key, value); }
 export function setAccountSyncStatus(accountId: string, status: 'connected' | 'syncing' | 'error', lastError?: string) { return configuredStore().setAccountSyncStatus(accountId, status, lastError); }
 export function commitMailboxSync(input: MailboxSyncCommit) { return configuredStore().commitMailboxSync(input); }
 export function closeStore() {

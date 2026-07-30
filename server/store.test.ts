@@ -69,6 +69,16 @@ describe('SQLiteStore', () => {
     expect((await reopened.read()).accounts).toEqual([account()]);
   });
 
+  it('persists metadata independently from snapshot updates', async () => {
+    const { store, directory, legacyPath } = await temporaryStore();
+    await store.setMetadata('app_preferences_v1', JSON.stringify({ defaultMessageView: 'rendered' }));
+    await store.update((data) => { data.accounts.push(account()); });
+    expect(await store.getMetadata('app_preferences_v1')).toContain('rendered');
+    store.close(); stores.splice(stores.indexOf(store), 1);
+    const reopened = new SQLiteStore(path.join(directory, 'imail.sqlite'), legacyPath); stores.push(reopened);
+    expect(await reopened.getMetadata('app_preferences_v1')).toContain('rendered');
+  });
+
   it('materializes contacts when opening a database created before the contacts table was populated', async () => {
     const { store, directory, legacyPath } = await temporaryStore();
     await store.update((data) => { data.accounts = [account()]; data.messages = [message()]; });

@@ -40,6 +40,7 @@ Authorization: Bearer imail_mcp_xxx
 | 领域 | 工具 | 说明 |
 | --- | --- | --- |
 | 状态 | `imail_status` | 账户、邮件、未读、草稿和最近同步概览 |
+| 设置 | `settings_get` / `settings_update` | 读取或更新启动、阅读、通知、邮件展示与快捷键偏好 |
 | 账户 | `accounts_list` | 非敏感账户元数据与文件夹 |
 | 账户 | `account_add_with_code` | 用服务商授权码/应用专用密码添加 IMAP/SMTP 账户 |
 | 账户 | `account_start_oauth` | 开始 Gmail、Outlook、Hotmail 或 Yahoo OAuth |

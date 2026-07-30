@@ -11,6 +11,7 @@ import { getCachedMessage, getMessageStats, listCachedMessages, readStore, updat
 import type { Draft, MailAccount, MailSettings, ProviderId } from '../types.js';
 import { getSyncStore } from '../sync/store.js';
 import { canonicalSyncTarget } from '../mail/mailbox-role.js';
+import { appPreferencesUpdateSchema, readAppPreferences, updateAppPreferences } from '../preferences.js';
 
 const providerSchema = z.enum(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
 const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash', 'custom']);
@@ -61,6 +62,16 @@ export function createMailMcpServer() {
     const [data, stats] = await Promise.all([readStore(), getMessageStats()]);
     return output({ accounts: data.accounts.length, messages: data.messages.length, unread: stats.unread, drafts: (data.drafts ?? []).length, lastSyncAt: data.accounts.map((item) => item.lastSyncAt).filter(Boolean).sort().at(-1) ?? null, syncWorker: getSyncStore().workerHealth() });
   });
+
+  server.registerTool('settings_get', {
+    title: '读取 iMail 设置', description: '读取启动页面、阅读、通知、邮件展示和快捷键偏好。',
+    inputSchema: z.object({}), annotations: { readOnlyHint: true, idempotentHint: true },
+  }, async () => output({ preferences: await readAppPreferences() }));
+
+  server.registerTool('settings_update', {
+    title: '更新 iMail 设置', description: '更新启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。',
+    inputSchema: appPreferencesUpdateSchema, annotations: { idempotentHint: true },
+  }, async (changes) => output({ preferences: await updateAppPreferences(changes) }));
 
   server.registerTool('accounts_list', {
     title: '列出邮箱账户', description: '列出所有邮箱账户、连接状态和文件夹，不返回任何凭据。',
