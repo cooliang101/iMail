@@ -7,7 +7,7 @@ function folder(path: string, specialUse?: string): MailboxFolder {
 }
 
 describe('isWorkspaceMailbox', () => {
-  it.each(['Drafts', 'Deleted', 'Deleted Message', 'Deleted Messages', 'Deleted Items', 'Junk', 'Junk E-mail', 'Spam', 'Bulk Mail', 'Sent Items', 'All Mail', 'Starred'])(
+  it.each(['Drafts', 'Deleted', 'Deleted Message', 'Deleted Messages', 'Deleted Items', 'Junk', 'Junk E-mail', 'Spam', 'Bulk Mail', 'Sent Items', 'All Mail', 'Starred', '草稿箱', '已删除邮件', '垃圾邮件', '归档邮件', '已加星标', '重要'])(
     'keeps the common system folder %s out of workspaces',
     (path) => expect(isWorkspaceMailbox(folder(path))).toBe(false),
   );
