@@ -4,10 +4,11 @@ export function ensureSchema(db: DatabaseSync) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
     CREATE TABLE IF NOT EXISTS accounts (
-      id TEXT PRIMARY KEY, provider TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      id TEXT PRIMARY KEY, provider TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE,
       display_name TEXT NOT NULL, group_name TEXT NOT NULL, group_icon TEXT NOT NULL DEFAULT 'folder', color TEXT NOT NULL, settings_json TEXT NOT NULL,
       encrypted_secret TEXT NOT NULL, auth_method TEXT, created_at TEXT NOT NULL, last_sync_at TEXT,
-      status TEXT NOT NULL, last_error TEXT, mailboxes_json TEXT NOT NULL DEFAULT '[]'
+      status TEXT NOT NULL, last_error TEXT, mailboxes_json TEXT NOT NULL DEFAULT '[]', user_id TEXT NOT NULL DEFAULT '__legacy__',
+      UNIQUE(user_id, email)
     ) STRICT;
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -129,6 +130,34 @@ export function ensureSchema(db: DatabaseSync) {
   if (!accountColumns.has('user_id')) db.exec("ALTER TABLE accounts ADD COLUMN user_id TEXT NOT NULL DEFAULT '__legacy__'");
   if (!accountColumns.has('mailboxes_json')) db.exec("ALTER TABLE accounts ADD COLUMN mailboxes_json TEXT NOT NULL DEFAULT '[]'");
   if (!accountColumns.has('group_icon')) db.exec("ALTER TABLE accounts ADD COLUMN group_icon TEXT NOT NULL DEFAULT 'folder'");
+  const hasLegacyEmailIndex = () => (db.prepare('PRAGMA index_list(accounts)').all() as Array<Record<string, unknown>>).some((index) => {
+    if (!Number(index.unique)) return false;
+    const columns = (db.prepare(`PRAGMA index_info(${JSON.stringify(String(index.name))})`).all() as Array<Record<string, unknown>>).map((row) => String(row.name));
+    return columns.length === 1 && columns[0] === 'email';
+  });
+  if (hasLegacyEmailIndex()) {
+    db.exec('PRAGMA foreign_keys = OFF; BEGIN IMMEDIATE;');
+    try {
+      if (hasLegacyEmailIndex()) db.exec(`
+        DROP TABLE IF EXISTS accounts_per_user_email;
+        CREATE TABLE accounts_per_user_email (
+          id TEXT PRIMARY KEY, provider TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE,
+          display_name TEXT NOT NULL, group_name TEXT NOT NULL, group_icon TEXT NOT NULL DEFAULT 'folder', color TEXT NOT NULL, settings_json TEXT NOT NULL,
+          encrypted_secret TEXT NOT NULL, auth_method TEXT, created_at TEXT NOT NULL, last_sync_at TEXT,
+          status TEXT NOT NULL, last_error TEXT, mailboxes_json TEXT NOT NULL DEFAULT '[]', user_id TEXT NOT NULL DEFAULT '__legacy__',
+          UNIQUE(user_id, email)
+        ) STRICT;
+        INSERT INTO accounts_per_user_email SELECT id, provider, email, display_name, group_name, group_icon, color, settings_json,
+          encrypted_secret, auth_method, created_at, last_sync_at, status, last_error, mailboxes_json, user_id FROM accounts;
+        DROP TABLE accounts;
+        ALTER TABLE accounts_per_user_email RENAME TO accounts;
+      `);
+      db.exec('COMMIT;');
+    } catch (error) {
+      try { db.exec('ROLLBACK;'); } catch { /* Preserve the migration error. */ }
+      throw error;
+    } finally { db.exec('PRAGMA foreign_keys = ON;'); }
+  }
   const draftColumns = new Set((db.prepare('PRAGMA table_info(drafts)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
   if (!draftColumns.has('html_body')) db.exec("ALTER TABLE drafts ADD COLUMN html_body TEXT NOT NULL DEFAULT ''");
   if (!draftColumns.has('attachments_json')) db.exec("ALTER TABLE drafts ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");

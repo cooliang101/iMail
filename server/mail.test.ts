@@ -125,6 +125,8 @@ describe('mail account connection', () => {
     state.connect.mockRejectedValueOnce(failure);
     await expect(testAccount(account({ authMethod: 'oauth2' }))).rejects.toThrow('IMAP 验证失败 (NO)：[AUTHENTICATIONFAILED] Invalid credentials');
     expect(describeProtocolError('IMAP', failure).message).not.toContain('Command failed');
+    expect(describeProtocolError('IMAP', new Error('authorization=Bearer secret-token password=hunter2')).message)
+      .toBe('IMAP 验证失败：authorization=[redacted] [redacted] password=[redacted]');
   });
 
   it('identifies SMTP verification failures separately', async () => {

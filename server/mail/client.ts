@@ -72,7 +72,10 @@ export function describeProtocolError(stage: 'IMAP' | 'SMTP', error: unknown): E
   const detail = responseText || response || generic || '服务商拒绝了连接请求';
   const status = [value?.serverResponseCode, value?.responseStatus, value?.code]
     .find((item) => typeof item === 'string' || typeof item === 'number');
-  const safeDetail = String(detail).replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+  const safeDetail = String(detail).replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ')
+    .replace(/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/(access[_-]?token|refresh[_-]?token|password|authorization)(\s*[:=]\s*)[^\s,;]+/gi, '$1$2[redacted]')
+    .trim().slice(0, 500);
   return new Error(`${stage} 验证失败${status ? ` (${String(status)})` : ''}：${safeDetail}`);
 }
 

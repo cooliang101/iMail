@@ -104,6 +104,17 @@ describe('iMail HTTP API', () => {
     expect(wrongPassword.status).toBe(401);
   });
 
+  it('rate limits repeated login attempts independently of attacker-selected IP/login pairs', async () => {
+    const attempt = () => fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'rate-limit-target', password: 'wrong-password' }),
+    });
+    for (let index = 0; index < 10; index += 1) expect((await attempt()).status).toBe(401);
+    const limited = await attempt();
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+  });
+
   it('serves a full mail-management MCP endpoint only to mcp:full authorization codes', async () => {
     const ordinary = await request('/api/developer-tokens', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -248,6 +259,52 @@ describe('iMail HTTP API', () => {
     expect(result.response.status).toBe(200);
     expect(result.body.account).toMatchObject({ group: '客户支持', groupIcon: 'users', displayName: 'Support' });
     expect(result.body.account).not.toHaveProperty('encryptedSecret');
+  });
+
+  it('deletes an account together with its drafts and sync data', async () => {
+    const created = await request('/api/drafts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id, to: [], cc: [], subject: 'Temporary', text: '', html: '', attachments: [] }),
+    });
+    expect(created.response.status).toBe(201);
+    const removed = await request(`/api/accounts/${account.id}`, { method: 'DELETE' });
+    expect(removed.response.status).toBe(204);
+    expect((await request('/api/accounts')).body.accounts).toEqual([]);
+    expect((await request('/api/drafts')).body.drafts).toEqual([]);
+    expect(getSyncStore().getPolicy(account.id)).toBeUndefined();
+  });
+
+  it('cannot move a draft to another application user mailbox or delete its sync data', async () => {
+    const foreignAccount = { ...account, id: '22222222-2222-4222-8222-222222222222', email: 'foreign@example.com' };
+    await withUserContext('foreign-user', () => updateStore((data) => { data.accounts = [foreignAccount]; data.messages = []; data.tokens = []; data.drafts = []; }));
+    getSyncStore().ensurePolicy(foreignAccount.id);
+    try {
+      const created = await request('/api/drafts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: account.id, to: [], cc: [], subject: 'Owned', text: '', html: '', attachments: [] }),
+      });
+      const moved = await request(`/api/drafts/${created.body.draft.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: foreignAccount.id, to: [], cc: [], subject: 'Injected', text: '', html: '', attachments: [] }),
+      });
+      expect(moved.response.status).toBe(404);
+      expect(moved.body.error).toBe('发件邮箱不存在');
+      const removed = await request(`/api/accounts/${foreignAccount.id}`, { method: 'DELETE' });
+      expect(removed.response.status).toBe(404);
+      expect(getSyncStore().getPolicy(foreignAccount.id)).toBeDefined();
+    } finally {
+      getSyncStore().deleteAccountData(foreignAccount.id);
+      await withUserContext('foreign-user', () => updateStore((data) => { data.accounts = []; data.messages = []; data.tokens = []; data.drafts = []; }));
+    }
+  });
+
+  it('returns a stable not-found response instead of an internal storage error for a missing draft', async () => {
+    const result = await request('/api/drafts/00000000-0000-4000-8000-000000000099', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id, to: [], cc: [], subject: 'Missing', text: '', html: '', attachments: [] }),
+    });
+    expect(result.response.status).toBe(404);
+    expect(result.body).toEqual({ error: '草稿不存在' });
   });
 
   it('issues a scoped developer token and authorizes its permitted API', async () => {

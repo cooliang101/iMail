@@ -7,7 +7,8 @@ import type { MessageQuery, MessageStats } from './storage/models.js';
 import type { MailboxSyncCommit } from './storage/models.js';
 import { readSnapshot } from './storage/snapshot.js';
 import { replaceData } from './storage/write-data.js';
-import type { CachedMessage, MailboxMessageChange, StoreData } from './types.js';
+import { updateData } from './storage/update-data.js';
+import type { CachedMessage, DeveloperToken, MailboxMessageChange, StoreData, TokenScope } from './types.js';
 import { reconcileContacts } from './contact-model.js';
 import { currentUserId, userMetadataKey } from './auth/context.js';
 
@@ -136,6 +137,30 @@ export class SQLiteStore {
     await operation;
   }
 
+  async developerTokenByHash(tokenHash: string): Promise<DeveloperToken | undefined> {
+    await this.queue;
+    const row = this.db.prepare('SELECT * FROM developer_tokens WHERE token_hash = ?').get(tokenHash) as Row | undefined;
+    if (!row) return undefined;
+    const id = text(row, 'id');
+    const token: DeveloperToken = {
+      id, name: text(row, 'name'), tokenHash: text(row, 'token_hash'), prefix: text(row, 'prefix'),
+      scopes: (this.db.prepare('SELECT scope FROM developer_token_scopes WHERE token_id = ? ORDER BY scope').all(id) as Row[]).map((item) => text(item, 'scope') as TokenScope),
+      accountIds: (this.db.prepare('SELECT account_id FROM developer_token_accounts WHERE token_id = ? ORDER BY account_id').all(id) as Row[]).map((item) => text(item, 'account_id')),
+      createdAt: text(row, 'created_at'), expiresAt: text(row, 'expires_at'),
+    };
+    const lastUsedAt = optionalText(row, 'last_used_at'); if (lastUsedAt) token.lastUsedAt = lastUsedAt;
+    Object.defineProperty(token, 'ownerId', { value: text(row, 'user_id'), enumerable: false, writable: true });
+    return token;
+  }
+
+  async touchDeveloperToken(id: string, usedAt: string) {
+    const operation = this.queue.catch(() => undefined).then(() => {
+      this.db.prepare('UPDATE developer_tokens SET last_used_at = ? WHERE id = ?').run(usedAt, id);
+    });
+    this.queue = operation.then(() => undefined, () => undefined);
+    await operation;
+  }
+
   async update(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> {
     let output = structuredClone(initial);
     const operation = this.queue.catch(() => undefined).then(async () => {
@@ -143,8 +168,10 @@ export class SQLiteStore {
       try {
         const userId = currentUserId();
         const data = readSnapshot(this.db, userId);
+        const before = structuredClone(data);
         await mutator(data);
-        replaceData(this.db, data, undefined, false, userId);
+        if (userId) updateData(this.db, before, data, userId);
+        else replaceData(this.db, data, undefined, false);
         this.db.exec('COMMIT');
         output = data;
       } catch (error) {
@@ -272,6 +299,8 @@ export function getCachedMessage(id: string) { return configuredStore().getMessa
 export function getMessageStats() { return configuredStore().messageStats(); }
 export function getMetadata(key: string) { return configuredStore().getMetadata(userMetadataKey(key)); }
 export function setMetadata(key: string, value: string) { return configuredStore().setMetadata(userMetadataKey(key), value); }
+export function getDeveloperTokenByHash(tokenHash: string) { return configuredStore().developerTokenByHash(tokenHash); }
+export function touchDeveloperToken(id: string, usedAt: string) { return configuredStore().touchDeveloperToken(id, usedAt); }
 export function setAccountSyncStatus(accountId: string, status: 'connected' | 'syncing' | 'error', lastError?: string) { return configuredStore().setAccountSyncStatus(accountId, status, lastError); }
 export function commitMailboxSync(input: MailboxSyncCommit) { return configuredStore().commitMailboxSync(input); }
 export function closeStore() {

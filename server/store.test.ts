@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteStore } from './store.js';
+import { withUserContext } from './auth/context.js';
 import type { CachedMessage, DeveloperToken, MailAccount, StoreData } from './types.js';
 
 const directories: string[] = [];
@@ -67,6 +68,24 @@ describe('SQLiteStore', () => {
     store.close(); stores.splice(stores.indexOf(store), 1);
     const reopened = new SQLiteStore(path.join(directory, 'imail.sqlite'), legacyPath); stores.push(reopened);
     expect((await reopened.read()).accounts).toEqual([account()]);
+  });
+
+  it('migrates the legacy global email constraint to a per-user constraint', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'imail-store-')); directories.push(directory);
+    const databasePath = path.join(directory, 'imail.sqlite');
+    const { DatabaseSync } = await import('node:sqlite');
+    const legacy = new DatabaseSync(databasePath);
+    legacy.exec(`CREATE TABLE accounts (
+      id TEXT PRIMARY KEY, provider TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      display_name TEXT NOT NULL, group_name TEXT NOT NULL, group_icon TEXT NOT NULL DEFAULT 'folder', color TEXT NOT NULL, settings_json TEXT NOT NULL,
+      encrypted_secret TEXT NOT NULL, auth_method TEXT, created_at TEXT NOT NULL, last_sync_at TEXT,
+      status TEXT NOT NULL, last_error TEXT, mailboxes_json TEXT NOT NULL DEFAULT '[]', user_id TEXT NOT NULL DEFAULT '__legacy__'
+    ) STRICT;`);
+    legacy.close();
+    const store = new SQLiteStore(databasePath); stores.push(store);
+    await withUserContext('user-a', () => store.update((data) => { data.accounts.push(account()); }));
+    await withUserContext('user-b', () => store.update((data) => { data.accounts.push(account({ id: 'account-b' })); }));
+    expect((await withUserContext('user-b', () => store.read())).accounts[0].email).toBe(account().email);
   });
 
   it('persists metadata independently from snapshot updates', async () => {
@@ -147,6 +166,25 @@ describe('SQLiteStore', () => {
       data.accounts.push(account({ id: `account-${index}`, email: `owner${index}@example.com` }));
     })));
     expect((await store.read()).accounts).toHaveLength(20);
+  });
+
+  it('allows separate application users to add the same mailbox address', async () => {
+    const { store } = await temporaryStore();
+    await withUserContext('user-a', () => store.update((data) => { data.accounts.push(account()); }));
+    await withUserContext('user-b', () => store.update((data) => { data.accounts.push(account({ id: 'account-b' })); }));
+    expect((await withUserContext('user-a', () => store.read())).accounts.map((item) => item.id)).toEqual([account().id]);
+    expect((await withUserContext('user-b', () => store.read())).accounts.map((item) => item.id)).toEqual(['account-b']);
+  });
+
+  it('updates only changed records instead of rewriting the complete user snapshot', async () => {
+    const { store, directory } = await temporaryStore();
+    await withUserContext('user-a', () => store.update((data) => { data.accounts = [account()]; data.messages = [message()]; }));
+    const { DatabaseSync } = await import('node:sqlite');
+    const database = new DatabaseSync(path.join(directory, 'imail.sqlite'));
+    database.exec('CREATE TABLE account_update_audit (count INTEGER NOT NULL); INSERT INTO account_update_audit VALUES (0); CREATE TRIGGER audit_account_update AFTER UPDATE ON accounts BEGIN UPDATE account_update_audit SET count = count + 1; END;');
+    await withUserContext('user-a', () => store.update((data) => { data.messages[0].labels = ['changed']; }));
+    expect((database.prepare('SELECT count FROM account_update_audit').get() as { count: number }).count).toBe(0);
+    database.close();
   });
 
   it('commits mailbox synchronization with granular SQL while preserving local organization', async () => {

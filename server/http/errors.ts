@@ -6,7 +6,10 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _ne
     res.status(400).json({ error: error.issues.map((issue) => issue.message).join('；') });
     return;
   }
-  const message = error instanceof Error ? error.message : '服务发生未知错误';
-  console.error(error);
-  res.status(500).json({ error: message });
+  const detail = (error instanceof Error ? error.stack || error.message : String(error))
+    .replace(/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/(access[_-]?token|refresh[_-]?token|password|authorization)(\s*[:=]\s*)[^\s,;]+/gi, '$1$2[redacted]')
+    .slice(0, 2_000);
+  console.error('[http] unhandled request error', detail);
+  res.status(500).json({ error: '服务暂时无法完成请求' });
 };

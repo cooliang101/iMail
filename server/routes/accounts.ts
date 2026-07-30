@@ -77,12 +77,17 @@ accountsRouter.post('/accounts', asyncRoute(async (req, res) => {
 }));
 
 accountsRouter.delete('/accounts/:id', asyncRoute(async (req, res) => {
+  const accountId = String(req.params.id);
+  const existing = await readStore();
+  if (!existing.accounts.some((item) => item.id === accountId)) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
   await updateStore((data) => {
-    data.accounts = data.accounts.filter((item) => item.id !== req.params.id);
-    data.messages = data.messages.filter((item) => item.accountId !== req.params.id);
-    data.tokens.forEach((token) => { token.accountIds = token.accountIds.filter((id) => id !== req.params.id); });
+    if (!data.accounts.some((item) => item.id === accountId)) throw new Error('邮箱账户已被移除');
+    data.accounts = data.accounts.filter((item) => item.id !== accountId);
+    data.messages = data.messages.filter((item) => item.accountId !== accountId);
+    data.drafts = (data.drafts ?? []).filter((item) => item.accountId !== accountId);
+    data.tokens.forEach((token) => { token.accountIds = token.accountIds.filter((id) => id !== accountId); });
   });
-  getSyncStore().deleteAccountData(String(req.params.id));
+  getSyncStore().deleteAccountData(accountId);
   res.status(204).end();
 }));
 

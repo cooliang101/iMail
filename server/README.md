@@ -11,7 +11,7 @@ gateway/                 开发者网关契约、服务、错误模型与轻量�
 mcp/                     MCP Streamable HTTP 传输、认证和邮箱控制工具
 mail/                    IMAP/SMTP 连接、同步、远程操作和发送
 oauth/                   服务商配置、OAuth 客户端、授权流程和密钥刷新
-storage/                 SQLite schema、行转换、快照和事务写入
+storage/                 SQLite schema、行转换、快照、差异更新和迁移写入
 store.ts                 存储门面与 SQLiteStore 协调器
 contact-model.ts         联系人聚合、主域识别和共享 Logo 引用
 sender-logo.ts           安全网站探测、图片缓存和采集审计
@@ -28,6 +28,7 @@ mail.ts / oauth.ts       稳定的公共导出入口
 - `mcp/` 复用业务门面与存储能力，只接受独立的 `mcp:full` 授权码，不返回邮箱凭据。
 - `mail/`、`oauth/` 通过 `store.ts` 访问持久化，不直接操作 HTTP 请求或响应。
 - `storage/` 只关心 SQLite 与领域数据之间的转换。
+- 账户、草稿和同步资源的写操作必须先验证当前用户归属；HTTP 与 MCP 删除账户时统一清理邮件、草稿、Token 关联和同步控制数据。
 - `contacts` 是联系人建议和邮件发件人资料的唯一来源；Logo 元数据属于联系人字段，优先引用子域缓存，缺失时引用可注册主域缓存。
 - Logo 探测只访问发件人同主域，且 `logo_fetch_attempts` 中已有成功或失败记录的域名/子域名永不自动重试。
 

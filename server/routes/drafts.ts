@@ -23,7 +23,11 @@ draftsRouter.post('/drafts', asyncRoute(async (req, res) => {
 
 draftsRouter.put('/drafts/:id', asyncRoute(async (req, res) => {
   const input = draftSchema.parse(req.body); let draft;
+  const existing = await readStore();
+  if (!existing.accounts.some((item) => item.id === input.accountId)) { res.status(404).json({ error: '发件邮箱不存在' }); return; }
+  if (!(existing.drafts ?? []).some((item) => item.id === req.params.id)) { res.status(404).json({ error: '草稿不存在' }); return; }
   await updateStore((data) => {
+    if (!data.accounts.some((item) => item.id === input.accountId)) throw new Error('发件邮箱不存在');
     draft = (data.drafts ?? []).find((item) => item.id === req.params.id);
     if (!draft) throw new Error('草稿不存在');
     Object.assign(draft, input, { updatedAt: new Date().toISOString() });

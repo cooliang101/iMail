@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { readStore, updateStore } from './store.js';
+import { getDeveloperTokenByHash, readStore, touchDeveloperToken, updateStore } from './store.js';
 import type { DeveloperToken, TokenScope } from './types.js';
 
 type TokenStore = {
@@ -32,16 +32,21 @@ export async function issueToken(input: { name: string; scopes: TokenScope[]; ac
 
 export async function authenticateToken(raw: string | undefined, scope: TokenScope, store: TokenStore = defaultTokenStore): Promise<DeveloperToken | null> {
   if (!raw?.startsWith('imail_')) return null;
-  const digest = Buffer.from(hashToken(raw), 'hex');
-  const data = await store.read();
-  const token = data.tokens.find((candidate) => {
-    const candidateDigest = Buffer.from(candidate.tokenHash, 'hex');
-    return candidateDigest.length === digest.length && timingSafeEqual(candidateDigest, digest);
-  });
+  const tokenHash = hashToken(raw);
+  const digest = Buffer.from(tokenHash, 'hex');
+  const token = store === defaultTokenStore
+    ? await getDeveloperTokenByHash(tokenHash)
+    : (await store.read()).tokens.find((candidate) => {
+      const candidateDigest = Buffer.from(candidate.tokenHash, 'hex');
+      return candidateDigest.length === digest.length && timingSafeEqual(candidateDigest, digest);
+    });
   if (!token || token.expiresAt <= new Date().toISOString() || !token.scopes.includes(scope)) return null;
-  await store.update((data) => {
+  const usedAt = new Date().toISOString();
+  if (store === defaultTokenStore) await touchDeveloperToken(token.id, usedAt);
+  else await store.update((data) => {
     const current = data.tokens.find((item) => item.id === token.id);
-    if (current) current.lastUsedAt = new Date().toISOString();
+    if (current) current.lastUsedAt = usedAt;
   });
+  token.lastUsedAt = usedAt;
   return token;
 }

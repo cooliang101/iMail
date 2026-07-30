@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { contactDomain, contactLogoKey, contactLogoKeys, contactRootLogoKey } from './contact-model.js';
 import { readStore, updateStore } from './store.js';
 import type { CachedMessage } from './types.js';
@@ -53,21 +56,58 @@ function isPublicIp(address: string) {
   return false;
 }
 
-async function assertPublicUrl(url: URL) {
+async function publicAddresses(url: URL) {
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('不安全的网址');
   if (url.port && !['80', '443'].includes(url.port)) throw new Error('不允许的端口');
-  const addresses = net.isIP(url.hostname) ? [url.hostname] : (await lookup(url.hostname, { all: true })).map((item) => item.address);
-  if (addresses.length === 0 || addresses.some((address) => !isPublicIp(address))) throw new Error('不允许访问内网地址');
+  const addresses = net.isIP(url.hostname)
+    ? [{ address: url.hostname, family: net.isIPv6(url.hostname) ? 6 : 4 }]
+    : await lookup(url.hostname, { all: true, verbatim: true });
+  if (addresses.length === 0 || addresses.some((item) => !isPublicIp(item.address))) throw new Error('不允许访问内网地址');
+  return addresses;
+}
+
+function pinnedRequestOptions(url: URL, selected: { address: string; family: number }, accepts: string, signal: AbortSignal) {
+  return {
+    protocol: url.protocol,
+    hostname: selected.address,
+    family: selected.family,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    method: 'GET',
+    path: `${url.pathname}${url.search}`,
+    servername: url.protocol === 'https:' && !net.isIP(url.hostname) ? url.hostname : undefined,
+    signal,
+    headers: { Accept: accepts, 'User-Agent': 'iMail Logo Fetcher/1.0', Host: url.host },
+  };
+}
+
+async function pinnedFetch(url: URL, accepts: string, signal: AbortSignal) {
+  const addresses = await publicAddresses(url);
+  const selected = addresses[0];
+  const transport = url.protocol === 'https:' ? https : http;
+  return new Promise<Response>((resolve, reject) => {
+    const request = transport.request(pinnedRequestOptions(url, selected, accepts, signal), (incoming) => {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(incoming.headers)) {
+        if (Array.isArray(value)) value.forEach((item) => headers.append(name, item));
+        else if (value !== undefined) headers.set(name, String(value));
+      }
+      const status = incoming.statusCode ?? 500;
+      const body = ['HEAD'].includes(request.method ?? '') || status === 204 || status === 304
+        ? null
+        : Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
+      const response = new Response(body, { status, statusText: incoming.statusMessage, headers });
+      Object.defineProperty(response, 'url', { value: url.href });
+      resolve(response);
+    });
+    request.once('error', reject);
+    request.end();
+  });
 }
 
 async function safeFetch(initialUrl: URL, accepts: string, signal: AbortSignal, redirects = 3): Promise<Response> {
   let current = initialUrl;
   for (let index = 0; index <= redirects; index += 1) {
-    await assertPublicUrl(current);
-    const response = await fetch(current, {
-      redirect: 'manual', signal,
-      headers: { Accept: accepts, 'User-Agent': 'iMail Logo Fetcher/1.0' },
-    });
+    const response = await pinnedFetch(current, accepts, signal);
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       if (!location || index === redirects) throw new Error('重定向过多');
@@ -281,4 +321,4 @@ export async function senderLogo(message: LogoSource) {
   return (await readCache(exactKey)) || (rootKey !== exactKey ? (await readCache(rootKey)) || null : null);
 }
 
-export const senderLogoInternals = { isPublicIp, siteCandidates, discoverIcons, imageType, isChallengePage, isCloudflareForbidden, contactDomain, senderKey, rootSenderKey, isFreshFailure, FAILURE_CACHE_TTL_MS };
+export const senderLogoInternals = { isPublicIp, pinnedRequestOptions, siteCandidates, discoverIcons, imageType, isChallengePage, isCloudflareForbidden, contactDomain, senderKey, rootSenderKey, isFreshFailure, FAILURE_CACHE_TTL_MS };

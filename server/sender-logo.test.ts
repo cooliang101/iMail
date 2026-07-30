@@ -63,4 +63,14 @@ describe('sender logo discovery', () => {
     expect(senderLogoInternals.isPublicIp('::1')).toBe(false);
     expect(senderLogoInternals.isPublicIp('8.8.8.8')).toBe(true);
   });
+
+  it('pins the validated IP while preserving the original HTTP host and TLS server name', () => {
+    const options = senderLogoInternals.pinnedRequestOptions(
+      new URL('https://logos.example.com/path?q=1'), { address: '203.0.113.8', family: 4 }, 'image/png', AbortSignal.timeout(1_000),
+    );
+    expect(options).toMatchObject({
+      hostname: '203.0.113.8', family: 4, port: 443, path: '/path?q=1', servername: 'logos.example.com',
+      headers: { Host: 'logos.example.com', Accept: 'image/png' },
+    });
+  });
 });
