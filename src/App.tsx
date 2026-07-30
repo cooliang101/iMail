@@ -10,7 +10,7 @@ import { VirtualMessageList, MessageReader } from './features/mail';
 import { AddAccountModal, AccountSettingsModal } from './features/accounts';
 import { ComposePane, DraftWorkspace, type ComposePaneHandle } from './features/compose';
 import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal } from './features/organize';
-import { CreateTokenModal, TokenWorkspace } from './features/developer';
+import { CreateApiTokenModal, CreateMcpTokenModal, TokenWorkspace } from './features/developer';
 import { isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKey, ShortcutSettingsModal } from './features/shortcuts';
 import { AppContextMenu } from './features/context-menu';
 
@@ -38,7 +38,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [composeMode, setComposeMode] = useState<'new' | 'reply' | 'forward' | null>(null);
-  const [tokenOpen, setTokenOpen] = useState(false);
+  const [tokenOpen, setTokenOpen] = useState<'api' | 'mcp' | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutSettingsOpen, setShortcutSettingsOpen] = useState(false);
   const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(() => loadShortcutBindings());
@@ -440,7 +440,7 @@ function App() {
       </section>
       {labels.length > 0 && <><div className="section-label"><span>邮件标签</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} data-icon-tone="info" className={activeLabel === label ? 'active' : ''} onClick={() => selectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
       <div className="sidebar-spacer" />
-      <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => selectScope('tokens')}><Code size={19} /><span><strong>开发者网关</strong><small>Token 与邮件 API</small></span><ArrowRight size={16} /></button>
+      <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => selectScope('tokens')}><Code size={19} /><span><strong>外部接入</strong><small>MCP 与邮件 API</small></span><ArrowRight size={16} /></button>
       <div className="user-strip"><UserCircle size={32} weight="duotone" /><span><strong>本地工作区</strong><small>数据仅存储在本机</small></span><CaretDown size={15} /></div>
     </aside>
 
@@ -454,7 +454,7 @@ function App() {
         <button data-icon-tone="info" className="icon-button" title="通知中心" aria-label="打开通知中心" onClick={() => void openNotifications()}><Bell size={19} /></button>
       </header>
 
-      {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreate={() => setTokenOpen(true)} onReload={load} setNotice={setNotice} /> :
+      {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
           {view === 'drafts' ? <DraftWorkspace drafts={drafts} accounts={accounts} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> : <section className="message-pane">
             <div className="pane-title">
@@ -481,7 +481,8 @@ function App() {
     </main>
 
     {addOpen && <AddAccountModal accounts={accounts} onClose={() => setAddOpen(false)} onAdded={async (result) => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice(result?.warning ? { kind: 'error', text: `授权已保存，连接验证失败：${result.warning}` } : { kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} />}
-    {tokenOpen && <CreateTokenModal accounts={realAccounts} onClose={() => setTokenOpen(false)} onCreated={async () => { await load(); }} />}
+    {tokenOpen === 'api' && <CreateApiTokenModal accounts={realAccounts} onClose={() => setTokenOpen(null)} onCreated={load} />}
+    {tokenOpen === 'mcp' && <CreateMcpTokenModal onClose={() => setTokenOpen(null)} onCreated={load} />}
     {settingsOpen && <AccountSettingsModal accounts={realAccounts} onClose={() => setSettingsOpen(false)} onReload={load} setNotice={setNotice} />}
     {shortcutSettingsOpen && <ShortcutSettingsModal bindings={shortcutBindings} onChange={saveShortcutBindings} onClose={() => setShortcutSettingsOpen(false)} />}
     {notificationsOpen && <NotificationsModal notifications={notifications} accounts={accounts} onClose={() => setNotificationsOpen(false)} onOpenMessage={(notification) => { setNotificationsOpen(false); if (notification.accountId) setAccountFilter(notification.accountId); setView('inbox'); setSelectedId(notification.messageId ?? null); }} />}

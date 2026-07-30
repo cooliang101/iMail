@@ -103,9 +103,9 @@ APP_MASTER_KEY=请替换为64位十六进制值
 
 不要提交 `.data`、`.env` 或任何 Token，项目已在 `.gitignore` 中排除这些文件。
 
-## 开发者邮件网关
+## 外部接入
 
-进入界面底部的“开发者网关”，选择邮箱、权限和有效时间。完整 Token 只在创建成功时显示一次，服务端只保存 SHA-256 哈希。
+进入界面底部的“外部接入”。“API 网关”标签页用于选择邮箱、API 权限和有效时间；“MCP”标签页用于为可信 Agent 创建独立授权码并查看可复制的接入配置。完整凭据只在创建成功时显示一次，服务端只保存 SHA-256 哈希。
 
 基础地址：
 
@@ -206,7 +206,7 @@ Token 有效期范围为 5 分钟至 7 天，且只能访问创建时选中的�
 
 iMail 内置基于官方 TypeScript SDK v2 的 MCP 服务，同时支持 Streamable HTTP 和 stdio。MCP 使用单独的 `mcp:full` 短期授权码；普通 `messages:*` / `accounts:read` Token 无法调用 MCP，避免已有只读 Token 意外获得账户删除、授权码更新或发信能力。
 
-在“开发者网关”中创建 Token，勾选“MCP 完整控制”。生成的授权码以 `imail_mcp_` 开头，只显示一次，服务端仍只保存 SHA-256 哈希。它默认最长有效 7 天，可以在同一页面即时撤销。即使尚未接入邮箱，也可以先签发 MCP 授权码，让可信 Agent 通过 `account_add_with_code` 接入第一个邮箱。
+在“外部接入”的“MCP”标签页点击“创建 MCP 授权码”。生成的授权码以 `imail_mcp_` 开头，只显示一次，服务端仍只保存 SHA-256 哈希。它最长有效 7 天，可以在同一标签页即时撤销。即使尚未接入邮箱，也可以先签发 MCP 授权码，让可信 Agent 通过 `account_add_with_code` 接入第一个邮箱。页面同时提供 Streamable HTTP、stdio 配置、工具速查与安全调用顺序。
 
 ### Streamable HTTP
 
@@ -301,7 +301,7 @@ src/features/mail/   邮件列表虚拟化与阅读器
 src/features/accounts/ 邮箱接入、授权与账户设置
 src/features/compose/  写信与草稿工作区
 src/features/organize/ 标签、稍后处理、通知和工作空间
-src/features/developer/ 开发者网关与临时 Token UI
+src/features/developer/ 外部接入、API Token 与 MCP 授权码 UI
 src/app-model.ts     跨 feature 的客户端类型
 server/index.ts      服务进程启动入口
 server/app.ts        Express 应用与路由装配
