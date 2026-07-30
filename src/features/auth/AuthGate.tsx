@@ -3,6 +3,7 @@ import { Button } from '@fluentui/react-components';
 import { ArrowLeft, LockKey, UserCircle, UserPlus } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { AppInput } from '../../components/form-controls';
+import { BrandLogo } from '../../components/brand-logo';
 
 type User = { id: string; login: string; displayName: string };
 type RememberedUser = Pick<User, 'login' | 'displayName'>;
@@ -66,13 +67,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   const context = useMemo(() => user ? { user, logout } : null, [user]);
-  if (checking) return <main className="auth-loading"><img src="/brand/imail-app-icon.png" alt="iMail" /><span>正在检查登录状态…</span></main>;
+  if (checking) return <main className="auth-loading"><BrandLogo label="iMail" /><span>正在检查登录状态…</span></main>;
   if (user && context) return <AuthContext.Provider value={context}>{children}</AuthContext.Provider>;
 
   const switcherVisible = mode === 'login' && remembered.length > 0 && !selectedLogin;
   return <main className="auth-page">
     <section className="auth-brand-panel">
-      <img src="/brand/imail-app-icon.png" alt="iMail" />
+      <BrandLogo label="iMail" />
       <span>ONE APP · EVERY INBOX</span>
       <h1>一个应用，<br />所有邮箱，<br />通用规则。</h1>
       <p>把多个邮箱放进一个工作区，统一查看、统一处理、统一设置。邮件凭据仍只在本机加密保存。</p>
