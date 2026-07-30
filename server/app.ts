@@ -10,6 +10,7 @@ import { messagesRouter } from './routes/messages.js';
 import { mcpRouter } from './mcp/http.js';
 import { oauthRouter } from './routes/oauth-routes.js';
 import { systemRouter } from './routes/system.js';
+import { syncRouter } from './routes/sync.js';
 
 export function createApp() {
   const app = express();
@@ -20,6 +21,7 @@ export function createApp() {
   app.use('/api', systemRouter);
   app.use('/api', oauthRouter);
   app.use('/api', accountsRouter);
+  app.use('/api', syncRouter);
   app.use('/api', messagesRouter);
   app.use('/api', draftsRouter);
   app.use('/api', developerTokensRouter);

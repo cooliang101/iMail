@@ -14,6 +14,9 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - 通用 IMAP/SMTP 接入
 - 邮箱凭据本地 AES-256-GCM 加密
 - SQLite 本地数据库、外键约束、事务写入与旧 JSON 自动迁移
+- 后端持久化同步策略与独立 Worker；前端关闭后仍按账户频率同步，进程重启后自动恢复到期任务
+- 收件箱 IMAP IDLE 实时唤醒；连接失败时仍由持久化周期轮询兜底
+- 设置页可配置新账户默认策略和账户级频率、文件夹范围、启动补同步、失败重试与通知
 - 首次同步最近 80 封邮件，后续按 IMAP UID 增量更新收件箱、已发送和归档缓存
 - 邮件摘要分页、正文懒加载与大邮箱虚拟列表
 - 已读、星标、归档与移至垃圾箱会同步写回源 IMAP 邮箱；兼容 Gmail All Mail 归档体系
@@ -44,6 +47,8 @@ npm run dev
 ```
 
 浏览器访问 `http://localhost:5173`。API 默认只监听 `127.0.0.1:8787`，不会暴露给局域网。
+
+API 启动器默认同时拉起独立同步 Worker。Worker 的任务、租约、邮箱 UID 游标、下次执行时间和失败状态均保存在 SQLite；浏览器、SSE 或开发者 WebSocket 断开不会停止同步。
 
 生产构建：
 
@@ -136,7 +141,7 @@ socket.addEventListener('message', ({ data }) => {
 });
 ```
 
-连接要求 `messages:read` 权限。网关仅推送 Token 授权邮箱的新邮件摘要，不包含正文或内部账户 ID；Token 被撤销或过期后连接会以 `1008` 关闭。有订阅者时网关默认每 15 秒检查一次新邮件，可通过 `GATEWAY_WS_SYNC_INTERVAL_MS` 调整（最小 5 秒）。首次同步用于建立本地基线，不会把历史邮件当作新邮件推送。服务端客户端也可以在 WebSocket 握手中使用 `Authorization: Bearer ...`。
+连接要求 `messages:read` 权限。网关仅推送 Token 授权邮箱的新邮件摘要，不包含正文或内部账户 ID；Token 被撤销或过期后连接会以 `1008` 关闭。新邮件由独立同步 Worker 按持久化策略采集，网关只转发已经写入数据库的事件，不触发也不维持同步。首次同步用于建立本地基线，不会把历史邮件当作新邮件推送。服务端客户端也可以在 WebSocket 握手中使用 `Authorization: Bearer ...`。
 
 读取邮件：
 
@@ -308,7 +313,8 @@ server/app.ts        Express 应用与路由装配
 server/routes/       管理 API 与开发者网关路由
 server/http/         校验、鉴权、响应转换与错误处理
 server/mcp/          MCP HTTP/stdio 传输、授权与完整邮箱工具
-server/mail/         IMAP/SMTP 连接、同步、远程操作与发送
+server/mail/         IMAP/SMTP 连接、增量同步、远程操作与发送
+server/sync/         持久化调度、任务租约、独立 Worker 与运行状态
 server/oauth/        OAuth 配置、授权流程、身份校验与 Token 刷新
 server/storage/      SQLite schema、数据映射与事务写入
 server/contact-model.ts 联系人聚合与可注册主域 Logo 归并
@@ -340,7 +346,7 @@ npm run build
 
 ## 后续增强方向
 
-1. IMAP IDLE 实时收信、任意自定义文件夹和更深历史同步
+1. 可配置的更深历史同步与邮箱会话视图
 2. 会话视图、联系人分组和模板化写信
 3. SQLite FTS 全文索引和可选 PostgreSQL 远程模式
 4. 管理端登录、设备会话、审计日志和远程安全部署模式

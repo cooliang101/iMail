@@ -10,6 +10,7 @@
     "dev": "concurrently -n web,api -c cyan,green \"vite\" \"tsx watch --env-file-if-exists=.env server/index.ts\"",
     "build": "tsc -b && vite build",
     "start": "tsx --env-file-if-exists=.env server/index.ts",
+    "worker": "tsx --env-file-if-exists=.env server/sync/worker.ts",
     "mcp": "tsx --env-file-if-exists=.env server/mcp/stdio.ts",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run"

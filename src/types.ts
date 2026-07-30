@@ -95,3 +95,54 @@ export type DeveloperToken = {
   expiresAt: string;
   lastUsedAt?: string;
 };
+
+export type SyncFolderMode = 'inbox' | 'standard' | 'selected';
+export type SyncPolicy = {
+  accountId: string;
+  enabled: boolean;
+  intervalMinutes: number;
+  folderMode: SyncFolderMode;
+  selectedMailboxes: string[];
+  syncOnStart: boolean;
+  retryOnRecovery: boolean;
+  notifyOnError: boolean;
+  updatedAt: string;
+};
+
+export type MailboxSyncState = {
+  accountId: string;
+  mailbox: string;
+  mailboxRole: MailboxRole;
+  uidValidity?: string;
+  lastSeenUid: number;
+  lastAttemptAt?: string;
+  lastSuccessAt?: string;
+  nextSyncAt?: string;
+  consecutiveFailures: number;
+  connectionStatus: 'connected' | 'unreachable' | 'authRequired';
+  syncState: 'idle' | 'scheduled' | 'running' | 'backoff' | 'paused';
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+};
+
+export type SyncJob = {
+  id: string;
+  accountId: string;
+  mailbox?: string;
+  mailboxRole: MailboxRole;
+  reason: 'scheduled' | 'startup' | 'manual' | 'recovery';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  syncedCount?: number;
+  newCount?: number;
+  errorMessage?: string;
+};
+
+export type AccountSyncStatus = { accountId: string; policy: SyncPolicy; states: MailboxSyncState[]; jobs: SyncJob[] };
+export type SyncWorkerHealth = {
+  workers: Array<{ workerId: string; processId: number; hostName: string; startedAt: string; heartbeatAt: string }>;
+  queuedJobs: number;
+  oldestQueuedAt?: string;
+};

@@ -94,6 +94,16 @@ function App() {
 
   useEffect(() => { void load(); }, []);
   useEffect(() => {
+    const refresh = () => { void load(); setMessageRevision((value) => value + 1); };
+    const events = new EventSource('/api/events');
+    events.addEventListener('sync.completed', refresh);
+    events.addEventListener('message.created', refresh);
+    const onVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const fallback = window.setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 30_000);
+    return () => { events.close(); document.removeEventListener('visibilitychange', onVisibility); window.clearInterval(fallback); };
+  }, []);
+  useEffect(() => {
     if (folderDiscoveryStarted.current || accounts.length === 0 || accounts.some((account) => account.mailboxes.length > 0)) return;
     folderDiscoveryStarted.current = true;
     void api('/api/sync', { method: 'POST' }).then(load).catch(() => undefined);
@@ -206,7 +216,7 @@ function App() {
       const role = view === 'sent' ? 'sent' : view === 'archive' ? 'archive' : view === 'inbox' || view === 'starred' || view === 'snoozed' ? 'inbox' : null;
       if (view === 'folder' && activeMailbox) await Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) })));
       else if (role) await api(role === 'inbox' ? '/api/sync' : `/api/mailboxes/${role}/sync`, { method: 'POST' });
-      await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: '缓存已更新' });
+      setNotice({ kind: 'success', text: '同步任务已加入后端队列' });
     }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '同步失败' }); }
     finally { setSyncing(false); }
@@ -340,21 +350,21 @@ function App() {
 
   async function syncAccount(accountId: string) {
     setSyncing(true);
-    try { await api(`/api/accounts/${accountId}/sync`, { method: 'POST' }); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: '邮箱已同步' }); }
+    try { await api(`/api/accounts/${accountId}/sync`, { method: 'POST' }); setNotice({ kind: 'success', text: '邮箱已加入后端同步队列' }); }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮箱同步失败' }); }
     finally { setSyncing(false); }
   }
 
   async function syncWorkspace(group: string) {
     setSyncing(true);
-    try { await Promise.all(accounts.filter((account) => account.group === group).map((account) => api(`/api/accounts/${account.id}/sync`, { method: 'POST' }))); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: `${group} 已同步` }); }
+    try { await Promise.all(accounts.filter((account) => account.group === group).map((account) => api(`/api/accounts/${account.id}/sync`, { method: 'POST' }))); setNotice({ kind: 'success', text: `${group} 已加入后端同步队列` }); }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '工作空间同步失败' }); }
     finally { setSyncing(false); }
   }
 
   async function syncFolder(folder: WorkspaceFolder) {
     setSyncing(true);
-    try { await Promise.all(folder.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) }))); await load(); setMessageRevision((value) => value + 1); setNotice({ kind: 'success', text: `${folder.name} 已同步` }); }
+    try { await Promise.all(folder.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) }))); setNotice({ kind: 'success', text: `${folder.name} 已加入后端同步队列` }); }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); }
     finally { setSyncing(false); }
   }

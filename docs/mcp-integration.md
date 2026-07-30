@@ -70,7 +70,9 @@ stdio 进程只向 stdout 写 MCP 帧，诊断写 stderr。启动时会验证授
 | 账户 | `account_update_authorization_code` | 验证并替换非 OAuth 账户凭据 |
 | 账户 | `account_test_connection` | 验证已保存的 IMAP/SMTP 凭据 |
 | 账户 | `account_remove` | 移除账户及其本地缓存和草稿 |
-| 同步 | `mailbox_sync` | 同步单个/全部账户及特殊或自定义文件夹 |
+| 同步 | `mailbox_sync` | 为单个/全部账户的特殊或自定义文件夹创建持久化同步任务 |
+| 同步 | `sync_policy_get` | 读取默认/账户级策略、邮箱状态和最近任务 |
+| 同步 | `sync_policy_update` | 更新默认或账户级后端同步策略 |
 | 邮件 | `messages_list` | 分页和多条件查询本地缓存 |
 | 邮件 | `message_get` | 完整正文、HTML、标签与附件元数据 |
 | 邮件 | `message_update` | 已读、星标、标签和稍后处理 |
@@ -85,6 +87,7 @@ stdio 进程只向 stdout 写 MCP 帧，诊断写 stderr。启动时会验证授
 
 - 操作账户前先调用 `accounts_list`，使用邮箱地址定位，不猜内部 ID。
 - 操作邮件前先调用 `messages_list` 或 `message_get`，确认发件人、主题和目标邮箱。
+- `mailbox_sync` 返回 `jobId` 和排队状态；任务由独立 Worker 执行，调用方可用 `sync_policy_get` 查看状态，不应依赖 MCP 连接存活。
 - 发送邮件前确认 `accountEmail`、收件人、主题和正文；发送不是幂等操作。
 - `account_remove`、`message_move` 和 `draft_delete` 带 destructive annotation，执行前应获得用户确认。
 - 添加 QQ、iCloud 等账户时，把服务商生成的授权码传给 `account_add_with_code.authorizationCode`；不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。

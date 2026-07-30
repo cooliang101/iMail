@@ -21,6 +21,12 @@ export async function imapClientFor(account: MailAccount) {
     secure: account.settings.imapSecure,
     auth: authFor(account, secret),
     logger: false,
+    qresync: true,
+    maxIdleTime: 4 * 60_000,
+    missingIdleCommand: 'NOOP',
+    connectionTimeout: 30_000,
+    greetingTimeout: 30_000,
+    socketTimeout: 120_000,
   });
 }
 
@@ -75,6 +81,7 @@ export async function testAccount(account: MailAccount): Promise<void> {
   const client = new ImapFlow({
     host: account.settings.imapHost, port: account.settings.imapPort, secure: account.settings.imapSecure,
     auth: authFor(account, secret), logger: false,
+    qresync: true, maxIdleTime: 4 * 60_000, missingIdleCommand: 'NOOP', connectionTimeout: 30_000, greetingTimeout: 30_000, socketTimeout: 120_000,
   });
   try {
     try { await client.connect(); await client.mailboxOpen('INBOX', { readOnly: true }); }

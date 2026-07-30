@@ -20,6 +20,7 @@ let server: Server;
 let baseUrl: string;
 let updateStore: typeof import('./store.js')['updateStore'];
 let closeStore: typeof import('./store.js')['closeStore'];
+let getSyncStore: typeof import('./sync/store.js')['getSyncStore'];
 
 const account: MailAccount = {
   id: '11111111-1111-4111-8111-111111111111', provider: 'gmail', email: 'owner@example.com', displayName: 'Owner',
@@ -32,9 +33,10 @@ beforeAll(async () => {
   process.env.IMAIL_DATA_DIR = directory;
   process.env.APP_MASTER_KEY = '11'.repeat(32);
   vi.resetModules();
-  const [{ app }, store] = await Promise.all([import('./index.js'), import('./store.js')]);
+  const [{ app }, store, syncStore] = await Promise.all([import('./index.js'), import('./store.js'), import('./sync/store.js')]);
   updateStore = store.updateStore;
   closeStore = store.closeStore;
+  getSyncStore = syncStore.getSyncStore;
   server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
@@ -51,6 +53,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await updateStore((data) => { data.accounts = [account]; data.messages = []; data.tokens = []; data.drafts = []; });
+  getSyncStore().deleteAccountData(account.id); getSyncStore().ensurePolicy(account.id);
 });
 
 async function request(route: string, init?: RequestInit) {
@@ -92,12 +95,17 @@ describe('iMail HTTP API', () => {
     const toolNames = listed.body.result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toEqual(expect.arrayContaining([
       'accounts_list', 'account_add_with_code', 'account_start_oauth', 'account_update_authorization_code', 'account_remove',
-      'mailbox_sync', 'messages_list', 'message_get', 'message_update', 'message_move', 'message_send', 'attachment_download',
+      'mailbox_sync', 'sync_policy_get', 'sync_policy_update', 'messages_list', 'message_get', 'message_update', 'message_move', 'message_send', 'attachment_download',
       'drafts_list', 'draft_get', 'draft_save', 'draft_delete', 'labels_list', 'notifications_list',
     ]));
     const called = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'accounts_list', arguments: {} } });
     expect(called.body.result.structuredContent.accounts[0]).toMatchObject({ email: account.email, displayName: account.displayName });
     expect(JSON.stringify(called.body)).not.toContain(account.encryptedSecret);
+    const policyUpdated = await mcp({ jsonrpc: '2.0', id: 31, method: 'tools/call', params: { name: 'sync_policy_update', arguments: { email: account.email, intervalMinutes: 15 } } });
+    expect(policyUpdated.body.result.structuredContent.policy).toMatchObject({ intervalMinutes: 15 });
+    const policyRead = await mcp({ jsonrpc: '2.0', id: 32, method: 'tools/call', params: { name: 'sync_policy_get', arguments: { email: account.email } } });
+    expect(policyRead.body.result.structuredContent.accounts[0]).toMatchObject({ accountEmail: account.email, policy: { intervalMinutes: 15 } });
+    expect(JSON.stringify(policyRead.body)).not.toContain(account.encryptedSecret);
 
     await updateStore((data) => { data.messages = [{
       id: 'mcp-message', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 42,
@@ -137,6 +145,21 @@ describe('iMail HTTP API', () => {
     expect(result.body.accounts[0]).toMatchObject({ id: account.id, email: account.email, authMethod: 'oauth2' });
     expect(JSON.stringify(result.body)).not.toContain('must-never-leak');
     expect(result.body.accounts[0]).not.toHaveProperty('encryptedSecret');
+  });
+
+  it('persists backend sync policy and queues work without executing IMAP in the request', async () => {
+    const defaults = await request('/api/sync-policy');
+    expect(defaults.body.policy).toMatchObject({ enabled: true, intervalMinutes: 5, folderMode: 'inbox' });
+    const updated = await request(`/api/accounts/${account.id}/sync-policy`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intervalMinutes: 15, folderMode: 'standard', syncOnStart: true }),
+    });
+    expect(updated.body.policy).toMatchObject({ accountId: account.id, intervalMinutes: 15, folderMode: 'standard' });
+    const queued = await request(`/api/accounts/${account.id}/sync`, { method: 'POST' });
+    expect(queued.body).toMatchObject({ queued: true, synced: 0, jobId: expect.any(String) });
+    const status = await request('/api/sync-status');
+    expect(status.body.accounts[0]).toMatchObject({ accountId: account.id, policy: { intervalMinutes: 15 }, jobs: [{ id: queued.body.jobId, status: 'queued', reason: 'manual' }] });
+    expect(JSON.stringify(status.body)).not.toContain(account.encryptedSecret);
   });
 
   it('updates account workspace metadata without exposing credentials', async () => {
