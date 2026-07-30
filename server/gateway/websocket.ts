@@ -1,10 +1,10 @@
 import type { Server, IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer } from 'ws';
-import { syncAccount } from '../mail.js';
 import { authenticateToken } from '../tokens.js';
 import type { DeveloperToken } from '../types.js';
 import { gatewayEvents, type GatewayMessageCreatedEvent } from './events.js';
+import { getSyncStore } from '../sync/store.js';
 
 const EVENTS_PATH = '/gateway/v1/events';
 const AUTH_TIMEOUT_MS = 5_000;
@@ -29,13 +29,9 @@ function send(socket: WebSocket, value: unknown) {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
 }
 
-export function attachGatewayWebSocket(server: Server, options: { syncIntervalMs?: number; sync?: typeof syncAccount } = {}) {
+export function attachGatewayWebSocket(server: Server, _deprecatedOptions: Record<string, unknown> = {}) {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = new Set<Session>();
-  const syncingAccounts = new Set<string>();
-  const sync = options.sync ?? syncAccount;
-  const configuredInterval = options.syncIntervalMs ?? Number(process.env.GATEWAY_WS_SYNC_INTERVAL_MS ?? 15_000);
-  const syncIntervalMs = Number.isFinite(configuredInterval) ? Math.max(5_000, configuredInterval) : 15_000;
 
   const authenticate = async (session: Session, rawToken: string | undefined) => {
     if (session.token || session.authenticating) return;
@@ -51,17 +47,6 @@ export function attachGatewayWebSocket(server: Server, options: { syncIntervalMs
     session.rawToken = rawToken;
     session.token = token;
     send(session.socket, { type: 'connected', occurredAt: new Date().toISOString() });
-    void poll();
-  };
-
-  const poll = async () => {
-    const accountIds = new Set(Array.from(sessions).flatMap((session) => session.token?.accountIds ?? []));
-    await Promise.allSettled(Array.from(accountIds).map(async (accountId) => {
-      if (syncingAccounts.has(accountId)) return;
-      syncingAccounts.add(accountId);
-      try { await sync(accountId); }
-      finally { syncingAccounts.delete(accountId); }
-    }));
   };
 
   wss.on('connection', (socket, request) => {
@@ -104,7 +89,7 @@ export function attachGatewayWebSocket(server: Server, options: { syncIntervalMs
   };
   server.on('upgrade', onUpgrade);
 
-  const unsubscribe = gatewayEvents.subscribe((event: GatewayMessageCreatedEvent) => {
+  const deliver = (event: GatewayMessageCreatedEvent) => {
     for (const session of sessions) {
       if (!session.token?.accountIds.includes(event.accountId) || !session.rawToken) continue;
       session.delivery = session.delivery.then(async () => {
@@ -113,10 +98,18 @@ export function attachGatewayWebSocket(server: Server, options: { syncIntervalMs
         send(session.socket, { id: event.id, type: event.type, occurredAt: event.occurredAt, data: event.data });
       }).catch(() => session.socket.close(1011, 'Event delivery failed'));
     }
-  });
+  };
+  const unsubscribe = gatewayEvents.subscribe(deliver);
+  let eventCursor = getSyncStore().latestEventId();
+  const eventTimer = setInterval(() => {
+    for (const event of getSyncStore().listEvents(eventCursor)) {
+      eventCursor = event.id;
+      if (event.type !== 'message.created') continue;
+      deliver({ id: String(event.id), type: 'message.created', occurredAt: event.createdAt, accountId: event.accountId, data: event.payload as GatewayMessageCreatedEvent['data'] });
+    }
+  }, 1_000);
+  eventTimer.unref();
 
-  const syncTimer = setInterval(() => { void poll(); }, syncIntervalMs);
-  syncTimer.unref();
   const heartbeatTimer = setInterval(() => {
     for (const session of sessions) {
       if (!session.alive) { session.socket.terminate(); continue; }
@@ -127,8 +120,8 @@ export function attachGatewayWebSocket(server: Server, options: { syncIntervalMs
   heartbeatTimer.unref();
 
   const close = () => {
-    clearInterval(syncTimer);
     clearInterval(heartbeatTimer);
+    clearInterval(eventTimer);
     unsubscribe();
     server.off('upgrade', onUpgrade);
     for (const session of sessions) session.socket.terminate();

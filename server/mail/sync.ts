@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FetchMessageObject, ListResponse } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { readStore, updateStore } from '../store.js';
+import { commitMailboxSync, readStore, setAccountSyncStatus } from '../store.js';
 import type { CachedMessage, MailboxFolder, MailboxRole } from '../types.js';
 import { gatewayEvents } from '../gateway/events.js';
 import { address, imapClientFor } from './client.js';
@@ -31,15 +31,26 @@ function roleForMailbox(item: Partial<ListResponse> | undefined): MailboxRole {
   return 'custom';
 }
 
-export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 'inbox', requestedMailbox?: string): Promise<{ synced: number }> {
+export type SyncCursor = { uidValidity?: string; lastSeenUid?: number; highestModseq?: string };
+export type SyncExecutionResult = {
+  synced: number;
+  created: number;
+  updated: number;
+  deleted: number;
+  mailbox: string;
+  mailboxRole: MailboxRole;
+  uidValidity?: string;
+  highestModseq?: string;
+  lastSeenUid: number;
+  createdMessages: CachedMessage[];
+};
+
+export async function syncMailbox(accountId: string, mailboxRole: MailboxRole = 'inbox', requestedMailbox?: string, cursor?: SyncCursor): Promise<SyncExecutionResult> {
   const store = await readStore();
   const account = store.accounts.find((item) => item.id === accountId);
   if (!account) throw new Error('邮箱账户不存在');
   const previouslySynced = Boolean(account.lastSyncAt);
-  await updateStore((data) => {
-    const current = data.accounts.find((item) => item.id === accountId);
-    if (current) { current.status = 'syncing'; current.lastError = undefined; }
-  });
+  await setAccountSyncStatus(accountId, 'syncing');
 
   const client = await imapClientFor(account);
   try {
@@ -63,13 +74,19 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
     }
     const mailbox = await client.mailboxOpen(mailboxPath, { readOnly: true });
     const cached = store.messages.filter((message) => message.accountId === accountId && message.mailbox === mailboxPath);
+    const uidValidity = mailbox.uidValidity === undefined ? undefined : String(mailbox.uidValidity);
+    const highestModseq = mailbox.highestModseq === undefined ? undefined : String(mailbox.highestModseq);
+    const uidValidityChanged = Boolean(cursor?.uidValidity && uidValidity && cursor.uidValidity !== uidValidity);
     const maxCachedUid = cached.reduce((max, message) => Math.max(max, message.uid), 0);
+    const incrementalUid = uidValidityChanged ? 0 : Math.max(maxCachedUid, cursor?.lastSeenUid ?? 0);
     const incoming: CachedMessage[] = [];
-    const createdMessages: CachedMessage[] = [];
     const flagUpdates = new Map<number, { unread: boolean; flagged: boolean }>();
+    const checkedCachedUids = new Set<number>();
+    let lastSeenUid = incrementalUid;
 
     const parseIncoming = async (items: AsyncIterable<FetchMessageObject>) => {
       for await (const item of items) {
+        lastSeenUid = Math.max(lastSeenUid, item.uid);
         if (!item.source) continue;
         const labels = (item as FetchMessageObject & { labels?: Set<string> }).labels;
         if (allMailArchive && labels && ['\\Inbox', '\\Sent', '\\Drafts', '\\Trash'].some((label) => labels.has(label))) continue;
@@ -94,46 +111,57 @@ export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 
       }
     };
 
-    if (mailbox.exists > 0 && maxCachedUid === 0) {
+    if (mailbox.exists > 0 && incrementalUid === 0) {
       const start = Math.max(1, mailbox.exists - 79);
       await parseIncoming(client.fetch(`${start}:*`, { uid: true, flags: true, labels: true, source: true, envelope: true, internalDate: true }));
-    } else if (maxCachedUid > 0 && mailbox.uidNext > maxCachedUid + 1) {
-      await parseIncoming(client.fetch(`${maxCachedUid + 1}:*`, { uid: true, flags: true, labels: true, source: true, envelope: true, internalDate: true }, { uid: true }));
+    } else if (incrementalUid > 0 && mailbox.uidNext > incrementalUid + 1) {
+      await parseIncoming(client.fetch(`${incrementalUid + 1}:*`, { uid: true, flags: true, labels: true, source: true, envelope: true, internalDate: true }, { uid: true }));
     }
 
-    const recentCachedUids = cached.sort((a, b) => b.uid - a.uid).slice(0, 100).map((message) => message.uid);
-    if (recentCachedUids.length > 0) {
-      for await (const item of client.fetch(recentCachedUids, { uid: true, flags: true }, { uid: true })) {
-        flagUpdates.set(item.uid, { unread: !item.flags?.has('\\Seen'), flagged: Boolean(item.flags?.has('\\Flagged')) });
+    const cachedUids = uidValidityChanged ? [] : cached.map((message) => message.uid);
+    if (cachedUids.length > 0) {
+      let changedSince: bigint | undefined;
+      if (cursor?.highestModseq && highestModseq) {
+        try { changedSince = BigInt(cursor.highestModseq); } catch { changedSince = undefined; }
+      }
+      for (let index = 0; index < cachedUids.length; index += 500) {
+        const batch = cachedUids.slice(index, index + 500);
+        for await (const item of client.fetch(batch, { uid: true, flags: !changedSince }, { uid: true })) {
+          checkedCachedUids.add(item.uid);
+          if (!changedSince) flagUpdates.set(item.uid, { unread: !item.flags?.has('\\Seen'), flagged: Boolean(item.flags?.has('\\Flagged')) });
+        }
+      }
+      if (changedSince) {
+        const minimumUid = Math.min(...cachedUids);
+        for await (const item of client.fetch(`${minimumUid}:*`, { uid: true, flags: true }, { uid: true, changedSince })) {
+          flagUpdates.set(item.uid, { unread: !item.flags?.has('\\Seen'), flagged: Boolean(item.flags?.has('\\Flagged')) });
+        }
       }
     }
 
-    await updateStore((data) => {
-      const ids = new Set(incoming.map((message) => message.id));
-      for (const message of incoming) {
-        const previous = data.messages.find((item) => item.id === message.id);
-        if (previous) { message.labels = previous.labels ?? []; message.snoozedUntil = previous.snoozedUntil; }
-        else createdMessages.push(message);
-      }
-      const incomingMessageIds = new Set(incoming.map((message) => message.messageId).filter(Boolean));
-      data.messages = [...data.messages.filter((message) => message.accountId !== accountId || (!ids.has(message.id) && !((mailboxRole === 'custom' ? message.mailbox === mailboxPath : (message.mailboxRole ?? 'inbox') === mailboxRole) && message.messageId && incomingMessageIds.has(message.messageId)))), ...incoming]
-        .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5000);
-      for (const message of data.messages) {
-        if (message.accountId !== accountId || message.mailbox !== mailboxPath) continue;
-        const flags = flagUpdates.get(message.uid);
-        if (flags) Object.assign(message, flags);
-      }
-      const current = data.accounts.find((item) => item.id === accountId);
-      if (current) { current.status = 'connected'; current.lastSyncAt = new Date().toISOString(); current.lastError = undefined; current.mailboxes = folders; }
+    const removedUids = new Set(cachedUids.filter((uid) => !checkedCachedUids.has(uid)));
+    const updatedCount = cached.reduce((count, message) => {
+      const flags = flagUpdates.get(message.uid);
+      return count + (flags && (message.unread !== flags.unread || message.flagged !== flags.flagged) ? 1 : 0);
+    }, 0);
+    const { createdMessages } = await commitMailboxSync({
+      accountId, mailbox: mailboxPath, mailboxRole, incoming, removedUids: [...removedUids], uidValidityChanged,
+      flagUpdates: [...flagUpdates].map(([uid, flags]) => ({ uid, ...flags })), folders, completedAt: new Date().toISOString(),
     });
     if (previouslySynced && createdMessages.length > 0) gatewayEvents.publishMessageCreated(account, createdMessages);
-    return { synced: incoming.length };
+    return {
+      synced: incoming.length, created: createdMessages.length, updated: updatedCount, deleted: uidValidityChanged ? cached.length : removedUids.size,
+      mailbox: mailboxPath, mailboxRole, uidValidity, highestModseq, lastSeenUid,
+      createdMessages: previouslySynced ? createdMessages : [],
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步失败';
-    await updateStore((data) => {
-      const current = data.accounts.find((item) => item.id === accountId);
-      if (current) { current.status = 'error'; current.lastError = message; }
-    });
+    await setAccountSyncStatus(accountId, 'error', message);
     throw error;
   } finally { await client.logout().catch(() => undefined); }
+}
+
+export async function syncAccount(accountId: string, mailboxRole: MailboxRole = 'inbox', requestedMailbox?: string): Promise<{ synced: number }> {
+  const result = await syncMailbox(accountId, mailboxRole, requestedMailbox);
+  return { synced: result.synced };
 }

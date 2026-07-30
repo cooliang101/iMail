@@ -49,6 +49,76 @@ export function ensureSchema(db: DatabaseSync) {
       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
       PRIMARY KEY (token_id, account_id)
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS sync_policies (
+      account_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+      interval_minutes INTEGER NOT NULL DEFAULT 5 CHECK (interval_minutes BETWEEN 1 AND 60),
+      folder_mode TEXT NOT NULL DEFAULT 'inbox' CHECK (folder_mode IN ('inbox', 'standard', 'selected')),
+      selected_mailboxes_json TEXT NOT NULL DEFAULT '[]',
+      sync_on_start INTEGER NOT NULL DEFAULT 1 CHECK (sync_on_start IN (0, 1)),
+      retry_on_recovery INTEGER NOT NULL DEFAULT 1 CHECK (retry_on_recovery IN (0, 1)),
+      notify_on_error INTEGER NOT NULL DEFAULT 1 CHECK (notify_on_error IN (0, 1)),
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS mailbox_sync_states (
+      account_id TEXT NOT NULL,
+      mailbox TEXT NOT NULL,
+      mailbox_role TEXT NOT NULL DEFAULT 'inbox',
+      uid_validity TEXT,
+      last_seen_uid INTEGER NOT NULL DEFAULT 0,
+      highest_modseq TEXT,
+      last_attempt_at TEXT,
+      last_success_at TEXT,
+      next_sync_at TEXT,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      connection_status TEXT NOT NULL DEFAULT 'connected' CHECK (connection_status IN ('connected', 'unreachable', 'authRequired')),
+      sync_state TEXT NOT NULL DEFAULT 'idle' CHECK (sync_state IN ('idle', 'scheduled', 'running', 'backoff', 'paused')),
+      last_error_code TEXT,
+      last_error_message TEXT,
+      PRIMARY KEY (account_id, mailbox)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS mailbox_sync_states_due ON mailbox_sync_states(sync_state, next_sync_at);
+    CREATE TABLE IF NOT EXISTS sync_jobs (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      mailbox TEXT,
+      mailbox_role TEXT NOT NULL DEFAULT 'inbox',
+      reason TEXT NOT NULL CHECK (reason IN ('scheduled', 'startup', 'manual', 'recovery')),
+      status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
+      priority INTEGER NOT NULL DEFAULT 0,
+      not_before TEXT NOT NULL,
+      locked_by TEXT,
+      locked_until TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      finished_at TEXT,
+      synced_count INTEGER,
+      new_count INTEGER,
+      updated_count INTEGER,
+      deleted_count INTEGER,
+      error_code TEXT,
+      error_message TEXT
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS sync_jobs_claim ON sync_jobs(status, not_before, priority DESC, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS sync_jobs_active_target ON sync_jobs(account_id, coalesce(mailbox, ''), mailbox_role)
+      WHERE status IN ('queued', 'running');
+    CREATE TABLE IF NOT EXISTS sync_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      job_id TEXT,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS sync_events_created ON sync_events(created_at);
+    CREATE TABLE IF NOT EXISTS sync_worker_heartbeats (
+      worker_id TEXT PRIMARY KEY,
+      process_id INTEGER NOT NULL,
+      host_name TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      heartbeat_at TEXT NOT NULL
+    ) STRICT;
   `);
   const columns = new Set((db.prepare('PRAGMA table_info(messages)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
   if (!columns.has('mailbox_role')) db.exec("ALTER TABLE messages ADD COLUMN mailbox_role TEXT NOT NULL DEFAULT 'inbox'");

@@ -4,11 +4,12 @@ import { encryptSecret } from '../crypto.js';
 import { asyncRoute } from '../http/async-route.js';
 import { publicAccount } from '../http/presenters.js';
 import { accountSchema, mailboxRoleSchema, workspaceIconSchema } from '../http/schemas.js';
-import { syncAccount, testAccount } from '../mail.js';
+import { testAccount } from '../mail.js';
 import { beginOAuthReconnect, validateStoredAccountConnection } from '../oauth.js';
 import { settingsFor } from '../providers.js';
 import { readStore, updateStore } from '../store.js';
-import type { MailAccount, MailSettings, ProviderId } from '../types.js';
+import type { MailAccount, MailboxRole, MailSettings, ProviderId } from '../types.js';
+import { getSyncStore } from '../sync/store.js';
 import { z } from 'zod';
 
 export const accountsRouter = Router();
@@ -70,6 +71,7 @@ accountsRouter.post('/accounts', asyncRoute(async (req, res) => {
     if (data.accounts.some((item) => item.email === account.email)) throw new Error('这个邮箱刚刚被其他操作添加');
     data.accounts.push(account);
   });
+  getSyncStore().ensurePolicy(account.id);
   res.status(201).json({ account: publicAccount(account) });
 }));
 
@@ -79,6 +81,7 @@ accountsRouter.delete('/accounts/:id', asyncRoute(async (req, res) => {
     data.messages = data.messages.filter((item) => item.accountId !== req.params.id);
     data.tokens.forEach((token) => { token.accountIds = token.accountIds.filter((id) => id !== req.params.id); });
   });
+  getSyncStore().deleteAccountData(String(req.params.id));
   res.status(204).end();
 }));
 
@@ -93,27 +96,42 @@ accountsRouter.patch('/accounts/:id', asyncRoute(async (req, res) => {
   res.json({ account: publicAccount(updated!) });
 }));
 
-accountsRouter.post('/accounts/:id/sync', asyncRoute(async (req, res) => res.json(await syncAccount(String(req.params.id)))));
+function queuedResult(accountId: string, mailboxRole: MailboxRole = 'inbox', mailbox?: string) {
+  const job = getSyncStore().enqueueJob({ accountId, mailboxRole, mailbox, reason: 'manual', priority: 100 });
+  return { synced: 0, queued: true, jobId: job.id };
+}
+
+async function accountExists(accountId: string) { return (await readStore()).accounts.some((account) => account.id === accountId); }
+
+accountsRouter.post('/accounts/:id/sync', asyncRoute(async (req, res) => {
+  const accountId = String(req.params.id);
+  if (!(await readStore()).accounts.some((account) => account.id === accountId)) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
+  res.json(queuedResult(accountId));
+}));
 
 accountsRouter.post('/accounts/:id/mailboxes/:role/sync', asyncRoute(async (req, res) => {
   const role = mailboxRoleSchema.parse(req.params.role);
-  res.json(await syncAccount(String(req.params.id), role));
+  const accountId = String(req.params.id);
+  if (!await accountExists(accountId)) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
+  res.json(queuedResult(accountId, role));
 }));
 
 accountsRouter.post('/accounts/:id/mailboxes/sync', asyncRoute(async (req, res) => {
   const input = z.object({ mailbox: z.string().trim().min(1).max(500) }).parse(req.body);
-  res.json(await syncAccount(String(req.params.id), 'custom', input.mailbox));
+  const accountId = String(req.params.id);
+  if (!await accountExists(accountId)) { res.status(404).json({ error: '邮箱账户不存在' }); return; }
+  res.json(queuedResult(accountId, 'custom', input.mailbox));
 }));
 
 accountsRouter.post('/mailboxes/:role/sync', asyncRoute(async (req, res) => {
   const role = mailboxRoleSchema.parse(req.params.role);
   const { accounts } = await readStore();
-  const results = await Promise.allSettled(accounts.map((account) => syncAccount(account.id, role)));
-  res.json({ results: results.map((result, index) => ({ accountId: accounts[index].id, status: result.status, ...(result.status === 'fulfilled' ? result.value : { error: result.reason instanceof Error ? result.reason.message : '同步失败' }) })) });
+  const results = accounts.map((account) => queuedResult(account.id, role));
+  res.json({ results: results.map((result, index) => ({ accountId: accounts[index].id, status: 'fulfilled', ...result })) });
 }));
 
 accountsRouter.post('/sync', asyncRoute(async (_req, res) => {
   const { accounts } = await readStore();
-  const results = await Promise.allSettled(accounts.map((account) => syncAccount(account.id)));
-  res.json({ results: results.map((result, index) => ({ accountId: accounts[index].id, status: result.status, ...(result.status === 'fulfilled' ? result.value : { error: result.reason instanceof Error ? result.reason.message : '同步失败' }) })) });
+  const results = accounts.map((account) => queuedResult(account.id));
+  res.json({ results: results.map((result, index) => ({ accountId: accounts[index].id, status: 'fulfilled', ...result })) });
 }));

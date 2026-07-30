@@ -139,3 +139,72 @@ export type StoreData = {
   contacts?: MailContact[];
   logoFetchAttempts?: LogoFetchAttempt[];
 };
+
+export type SyncFolderMode = 'inbox' | 'standard' | 'selected';
+export type SyncJobReason = 'scheduled' | 'startup' | 'manual' | 'recovery';
+export type SyncJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type SyncConnectionStatus = 'connected' | 'unreachable' | 'authRequired';
+export type SyncState = 'idle' | 'scheduled' | 'running' | 'backoff' | 'paused';
+
+export type SyncPolicy = {
+  accountId: string;
+  enabled: boolean;
+  intervalMinutes: number;
+  folderMode: SyncFolderMode;
+  selectedMailboxes: string[];
+  syncOnStart: boolean;
+  retryOnRecovery: boolean;
+  notifyOnError: boolean;
+  updatedAt: string;
+};
+
+export type SyncPolicySettings = Omit<SyncPolicy, 'accountId' | 'updatedAt'>;
+
+export type MailboxSyncState = {
+  accountId: string;
+  mailbox: string;
+  mailboxRole: MailboxRole;
+  uidValidity?: string;
+  lastSeenUid: number;
+  highestModseq?: string;
+  lastAttemptAt?: string;
+  lastSuccessAt?: string;
+  nextSyncAt?: string;
+  consecutiveFailures: number;
+  connectionStatus: SyncConnectionStatus;
+  syncState: SyncState;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+};
+
+export type SyncJob = {
+  id: string;
+  accountId: string;
+  mailbox?: string;
+  mailboxRole: MailboxRole;
+  reason: SyncJobReason;
+  status: SyncJobStatus;
+  priority: number;
+  notBefore: string;
+  lockedBy?: string;
+  lockedUntil?: string;
+  attempts: number;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  syncedCount?: number;
+  newCount?: number;
+  updatedCount?: number;
+  deletedCount?: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+export type SyncEvent = {
+  id: number;
+  type: 'sync.started' | 'sync.completed' | 'sync.failed' | 'message.created';
+  accountId: string;
+  jobId?: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};

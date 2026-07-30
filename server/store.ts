@@ -2,11 +2,13 @@ import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { ensureSchema } from './storage/schema.js';
-import { integer, messageFromRow, text, type Row, type SqlValue } from './storage/rows.js';
+import { integer, messageFromRow, optionalText, text, type Row, type SqlValue } from './storage/rows.js';
 import type { MessageQuery, MessageStats } from './storage/models.js';
+import type { MailboxSyncCommit } from './storage/models.js';
 import { readSnapshot } from './storage/snapshot.js';
 import { replaceData } from './storage/write-data.js';
 import type { CachedMessage, StoreData } from './types.js';
+import { reconcileContacts } from './contact-model.js';
 
 export type { MessageQuery, MessageStats } from './storage/models.js';
 
@@ -115,25 +117,106 @@ export class SQLiteStore {
   async update(mutator: (data: StoreData) => void | Promise<void>): Promise<StoreData> {
     let output = structuredClone(initial);
     const operation = this.queue.catch(() => undefined).then(async () => {
-      const data = readSnapshot(this.db);
-      await mutator(data);
-      replaceData(this.db, data);
-      output = data;
+      this.db.exec('BEGIN IMMEDIATE');
+      try {
+        const data = readSnapshot(this.db);
+        await mutator(data);
+        replaceData(this.db, data, undefined, false);
+        this.db.exec('COMMIT');
+        output = data;
+      } catch (error) {
+        this.db.exec('ROLLBACK');
+        throw error;
+      }
     });
     this.queue = operation.then(() => undefined, () => undefined);
     await operation;
     return output;
   }
 
+  async setAccountSyncStatus(accountId: string, status: 'connected' | 'syncing' | 'error', lastError?: string) {
+    const operation = this.queue.catch(() => undefined).then(() => {
+      this.db.prepare('UPDATE accounts SET status = ?, last_error = ? WHERE id = ?').run(status, lastError ?? null, accountId);
+    });
+    this.queue = operation.then(() => undefined, () => undefined);
+    await operation;
+  }
+
+  async commitMailboxSync(input: MailboxSyncCommit): Promise<{ createdMessages: CachedMessage[] }> {
+    let createdMessages: CachedMessage[] = [];
+    const operation = this.queue.catch(() => undefined).then(() => {
+      this.db.exec('BEGIN IMMEDIATE');
+      try {
+        const selectExisting = this.db.prepare('SELECT labels_json, snoozed_until FROM messages WHERE id = ?');
+        const deleteMailbox = this.db.prepare('DELETE FROM messages WHERE account_id = ? AND mailbox = ?');
+        const deleteUid = this.db.prepare('DELETE FROM messages WHERE account_id = ? AND mailbox = ? AND uid = ?');
+        const deleteDuplicate = this.db.prepare(`DELETE FROM messages WHERE account_id = ? AND id <> ? AND message_id = ? AND
+          (CASE WHEN ? = 'custom' THEN mailbox = ? ELSE mailbox_role = ? END)`);
+        const upsert = this.db.prepare(`INSERT INTO messages
+          (id, account_id, mailbox, mailbox_role, uid, message_id, from_json, to_json, subject, preview, text_body, html_body, received_at, unread, flagged, has_attachments, attachments_json, labels_json, snoozed_until)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET mailbox = excluded.mailbox, mailbox_role = excluded.mailbox_role, uid = excluded.uid,
+          message_id = excluded.message_id, from_json = excluded.from_json, to_json = excluded.to_json, subject = excluded.subject,
+          preview = excluded.preview, text_body = excluded.text_body, html_body = excluded.html_body, received_at = excluded.received_at,
+          unread = excluded.unread, flagged = excluded.flagged, has_attachments = excluded.has_attachments,
+          attachments_json = excluded.attachments_json, labels_json = excluded.labels_json, snoozed_until = excluded.snoozed_until`);
+        const updateFlags = this.db.prepare('UPDATE messages SET unread = ?, flagged = ? WHERE account_id = ? AND mailbox = ? AND uid = ?');
+        const existingById = new Map<string, { labels: string[]; snoozedUntil?: string }>();
+        for (const message of input.incoming) {
+          const row = selectExisting.get(message.id) as Row | undefined;
+          if (row) existingById.set(message.id, { labels: JSON.parse(text(row, 'labels_json')) as string[], snoozedUntil: optionalText(row, 'snoozed_until') });
+          else createdMessages.push(message);
+        }
+        if (input.uidValidityChanged) deleteMailbox.run(input.accountId, input.mailbox);
+        else for (const uid of input.removedUids) deleteUid.run(input.accountId, input.mailbox, uid);
+        for (const message of input.incoming) {
+          const previous = existingById.get(message.id);
+          message.labels = previous?.labels ?? message.labels ?? [];
+          message.snoozedUntil = previous?.snoozedUntil ?? message.snoozedUntil;
+          if (message.messageId) deleteDuplicate.run(input.accountId, message.id, message.messageId, input.mailboxRole, input.mailbox, input.mailboxRole);
+          upsert.run(message.id, message.accountId, message.mailbox, message.mailboxRole ?? 'inbox', message.uid, message.messageId ?? null,
+            JSON.stringify(message.from), JSON.stringify(message.to), message.subject, message.preview, message.text, message.html ?? null,
+            message.date, Number(message.unread), Number(message.flagged), Number(message.hasAttachments), JSON.stringify(message.attachments),
+            JSON.stringify(message.labels ?? []), message.snoozedUntil ?? null);
+        }
+        for (const flags of input.flagUpdates) updateFlags.run(Number(flags.unread), Number(flags.flagged), input.accountId, input.mailbox, flags.uid);
+        this.db.prepare(`DELETE FROM messages WHERE account_id = ? AND id NOT IN
+          (SELECT id FROM messages WHERE account_id = ? ORDER BY received_at DESC, id DESC LIMIT 5000)`).run(input.accountId, input.accountId);
+        this.db.prepare("UPDATE accounts SET status = 'connected', last_sync_at = ?, last_error = NULL, mailboxes_json = ? WHERE id = ?")
+          .run(input.completedAt, JSON.stringify(input.folders), input.accountId);
+
+        const snapshot = readSnapshot(this.db);
+        const contacts = reconcileContacts(snapshot);
+        this.db.exec('DELETE FROM contacts');
+        const insertContact = this.db.prepare('INSERT INTO contacts (address, name, message_count, last_contact_at, logo_key, logo_content_type, logo_source_url, logo_fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        for (const contact of contacts) insertContact.run(contact.address, contact.name, contact.messageCount, contact.lastContactAt, contact.logo?.key ?? null, contact.logo?.contentType ?? null, contact.logo?.sourceUrl ?? null, contact.logo?.fetchedAt ?? null);
+        this.db.exec('COMMIT');
+      } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    });
+    this.queue = operation.then(() => undefined, () => undefined);
+    await operation;
+    return { createdMessages };
+  }
+
   close() { this.db.close(); }
 }
 
 let defaultStore: SQLiteStore | undefined;
+const auxiliaryStoreClosers = new Set<() => void>();
+
+export function registerAuxiliaryStoreCloser(close: () => void) {
+  auxiliaryStoreClosers.add(close);
+  return () => auxiliaryStoreClosers.delete(close);
+}
+
+export function configuredDatabasePath() {
+  return path.join(path.resolve(process.env.IMAIL_DATA_DIR ?? '.data'), 'imail.sqlite');
+}
 
 function configuredStore() {
   if (!defaultStore) {
-    const dataDir = path.resolve(process.env.IMAIL_DATA_DIR ?? '.data');
-    defaultStore = new SQLiteStore(path.join(dataDir, 'imail.sqlite'), path.join(dataDir, 'store.json'));
+    const dataDir = path.dirname(configuredDatabasePath());
+    defaultStore = new SQLiteStore(configuredDatabasePath(), path.join(dataDir, 'store.json'));
   }
   return defaultStore;
 }
@@ -143,4 +226,10 @@ export function updateStore(mutator: (data: StoreData) => void | Promise<void>):
 export function listCachedMessages(input: MessageQuery) { return configuredStore().listMessages(input); }
 export function getCachedMessage(id: string) { return configuredStore().getMessage(id); }
 export function getMessageStats() { return configuredStore().messageStats(); }
-export function closeStore() { defaultStore?.close(); defaultStore = undefined; }
+export function setAccountSyncStatus(accountId: string, status: 'connected' | 'syncing' | 'error', lastError?: string) { return configuredStore().setAccountSyncStatus(accountId, status, lastError); }
+export function commitMailboxSync(input: MailboxSyncCommit) { return configuredStore().commitMailboxSync(input); }
+export function closeStore() {
+  for (const close of [...auxiliaryStoreClosers]) close();
+  auxiliaryStoreClosers.clear();
+  defaultStore?.close(); defaultStore = undefined;
+}

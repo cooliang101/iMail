@@ -1,6 +1,6 @@
 # 运维手册
 
-## MCP 环境变量
+## 服务环境变量
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
@@ -8,6 +8,14 @@
 | `IMAIL_MCP_AUTH_CODE` | 无 | 仅 stdio 启动使用的 `mcp:full` 授权码 |
 | `HOST` | `127.0.0.1` | iMail API 监听地址；远程监听会扩大所有 API 的暴露面 |
 | `PORT` | `8787` | API 与 `/mcp` 端口 |
+| `IMAIL_SYNC_WORKER_MODE` | `child` | `child` 由 API 启动器监管；`external` 由外部管理器运行；`disabled` 仅用于诊断 |
+| `IMAIL_SYNC_CONCURRENCY` | `3` | Worker 最大并发同步任务数，范围 1–10 |
+| `IMAIL_SYNC_WORKER_POLL_MS` | `1000` | Worker 领取任务间隔，最小 250ms |
+| `IMAIL_SYNC_SCHEDULER_INTERVAL_MS` | `30000` | 到期策略扫描间隔，最小 5 秒 |
+| `IMAIL_SYNC_STARTUP_DELAY_MS` | `1000` | 服务启动后的首次补同步延迟 |
+| `IMAIL_SYNC_JOB_LEASE_MS` | `120000` | 任务租约时间，最小 10 秒；执行中会自动续租 |
+| `IMAIL_SYNC_IDLE_ENABLED` | `true` | 是否启用收件箱 IMAP IDLE 实时唤醒；关闭后仍按周期轮询 |
+| `IMAIL_SYNC_IDLE_RECONCILE_MS` | `30000` | IDLE 连接期望状态检查与断线重建间隔，最小 5 秒 |
 
 ## 本地启动
 
@@ -15,6 +23,14 @@ Streamable HTTP：
 
 ```bash
 npm run dev
+```
+
+默认模式会由 API 启动器拉起并监管 Worker。需要由 systemd、Docker Compose 等分别管理进程时：
+
+```powershell
+$env:IMAIL_SYNC_WORKER_MODE='external'
+npm start
+npm run worker
 ```
 
 stdio：
@@ -32,6 +48,8 @@ npm run mcp
 4. 调用 `imail_status` 与 `accounts_list`，确认响应不含 `encryptedSecret`、密码或 OAuth Token。
 5. 使用普通 `messages:read` Token 连接，预期得到 HTTP 401。
 6. 在 UI 撤销授权码，再次请求，预期得到 HTTP 401。
+7. 请求 `GET /api/sync-status`，确认 `worker.workers` 至少有一个十秒内更新的心跳。
+8. 关闭浏览器，等待一个同步周期后再次查询，确认 `lastSuccessAt` 和 `nextSyncAt` 继续推进。
 
 仓库级自动验证：
 
@@ -45,6 +63,14 @@ npm audit --omit=dev
 `server/index.test.ts` 覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`server/tokens.test.ts` 覆盖 `imail_mcp_` 格式和 scope 隔离。
 
 ## 故障排查
+
+### 邮件没有自动同步
+
+- 请求 `GET /api/sync-status`；先检查账户策略的 `enabled`、邮箱状态的 `nextSyncAt`，以及 `worker.workers[].heartbeatAt`。
+- `queuedJobs` 持续增加但没有新心跳，说明 Worker 未运行。默认 `child` 模式查看 API 控制台中的 `[sync-worker]` 日志；外部模式确认 `npm run worker` 或对应服务单元已启动。
+- `connectionStatus=authRequired` 时自动重试会暂停，应在邮箱设置中重新授权或更新凭据；验证成功后调度器会恢复该账户。
+- `syncState=backoff` 表示网络或服务商错误，按 1、5、15、30、60 分钟退避。不要通过频繁点击手动同步绕过服务商限流。
+- 前端 SSE 仅用于刷新界面；断开 SSE 不会影响 Worker。不要把网关订阅状态当成同步健康指标。
 
 ### 发件人 Logo 缺失或错误
 

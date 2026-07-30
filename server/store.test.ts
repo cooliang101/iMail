@@ -139,6 +139,29 @@ describe('SQLiteStore', () => {
     expect((await store.read()).accounts).toHaveLength(20);
   });
 
+  it('commits mailbox synchronization with granular SQL while preserving local organization', async () => {
+    const { store } = await temporaryStore();
+    await store.update((data) => {
+      data.accounts = [account()];
+      data.messages = [
+        message({ id: 'existing', uid: 42, labels: ['客户'], snoozedUntil: '2999-01-01T00:00:00.000Z' }),
+        message({ id: 'deleted-remotely', uid: 43 }),
+      ];
+    });
+    const refreshed = message({ id: 'existing', uid: 42, subject: 'Updated subject', unread: true, flagged: false, labels: [] });
+    const incoming = message({ id: 'new-message', uid: 44, subject: 'New message', messageId: '<44@example.com>' });
+    const result = await store.commitMailboxSync({
+      accountId: account().id, mailbox: 'INBOX', mailboxRole: 'inbox', incoming: [refreshed, incoming], removedUids: [43], uidValidityChanged: false,
+      flagUpdates: [{ uid: 42, unread: false, flagged: true }], folders: [{ path: 'INBOX', name: 'INBOX', delimiter: '/', selectable: true, subscribed: true }],
+      completedAt: '2026-07-30T03:00:00.000Z',
+    });
+    expect(result.createdMessages.map((item) => item.id)).toEqual(['new-message']);
+    const snapshot = await store.read();
+    expect(snapshot.messages.map((item) => item.id).sort()).toEqual(['existing', 'new-message']);
+    expect(snapshot.messages.find((item) => item.id === 'existing')).toMatchObject({ subject: 'Updated subject', unread: false, flagged: true, labels: ['客户'], snoozedUntil: '2999-01-01T00:00:00.000Z' });
+    expect(snapshot.accounts[0]).toMatchObject({ status: 'connected', lastSyncAt: '2026-07-30T03:00:00.000Z', mailboxes: [{ path: 'INBOX' }] });
+  });
+
   it('persists drafts and filters mailbox roles, labels and snoozed messages', async () => {
     const { store } = await temporaryStore();
     await store.update((data) => {

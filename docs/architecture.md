@@ -1,5 +1,32 @@
 # 架构说明
 
+## 后端同步控制面
+
+邮箱同步是后端持久化任务，不以任何前端页面、用户会话、SSE/WebSocket 或 MCP 连接作为生命周期条件。默认启动器同时运行 API 与独立 Worker；外部进程管理模式也可以分别运行二者。
+
+```text
+Frontend / MCP ── settings, status, sync-now ──► API
+                                                   │
+                                       policy / job / event
+                                                   ▼
+                                                SQLite
+                                                   ▲
+                                      lease / cursor / result
+                                                   │
+IMAP providers ◄──────────────────────────── Sync Worker
+```
+
+- `server/sync/store.ts`：同步策略、邮箱状态、任务租约、事件、Worker 心跳和积压指标。
+- `server/sync/scheduler.ts`：扫描到期策略，合并重复任务并处理启动补同步和退避恢复。
+- `server/sync/worker-runtime.ts`：领取任务、续租、执行 IMAP 同步、推进游标并记录安全错误。
+- `server/sync/idle.ts`：为可用账户保持收件箱 IDLE 连接，只负责提前唤醒持久化任务；断线不影响周期轮询。
+- `server/sync/worker.ts`：独立进程入口和信号关闭。
+- `server/routes/sync.ts`：策略、状态、任务查询和前端 SSE 通知。
+
+同步游标按账户和真实邮箱文件夹保存，包括 `UIDVALIDITY`、最后 UID 与 `HIGHESTMODSEQ`。UIDVALIDITY 改变时只重建对应文件夹；支持 CONDSTORE 时按 modseq 获取标记变化，同时显式检查已缓存 UID 是否仍存在。API 的“立即同步”和 MCP `mailbox_sync` 都只创建持久化任务。
+
+现有快照型写入已改为在 `BEGIN IMMEDIATE` 内读取和提交，使 API 与 Worker 的跨进程写入串行化；同步控制表使用细粒度 SQL 事务，不依赖进程内锁。
+
 ## MCP 控制面
 
 MCP 是现有本地邮件能力上的受控适配层，不建立第二份邮件状态，也不绕过 IMAP/SMTP 服务边界。

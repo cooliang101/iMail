@@ -1,4 +1,4 @@
-import type { MailboxRole } from '../types.js';
+import type { CachedMessage, MailboxFolder, MailboxRole } from '../types.js';
 
 export type MessageQuery = {
   accountId?: string;
@@ -21,4 +21,16 @@ export type MessageStats = {
   unread: number;
   byAccount: Array<{ accountId: string; total: number; unread: number }>;
   byGroup: Array<{ group: string; total: number; unread: number }>;
+};
+
+export type MailboxSyncCommit = {
+  accountId: string;
+  mailbox: string;
+  mailboxRole: MailboxRole;
+  incoming: CachedMessage[];
+  removedUids: number[];
+  uidValidityChanged: boolean;
+  flagUpdates: Array<{ uid: number; unread: boolean; flagged: boolean }>;
+  folders: MailboxFolder[];
+  completedAt: string;
 };

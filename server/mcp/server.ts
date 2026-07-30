@@ -5,10 +5,11 @@ import { encryptSecret } from '../crypto.js';
 import { publicAccount } from '../http/presenters.js';
 import { beginOAuth, beginOAuthReconnect, validateStoredAccountConnection } from '../oauth.js';
 import { settingsFor } from '../providers.js';
-import { downloadAttachment, moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from '../mail.js';
+import { downloadAttachment, moveRemoteMessage, sendMessage, testAccount, updateRemoteMessageFlags } from '../mail.js';
 import { gatewayMessageDetail, gatewayMessageSummary } from '../gateway/presenters.js';
 import { getCachedMessage, getMessageStats, listCachedMessages, readStore, updateStore } from '../store.js';
 import type { Draft, MailAccount, MailSettings, ProviderId } from '../types.js';
+import { getSyncStore } from '../sync/store.js';
 
 const providerSchema = z.enum(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
 const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'trash', 'custom']);
@@ -57,7 +58,7 @@ export function createMailMcpServer() {
     inputSchema: z.object({}), annotations: { readOnlyHint: true, idempotentHint: true },
   }, async () => {
     const [data, stats] = await Promise.all([readStore(), getMessageStats()]);
-    return output({ accounts: data.accounts.length, messages: data.messages.length, unread: stats.unread, drafts: (data.drafts ?? []).length, lastSyncAt: data.accounts.map((item) => item.lastSyncAt).filter(Boolean).sort().at(-1) ?? null });
+    return output({ accounts: data.accounts.length, messages: data.messages.length, unread: stats.unread, drafts: (data.drafts ?? []).length, lastSyncAt: data.accounts.map((item) => item.lastSyncAt).filter(Boolean).sort().at(-1) ?? null, syncWorker: getSyncStore().workerHealth() });
   });
 
   server.registerTool('accounts_list', {
@@ -157,6 +158,7 @@ export function createMailMcpServer() {
       data.drafts = (data.drafts ?? []).filter((item) => item.accountId !== account.id);
       data.tokens.forEach((token) => { token.accountIds = token.accountIds.filter((id) => id !== account.id); });
     });
+    getSyncStore().deleteAccountData(account.id);
     return output({ removed: true, email: account.email });
   });
 
@@ -169,8 +171,40 @@ export function createMailMcpServer() {
   }, async ({ email, mailboxRole, mailboxPath }) => {
     const data = await readStore();
     const accounts = email ? [accountByEmail(data, email)] : data.accounts;
-    const settled = await Promise.allSettled(accounts.map((account) => syncAccount(account.id, mailboxPath ? 'custom' : mailboxRole, mailboxPath)));
-    return output({ results: settled.map((item, index) => ({ accountEmail: accounts[index].email, status: item.status, ...(item.status === 'fulfilled' ? item.value : { error: item.reason instanceof Error ? item.reason.message : '同步失败' }) })) });
+    const syncStore = getSyncStore();
+    const results = accounts.map((account) => {
+      const job = syncStore.enqueueJob({ accountId: account.id, mailbox: mailboxPath, mailboxRole: mailboxPath ? 'custom' : mailboxRole, reason: 'manual', priority: 100 });
+      return { accountEmail: account.email, status: 'queued', synced: 0, jobId: job.id };
+    });
+    return output({ results });
+  });
+
+  server.registerTool('sync_policy_get', {
+    title: '读取同步策略', description: '读取默认同步策略、账户级策略、邮箱同步状态和最近任务。',
+    inputSchema: z.object({ email: z.string().email().optional() }), annotations: { readOnlyHint: true, idempotentHint: true },
+  }, async ({ email }) => {
+    const data = await readStore(); const syncStore = getSyncStore();
+    const accounts = email ? [accountByEmail(data, email)] : data.accounts;
+    return output({
+      defaultPolicy: syncStore.getDefaultPolicy(),
+      accounts: accounts.map((account) => ({ accountEmail: account.email, policy: syncStore.ensurePolicy(account.id), states: syncStore.listMailboxStates(account.id), jobs: syncStore.listJobs({ accountId: account.id, limit: 10 }) })),
+    });
+  });
+
+  server.registerTool('sync_policy_update', {
+    title: '更新同步策略', description: '更新全局默认策略或指定邮箱的后端自动同步策略。仅影响调度，不依赖任何前端连接。',
+    inputSchema: z.object({
+      email: z.string().email().optional().describe('不填时修改新账户使用的默认策略'),
+      enabled: z.boolean().optional(), intervalMinutes: z.number().int().min(1).max(60).optional(),
+      folderMode: z.enum(['inbox', 'standard', 'selected']).optional(), selectedMailboxes: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
+      syncOnStart: z.boolean().optional(), retryOnRecovery: z.boolean().optional(), notifyOnError: z.boolean().optional(),
+    }).refine((value) => Object.keys(value).some((key) => key !== 'email'), '至少提供一个同步设置'),
+    annotations: { idempotentHint: true },
+  }, async ({ email, ...changes }) => {
+    const syncStore = getSyncStore();
+    if (!email) return output({ policy: syncStore.updateDefaultPolicy(changes) });
+    const account = accountByEmail(await readStore(), email);
+    return output({ accountEmail: account.email, policy: syncStore.updatePolicy(account.id, changes) });
   });
 
   server.registerTool('messages_list', {

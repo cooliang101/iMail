@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
   fetchCalls: [] as Array<{ range: unknown; query: Record<string, unknown>; options?: Record<string, unknown> }>,
   parsed: {} as Record<string, any>,
   connect: vi.fn(async () => undefined),
-  mailboxOpen: vi.fn(async () => ({ exists: 0, uidNext: 1 })),
+  mailboxOpen: vi.fn(async (): Promise<any> => ({ exists: 0, uidNext: 1 })),
   logout: vi.fn(async () => undefined),
   verify: vi.fn(async () => true),
   close: vi.fn(),
@@ -25,6 +25,29 @@ const state = vi.hoisted(() => ({
 vi.mock('./oauth.js', () => ({ resolveAccountSecret: vi.fn(async () => state.secret) }));
 vi.mock('./store.js', () => ({
   readStore: vi.fn(async () => structuredClone(state.store)),
+  setAccountSyncStatus: vi.fn(async (accountId: string, status: 'connected' | 'syncing' | 'error', lastError?: string) => {
+    const current = state.store.accounts.find((item) => item.id === accountId);
+    if (current) { current.status = status; current.lastError = lastError; }
+  }),
+  commitMailboxSync: vi.fn(async (input: any) => {
+    const createdMessages = input.incoming.filter((message: any) => !state.store.messages.some((item) => item.id === message.id));
+    if (input.uidValidityChanged) state.store.messages = state.store.messages.filter((message) => message.accountId !== input.accountId || message.mailbox !== input.mailbox);
+    else state.store.messages = state.store.messages.filter((message) => message.accountId !== input.accountId || message.mailbox !== input.mailbox || !input.removedUids.includes(message.uid));
+    for (const message of input.incoming) {
+      const previous = state.store.messages.find((item) => item.id === message.id);
+      if (previous) { message.labels = previous.labels ?? []; message.snoozedUntil = previous.snoozedUntil; }
+      state.store.messages = state.store.messages.filter((item) => item.id !== message.id);
+      state.store.messages.push(message);
+    }
+    for (const flags of input.flagUpdates) {
+      const message = state.store.messages.find((item) => item.accountId === input.accountId && item.mailbox === input.mailbox && item.uid === flags.uid);
+      if (message) Object.assign(message, { unread: flags.unread, flagged: flags.flagged });
+    }
+    state.store.messages.sort((a, b) => b.date.localeCompare(a.date));
+    const current = state.store.accounts.find((item) => item.id === input.accountId);
+    if (current) { current.status = 'connected'; current.lastSyncAt = input.completedAt; current.lastError = undefined; current.mailboxes = input.folders; }
+    return { createdMessages };
+  }),
   updateStore: vi.fn(async (mutator: (data: StoreData) => void | Promise<void>) => {
     const next = structuredClone(state.store); await mutator(next); state.store = next; return structuredClone(next);
   }),
@@ -55,7 +78,7 @@ vi.mock('nodemailer', () => ({
   }) },
 }));
 
-import { describeProtocolError, downloadAttachment, moveRemoteMessage, sendMessage, syncAccount, testAccount, updateRemoteMessageFlags } from './mail.js';
+import { describeProtocolError, downloadAttachment, moveRemoteMessage, sendMessage, syncAccount, syncMailbox, testAccount, updateRemoteMessageFlags } from './mail.js';
 import { gatewayEvents, type GatewayMessageCreatedEvent } from './gateway/events.js';
 
 function account(overrides: Partial<MailAccount> = {}): MailAccount {
@@ -207,6 +230,26 @@ describe('message synchronization', () => {
     expect(state.fetchCalls).toHaveLength(1);
     expect(state.fetchCalls[0].query).not.toHaveProperty('source');
     expect(state.simpleParser).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds one mailbox cache when UIDVALIDITY changes', async () => {
+    const configured = account({ lastSyncAt: '2026-07-28T00:00:00.000Z' }); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'old-uid', accountId: configured.id, mailbox: 'INBOX', uid: 42, from: { name: '', address: '' }, to: [], subject: 'Old', preview: '', text: 'Old body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [] }];
+    state.mailboxOpen.mockResolvedValue({ exists: 1, uidNext: 8, uidValidity: 2n, highestModseq: 9n });
+    state.fetchBatches = [[{ uid: 7, source: Buffer.from('replacement'), flags: new Set(), internalDate: new Date('2026-07-29T00:00:00.000Z') }]];
+    state.parsed = { from: { value: [{ address: 'new@example.com' }] }, to: { value: [] }, subject: 'Replacement', text: 'New body', attachments: [] };
+    await expect(syncMailbox(configured.id, 'inbox', undefined, { uidValidity: '1', lastSeenUid: 42 })).resolves.toMatchObject({ uidValidity: '2', lastSeenUid: 7, created: 1, deleted: 1 });
+    expect(state.store.messages.map((message) => message.subject)).toEqual(['Replacement']);
+  });
+
+  it('uses CONDSTORE modseq to fetch only changed flags while still checking cached UID existence', async () => {
+    const configured = account({ lastSyncAt: '2026-07-28T00:00:00.000Z' }); state.store.accounts = [configured];
+    state.store.messages = [{ id: 'cached-42', accountId: configured.id, mailbox: 'INBOX', uid: 42, from: { name: '', address: '' }, to: [], subject: 'Cached', preview: '', text: 'Body', date: '2026-07-28T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [] }];
+    state.mailboxOpen.mockResolvedValue({ exists: 1, uidNext: 43, uidValidity: 2n, highestModseq: 8n });
+    state.fetchBatches = [[{ uid: 42 }], [{ uid: 42, flags: new Set(['\\Seen']), modseq: 8n }]];
+    await expect(syncMailbox(configured.id, 'inbox', undefined, { uidValidity: '2', lastSeenUid: 42, highestModseq: '5' })).resolves.toMatchObject({ updated: 1, deleted: 0, highestModseq: '8' });
+    expect(state.fetchCalls[1]).toMatchObject({ range: '42:*', options: { uid: true, changedSince: 5n } });
+    expect(state.store.messages[0].unread).toBe(false);
   });
 
   it('records a connection error and always logs out', async () => {

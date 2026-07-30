@@ -136,7 +136,7 @@ export const gatewayOpenApi = {
   },
   'x-websocket': {
     url: '/gateway/v1/events',
-    description: '存在订阅者时，网关会自动同步授权邮箱，并推送新邮件摘要。',
+    description: '独立同步 Worker 按后端策略采集邮件；网关连接只推送授权邮箱的新邮件摘要，不影响同步生命周期。',
     authentication: { firstMessage: { type: 'authenticate', token: 'imail_your_token' }, requiredScope: 'messages:read' },
     messages: { connected: { example: { type: 'connected', occurredAt: '2026-07-29T10:00:00.000Z' } }, messageCreated: { $ref: '#/components/schemas/MessageCreatedEvent' } },
   },

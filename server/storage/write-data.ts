@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { reconcileContacts } from '../contact-model.js';
 import type { StoreData } from '../types.js';
 
-export function replaceData(db: DatabaseSync, data: StoreData, migratedAt?: string) {
+export function replaceData(db: DatabaseSync, data: StoreData, migratedAt?: string, manageTransaction = true) {
   const insertAccount = db.prepare(`INSERT INTO accounts
     (id, provider, email, display_name, group_name, group_icon, color, settings_json, encrypted_secret, auth_method, created_at, last_sync_at, status, last_error, mailboxes_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -15,7 +15,7 @@ export function replaceData(db: DatabaseSync, data: StoreData, migratedAt?: stri
   const insertToken = db.prepare('INSERT INTO developer_tokens (id, name, token_hash, prefix, created_at, expires_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
   const insertScope = db.prepare('INSERT INTO developer_token_scopes (token_id, scope) VALUES (?, ?)');
   const insertTokenAccount = db.prepare('INSERT INTO developer_token_accounts (token_id, account_id) VALUES (?, ?)');
-  db.exec('BEGIN IMMEDIATE');
+  if (manageTransaction) db.exec('BEGIN IMMEDIATE');
   try {
     db.exec('DELETE FROM developer_token_accounts; DELETE FROM developer_token_scopes; DELETE FROM developer_tokens; DELETE FROM drafts; DELETE FROM contacts; DELETE FROM logo_fetch_attempts; DELETE FROM messages; DELETE FROM accounts;');
     for (const account of data.accounts) insertAccount.run(account.id, account.provider, account.email, account.displayName, account.group, account.groupIcon ?? 'folder', account.color, JSON.stringify(account.settings), account.encryptedSecret, account.authMethod ?? null, account.createdAt, account.lastSyncAt ?? null, account.status, account.lastError ?? null, JSON.stringify(account.mailboxes ?? []));
@@ -30,9 +30,9 @@ export function replaceData(db: DatabaseSync, data: StoreData, migratedAt?: stri
       for (const accountId of token.accountIds) insertTokenAccount.run(token.id, accountId);
     }
     if (migratedAt) db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('legacy_json_migrated_at', ?)").run(migratedAt);
-    db.exec('COMMIT');
+    if (manageTransaction) db.exec('COMMIT');
   } catch (error) {
-    db.exec('ROLLBACK');
+    if (manageTransaction) db.exec('ROLLBACK');
     throw error;
   }
 }
