@@ -1,49 +1,144 @@
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import { useMemo } from 'react';
+
+const allowedElements = new Set([
+  'a', 'abbr', 'address', 'b', 'bdi', 'bdo', 'blockquote', 'br', 'caption', 'center', 'cite', 'code',
+  'col', 'colgroup', 'dd', 'del', 'details', 'dfn', 'div', 'dl', 'dt', 'em', 'figcaption', 'figure',
+  'font', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'kbd', 'li', 'mark', 'ol',
+  'p', 'pre', 'q', 'rp', 'rt', 'ruby', 's', 'samp', 'small', 'span', 'strike', 'strong', 'sub',
+  'summary', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'tt', 'u', 'ul', 'var', 'wbr',
+]);
+
+const blockedElements = new Set([
+  'applet', 'audio', 'base', 'button', 'canvas', 'embed', 'form', 'frame', 'frameset', 'head', 'iframe',
+  'input', 'link', 'math', 'meta', 'noscript', 'object', 'option', 'script', 'select', 'source', 'style',
+  'svg', 'template', 'textarea', 'title', 'track', 'video',
+]);
+
+const sharedAttributes = new Set(['dir', 'lang', 'style', 'title']);
+const attributesByElement: Record<string, Set<string>> = {
+  a: new Set(['href']),
+  blockquote: new Set(['cite']),
+  col: new Set(['span']),
+  colgroup: new Set(['span']),
+  img: new Set(['alt', 'height', 'src', 'title', 'width']),
+  ol: new Set(['reversed', 'start', 'type']),
+  q: new Set(['cite']),
+  td: new Set(['colspan', 'rowspan']),
+  th: new Set(['colspan', 'rowspan', 'scope']),
+};
+
+const unsafeCssValue = /(?:expression\s*\(|url\s*\(|image-set\s*\(|cross-fade\s*\(|element\s*\(|paint\s*\(|@import|javascript\s*:|vbscript\s*:|data\s*:|var\s*\()/i;
+const unsafeCssProperty = /^(?:--|behavior$|-moz-binding$|content$|cursor$|filter$|(?:-webkit-)?mask|clip-path$|list-style-image$)/i;
 
 export function HtmlEmailBody({ html, subject }: { html: string; subject: string }) {
-  const [ready, setReady] = useState(false);
-  const frameRef = useRef<HTMLIFrameElement>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const sanitizedHtml = useMemo(() => sanitizeEmailHtml(html), [html]);
 
-  const resizeFrame = useCallback(() => {
-    const frame = frameRef.current;
-    const document = frame?.contentDocument;
-    if (!frame || !document) return;
-    const body = document.body;
-    const bodyStyle = body ? document.defaultView?.getComputedStyle(body) : undefined;
-    const marginBottom = Number.parseFloat(bodyStyle?.marginBottom ?? '0') || 0;
-    const bodyBottom = body
-      ? body.getBoundingClientRect().bottom - document.documentElement.getBoundingClientRect().top + marginBottom
-      : document.documentElement.scrollHeight;
-    const height = body ? Array.from(body.children).reduce((bottom, child) => {
-      const style = document.defaultView?.getComputedStyle(child);
-      const childMarginBottom = Number.parseFloat(style?.marginBottom ?? '0') || 0;
-      return Math.max(bottom, child.getBoundingClientRect().bottom - document.documentElement.getBoundingClientRect().top + childMarginBottom);
-    }, bodyBottom) : bodyBottom;
-    const horizontalScrollbarSpace = document.documentElement.scrollWidth > document.documentElement.clientWidth ? 18 : 2;
-    frame.style.height = `${Math.max(190, height + horizontalScrollbarSpace)}px`;
-  }, []);
-
-  const handleLoad = useCallback((event: SyntheticEvent<HTMLIFrameElement>) => {
-    resizeObserverRef.current?.disconnect();
-    resizeFrame();
-    const document = event.currentTarget.contentDocument;
-    if (!document) return;
-    const observer = new ResizeObserver(resizeFrame);
-    if (document.body) observer.observe(document.body);
-    document.querySelectorAll('img').forEach((image) => image.addEventListener('load', resizeFrame, { once: true }));
-    resizeObserverRef.current = observer;
-    window.requestAnimationFrame(() => setReady(true));
-  }, [resizeFrame]);
-
-  useEffect(() => () => resizeObserverRef.current?.disconnect(), []);
-
-  return <div className={`mail-html-stage ${ready ? 'is-ready' : ''}`} aria-busy={!ready}>
-    {!ready && <div className="mail-html-placeholder" role="status" aria-label="正在排版邮件内容"><i /><i /><i /></div>}
-    <iframe ref={frameRef} className="mail-html-frame" title={`邮件正文：${subject}`} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" srcDoc={emailDocument(html)} onLoad={handleLoad} aria-hidden={!ready} tabIndex={ready ? 0 : -1} />
-  </div>;
+  return <div
+    className="mail-html-stage"
+    aria-label={`邮件正文：${subject}`}
+    // The only HTML reaching this sink has passed the strict element, attribute, URL and CSS sanitizer below.
+    dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+  />;
 }
 
-function emailDocument(html: string) {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; form-action 'none'"><base target="_blank"><style>html{height:auto!important;min-height:0!important;color-scheme:light}body{height:auto!important;min-height:0!important;margin:0;overflow-wrap:anywhere;color:#384944;background:#fff;font:14px/1.7 'Segoe UI Variable Text','Segoe UI',sans-serif}body>*{max-width:100%!important;box-sizing:border-box}img{max-width:100%!important;height:auto}table{max-width:100%!important}a{color:#187763}pre{white-space:pre-wrap}blockquote{margin-inline:0;padding-left:14px;border-left:3px solid #dce8e4;color:#63756f}</style></head><body>${html}</body></html>`;
+export function sanitizeEmailHtml(html: string, Parser: typeof DOMParser = DOMParser) {
+  const source = /<(?:html|body)\b/i.test(html) ? html : `<!doctype html><html><body>${html}</body></html>`;
+  const document = new Parser().parseFromString(source, 'text/html');
+  const elements = Array.from(document.body.querySelectorAll('*'));
+
+  for (const element of elements) {
+    const tag = element.tagName.toLocaleLowerCase();
+    if (!element.isConnected) continue;
+    if (blockedElements.has(tag)) {
+      element.remove();
+      continue;
+    }
+    if (!allowedElements.has(tag)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      continue;
+    }
+
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLocaleLowerCase();
+      const permitted = sharedAttributes.has(name) || attributesByElement[tag]?.has(name);
+      if (!permitted) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+      if (name === 'style') {
+        const style = sanitizeInlineStyle(attribute.value, document);
+        if (style) element.setAttribute('style', style);
+        else element.removeAttribute('style');
+      }
+    }
+
+    if (tag === 'a') sanitizeLink(element);
+    if (tag === 'img') sanitizeImage(element);
+    if (tag === 'blockquote' || tag === 'q') sanitizeCitation(element);
+  }
+
+  return document.body.innerHTML;
+}
+
+function sanitizeInlineStyle(value: string, document: Document) {
+  const probe = document.createElement('span');
+  probe.setAttribute('style', value);
+  const safe = document.createElement('span');
+
+  for (const property of Array.from(probe.style)) {
+    const cssValue = probe.style.getPropertyValue(property).trim();
+    const comparableValue = normalizeCssForInspection(cssValue);
+    if (!cssValue || unsafeCssProperty.test(property) || unsafeCssValue.test(comparableValue)) continue;
+    if (property.toLocaleLowerCase() === 'position' && /^(?:fixed|sticky)$/i.test(comparableValue)) continue;
+    safe.style.setProperty(property, cssValue);
+  }
+
+  return safe.getAttribute('style')?.trim() ?? '';
+}
+
+function normalizeCssForInspection(value: string) {
+  return value
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\\([\da-f]{1,6})\s?/gi, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/\\(.)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sanitizeLink(element: Element) {
+  const href = element.getAttribute('href');
+  if (!href || !isSafeUrl(href, ['http:', 'https:', 'mailto:', 'tel:'])) {
+    element.removeAttribute('href');
+    return;
+  }
+  element.setAttribute('target', '_blank');
+  element.setAttribute('rel', 'noopener noreferrer');
+  element.setAttribute('referrerpolicy', 'no-referrer');
+}
+
+function sanitizeImage(element: Element) {
+  const src = element.getAttribute('src');
+  if (!src || (!isSafeUrl(src, ['http:', 'https:']) && !isSafeRasterDataUrl(src))) {
+    element.removeAttribute('src');
+    return;
+  }
+  element.setAttribute('loading', 'lazy');
+  element.setAttribute('referrerpolicy', 'no-referrer');
+}
+
+function sanitizeCitation(element: Element) {
+  const cite = element.getAttribute('cite');
+  if (cite && !isSafeUrl(cite, ['http:', 'https:'])) element.removeAttribute('cite');
+}
+
+function isSafeUrl(value: string, protocols: string[]) {
+  try {
+    return protocols.includes(new URL(value).protocol.toLocaleLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function isSafeRasterDataUrl(value: string) {
+  return /^data:image\/(?:avif|bmp|gif|jpeg|png|webp);base64,[a-z\d+/=\s]+$/i.test(value);
 }

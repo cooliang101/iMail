@@ -72,7 +72,7 @@ function DisplayPanel({ preferences, onChange }: { preferences: AppPreferences; 
   return <section className="settings-feature-panel"><PanelHeading eyebrow="阅读体验" title="邮件展示" description="选择每封邮件正文首次打开时的查看方式，仍可在邮件内随时切换。" />
     <div className="settings-panel-body"><div className="display-choice-grid" role="radiogroup" aria-label="默认邮件正文视图">
       <button type="button" role="radio" aria-checked={preferences.defaultMessageView === 'source'} className={preferences.defaultMessageView === 'source' ? 'is-selected' : ''} onClick={() => onChange({ ...preferences, defaultMessageView: 'source' })}><Database size={22} /><span><strong>原始内容</strong><small>移除 HTML 节点、样式和脚本，只显示邮件的纯文本内容。</small></span><i>{preferences.defaultMessageView === 'source' && <Check size={14} />}</i></button>
-      <button type="button" role="radio" aria-checked={preferences.defaultMessageView === 'rendered'} className={preferences.defaultMessageView === 'rendered' ? 'is-selected' : ''} onClick={() => onChange({ ...preferences, defaultMessageView: 'rendered' })}><Eye size={22} /><span><strong>渲染邮件</strong><small>在受限 iframe 中按邮件设计排版，脚本、对象和表单均被禁用。</small></span><i>{preferences.defaultMessageView === 'rendered' && <Check size={14} />}</i></button>
+      <button type="button" role="radio" aria-checked={preferences.defaultMessageView === 'rendered'} className={preferences.defaultMessageView === 'rendered' ? 'is-selected' : ''} onClick={() => onChange({ ...preferences, defaultMessageView: 'rendered' })}><Eye size={22} /><span><strong>渲染邮件</strong><small>提取并安全清洗邮件正文，在阅读页内保留内联样式排版。</small></span><i>{preferences.defaultMessageView === 'rendered' && <Check size={14} />}</i></button>
     </div></div>
   </section>;
 }
@@ -91,7 +91,7 @@ function NotificationPanel({ preferences, onChange }: { preferences: AppPreferen
 function PrivacyPanel({ accountCount }: { accountCount: number }) {
   return <section className="settings-feature-panel"><PanelHeading eyebrow="安全边界" title="隐私与数据" description="了解 iMail 如何保存账户、邮件与外部访问凭据。" />
     <div className="settings-panel-body"><div className="privacy-summary"><LockKey size={26} /><div><strong>本地优先</strong><p>邮件缓存和账户配置保存在当前设备，邮箱凭据、OAuth Token 与加密字段不会出现在设置响应中。</p></div></div>
-      <dl className="settings-facts"><div><dt>已连接邮箱</dt><dd>{accountCount} 个</dd></div><div><dt>邮件内容</dt><dd>本机缓存</dd></div><div><dt>渲染隔离</dt><dd>受限 iframe</dd></div><div><dt>账户管理授权</dt><dd>仅 MCP Full</dd></div></dl>
+      <dl className="settings-facts"><div><dt>已连接邮箱</dt><dd>{accountCount} 个</dd></div><div><dt>邮件内容</dt><dd>本机缓存</dd></div><div><dt>正文渲染</dt><dd>白名单清洗</dd></div><div><dt>账户管理授权</dt><dd>仅 MCP Full</dd></div></dl>
       <p className="settings-note">删除邮箱账户会同时删除该账户在本机的邮件缓存；执行前会要求二次确认。</p></div>
   </section>;
 }

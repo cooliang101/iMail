@@ -49,6 +49,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.5.2",
     "concurrently": "^9.1.2",
+    "linkedom": "^0.18.13",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "vite": "^7.0.0",

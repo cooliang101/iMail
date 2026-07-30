@@ -238,13 +238,13 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .mail-body-view-action button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 7px; padding: 7px 8px; background: rgb(255 255 255 / 82%); backdrop-filter: blur(8px); color: var(--color-accent-pressed); font: 650 10px/1.2 var(--font-family-ui); cursor: pointer; transition: color .16s ease, background .16s ease, transform .16s ease; }
 .mail-body-view-action button:hover { background: var(--color-accent-subtle); transform: translateY(-1px); }.mail-body-view-action button:active { transform: scale(.98); }
 .mail-plain-body { max-width: 72ch; color: var(--neutral-90); font: 400 14px/1.85 var(--font-family-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
-.mail-html-stage { position: relative; min-height: 190px; }
-.mail-html-stage.is-ready { min-height: 0; }
-.mail-html-frame { position: absolute; inset: 0 auto auto 0; display: block; width: 100%; min-height: 190px; border: 0; visibility: hidden; opacity: 0; pointer-events: none; background: #fff; color-scheme: light; }
-.mail-html-stage.is-ready .mail-html-frame { position: relative; visibility: visible; opacity: 1; pointer-events: auto; }
-.mail-html-placeholder { min-height: 190px; display: grid; align-content: center; gap: 11px; padding: 30px clamp(12px, 8%, 48px); }
-.mail-html-placeholder i { height: 10px; border-radius: 5px; background: var(--color-canvas); animation: pulse 1.5s ease-in-out infinite; }
-.mail-html-placeholder i:nth-child(1) { width: 48%; }.mail-html-placeholder i:nth-child(2) { width: 82%; }.mail-html-placeholder i:nth-child(3) { width: 65%; }
+.mail-html-stage { position: relative; min-width: 0; overflow: auto; overflow-wrap: anywhere; color: #384944; background: #fff; color-scheme: light; font: 14px/1.7 'Segoe UI Variable Text', 'Segoe UI', sans-serif; contain: layout paint style; isolation: isolate; }
+.mail-html-stage > * { max-width: 100% !important; box-sizing: border-box !important; }
+.mail-html-stage img { max-width: 100% !important; height: auto; }
+.mail-html-stage table { max-width: 100% !important; }
+.mail-html-stage a { color: #187763; }
+.mail-html-stage pre { white-space: pre-wrap; }
+.mail-html-stage blockquote { margin-inline: 0; padding-left: 14px; border-left: 3px solid #dce8e4; color: #63756f; }
 .mail-body-loading { color: var(--color-text-tertiary); }
 .attachments { border-top: 1px solid var(--color-canvas); padding-top: 17px; }.attachments > p { font-size: 10px; color: var(--color-text-secondary); }.attachments a { border: 1px solid var(--color-border); background: var(--color-surface-subtle); border-radius: 11px; padding: 10px 12px; display: inline-flex; gap: 9px; align-items: center; text-align: left; color: var(--neutral-90); text-decoration: none; transition: .16s ease; }.attachments a:hover { border-color: #8fc8ba; background: #eff8f5; transform: translateY(-1px); }.attachments a span { display: flex; flex-direction: column; gap: 2px; }.attachments strong { font-size: 9px; }.attachments small { color: #91a09d; font-size: 8px; }
 .reader-labels { display: flex; flex-wrap: wrap; gap: 6px; margin: -13px 0 19px; }.reader-labels span { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 4px 8px; background: #e9f4f1; color: var(--color-accent-pressed); font-size: 9px; font-weight: 650; }
