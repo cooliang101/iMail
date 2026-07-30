@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@fluentui/react-components';
-import { ArrowClockwise, Envelope, Key, PencilSimple, SlidersHorizontal, Trash, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, CaretDown, Envelope, Key, PencilSimple, Plus, SlidersHorizontal, Trash, WarningCircle } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { credentialGuideFor, oauthCallbackOrigins } from '../../provider-guides';
 import type { Account, AccountSyncStatus, SyncPolicy, SyncWorkerHealth } from '../../types';
@@ -19,12 +19,13 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   const [defaultPolicy, setDefaultPolicy] = useState<Omit<SyncPolicy, 'accountId' | 'updatedAt'> | null>(null);
   const [workerHealth, setWorkerHealth] = useState<SyncWorkerHealth | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [advancedSyncOpen, setAdvancedSyncOpen] = useState(false);
   const [error, setError] = useState('');
   const popupRef = useRef<Window | null>(null);
   const oauthOriginsRef = useRef(oauthCallbackOrigins(['http://localhost:8787/api/oauth'], window.location.origin));
 
   useEffect(() => {
-    setCredentialId(null); setEditingId(null); setSyncEditingId(null); setConfirmRemoveId(null); setError('');
+    setCredentialId(null); setEditingId(null); setSyncEditingId(null); setConfirmRemoveId(null); setAdvancedSyncOpen(false); setError('');
   }, [section]);
 
   useEffect(() => {
@@ -167,7 +168,7 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   const workerOnline = workerHealth?.workers.some((worker) => Date.now() - new Date(worker.heartbeatAt).getTime() < 30_000) ?? false;
 
   return <section className="settings-feature-panel">
-    <header className="settings-panel-heading"><div><span>{section === 'accounts' ? '连接与身份' : '后台同步'}</span><h2>{section === 'accounts' ? '邮箱账号' : '同步'}</h2><p>{section === 'accounts' ? '管理邮箱资料、授权状态与本地连接。' : '设置后台同步频率、范围与失败恢复策略。'}</p></div>{section === 'accounts' && <button type="button" className="settings-primary-action" onClick={onAddAccount}>添加邮箱</button>}</header>
+    <header className="settings-panel-heading"><div><span>{section === 'accounts' ? '连接与身份' : '后台同步'}</span><h2>{section === 'accounts' ? '邮箱账号' : '同步'}</h2><p>{section === 'accounts' ? '管理邮箱资料、授权状态与本地连接。' : '设置后台同步频率、范围与失败恢复策略。'}</p></div>{section === 'accounts' && <button type="button" className="settings-add-account" aria-label="新增邮箱" title="新增邮箱" onClick={onAddAccount}><Plus size={20} weight="bold" /></button>}</header>
     {section === 'sync' && workerHealth && <div className={`sync-worker-health ${workerOnline ? 'is-online' : 'is-offline'}`}><span>{workerOnline ? '同步 Worker 运行正常' : '同步 Worker 未运行或心跳已过期'}</span><small>{workerHealth.queuedJobs > 0 ? `${workerHealth.queuedJobs} 个任务正在等待` : '当前没有积压任务'}</small></div>}
     {section === 'sync' && defaultPolicy && <form className="sync-default-policy" onSubmit={(event) => void updateDefaultSyncPolicy(event)}>
       <header><span><strong>新账户默认同步策略</strong><small>新接入邮箱自动继承；已有账户仍使用各自设置。</small></span><Button appearance="primary" type="submit" disabled={busyId === 'defaults'}>{busyId === 'defaults' ? '保存中…' : '保存默认值'}</Button></header>
@@ -178,11 +179,12 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
       </div>
       <div className="sync-default-options"><label><AppCheckbox name="syncOnStart" defaultChecked={defaultPolicy.syncOnStart} />服务启动后补同步</label><label><AppCheckbox name="retryOnRecovery" defaultChecked={defaultPolicy.retryOnRecovery} />网络恢复后重试</label><label><AppCheckbox name="notifyOnError" defaultChecked={defaultPolicy.notifyOnError} />持续失败时通知</label></div>
     </form>}
+    {section === 'sync' && <button type="button" className={`sync-advanced-toggle ${advancedSyncOpen ? 'is-open' : ''}`} aria-expanded={advancedSyncOpen} aria-controls="account-sync-advanced" onClick={() => setAdvancedSyncOpen((open) => !open)}><span><strong>高级设置</strong><small>按邮箱单独配置同步策略</small></span><em>{accounts.length} 个邮箱</em><CaretDown size={18} weight="bold" /></button>}
+    {(section === 'accounts' || advancedSyncOpen) && <div id={section === 'sync' ? 'account-sync-advanced' : undefined} className={section === 'sync' ? 'sync-advanced-content' : undefined}>
     {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>接入第一个邮箱后，即可在这里管理账户和同步策略。</p><button type="button" className="settings-primary-action" onClick={onAddAccount}>添加邮箱</button></div> : <div className="settings-account-list">
       {accounts.map((account) => {
         const editing = editingId === account.id;
         const connectionText = account.status === 'connected' ? '连接正常' : account.status === 'syncing' ? '正在同步' : account.lastError || '连接异常';
-        const authText = account.authMethod === 'oauth2' ? 'OAuth 2.0' : '授权码 / 专用密码';
         const syncStatus = syncStatuses.find((item) => item.accountId === account.id);
 
         return <article key={account.id} className={`settings-account-card ${editing ? 'is-editing' : ''} ${syncEditingId === account.id ? 'is-sync-editing' : ''}`}>
@@ -194,11 +196,10 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
                 <label className="account-workspace-editor"><small>{account.email} ·</small><span className="sr-only">所属工作空间</span><AppSelect name="group" defaultValue={account.group} options={workspaceOptions} /></label>
                 <em className={`connection-${account.status}`}>{connectionText}</em>
               </span>
-              <small className="account-auth-kind">{authText}</small>
             </header>
             <footer className="settings-account-actions card-editor-actions"><button type="button" onClick={() => setEditingId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '保存中…' : '保存修改'}</Button></footer>
           </form> : <>
-            <header className="settings-account-summary"><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · {account.group}</small><em className={`connection-${account.status}`}>{connectionText}</em></span><small className="account-auth-kind">{authText}</small></header>
+            <header className="settings-account-summary"><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · {account.group}</small><em className={`connection-${account.status}`}>{connectionText}</em></span></header>
             {section === 'sync' && syncStatus && <AccountSyncSummary status={syncStatus} />}
             {section === 'sync' && syncEditingId === account.id && syncStatus ? <SyncPolicyEditor account={account} status={syncStatus} busy={busyId === account.id} onSave={(changes) => updateSyncPolicy(account, changes)} onSync={() => queueSync(account)} onClose={() => setSyncEditingId(null)} />
               : credentialId === account.id ? <form className="credential-renewal" onSubmit={(event) => void updateCredential(event, account)}><label><span>{credentialGuideFor(account.provider)?.secretLabel || '新的授权码 / 应用专用密码'}</span><AppInput name="password" type="password" placeholder={credentialGuideFor(account.provider)?.secretPlaceholder || '输入新的专用凭据'} autoFocus required /></label><div className="card-editor-actions"><button type="button" onClick={() => setCredentialId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '正在验证…' : '验证并更新'}</Button></div></form>
@@ -208,6 +209,7 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
           </>}
         </article>;
       })}
+    </div>}
     </div>}
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
   </section>;
