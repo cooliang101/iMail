@@ -116,6 +116,15 @@
   --color-reader-toolbar: #f7faf9;
   --color-mail-body: #f2f8f6;
   --color-mail-body-border: #dce9e5;
+  --color-rail-text: #f5fffc;
+  --color-rail-muted: #8db0a8;
+  --color-rail-control: #28403b;
+  --color-rail-control-hover: #34524b;
+  --color-rail-control-active: #e6f6f2;
+  --color-rail-control-active-text: #137c68;
+  --color-rail-accent: #49d5b7;
+  --color-rail-border: #28443d;
+  --shadow-rail-control: 0 7px 18px rgb(6 27 23 / 32%);
 
   /* Identity colors are intentionally separate from the UI accent. */
   --color-provider-outlook: #1677b8;
@@ -185,6 +194,11 @@
   --color-message-hover: #f0f5fa; --color-message-selected: #e7f1fa;
   --color-reader-surface: #f8fbff; --color-reader-toolbar: #f2f6fb;
   --color-mail-body: #edf4fb; --color-mail-body-border: #d4e2ef;
+  --color-rail-text: #f7fbff; --color-rail-muted: #9db9d8;
+  --color-rail-control: #183d69; --color-rail-control-hover: #205083;
+  --color-rail-control-active: #e8f3fc; --color-rail-control-active-text: #145f9b;
+  --color-rail-accent: #68b7ee; --color-rail-border: #234a76;
+  --shadow-rail-control: 0 8px 20px rgb(4 25 52 / 38%);
   --shadow-sm: 0 5px 18px rgb(20 48 83 / 8%);
   --shadow-md: 0 16px 38px rgb(19 47 82 / 14%);
   --shadow-lg: 0 24px 70px rgb(12 35 66 / 26%);
@@ -210,6 +224,11 @@
   --color-message-hover: #e3e8eb; --color-message-selected: #f4e3d6;
   --color-reader-surface: #f3f6f7; --color-reader-toolbar: #e9eef0;
   --color-mail-body: #e4eaed; --color-mail-body-border: #bbc6cc;
+  --color-rail-text: #f6f9fa; --color-rail-muted: #aeb9c0;
+  --color-rail-control: #28343c; --color-rail-control-hover: #35434c;
+  --color-rail-control-active: #f4e3d6; --color-rail-control-active-text: #7e3a11;
+  --color-rail-accent: #df8143; --color-rail-border: #684329;
+  --shadow-rail-control: 0 0 0 1px rgb(223 129 67 / 28%), 0 8px 22px rgb(5 10 13 / 46%);
   --radius-xs: 0.1875rem; --radius-sm: 0.3125rem; --radius-md: 0.4375rem;
   --radius-lg: 0.625rem; --radius-xl: 0.75rem;
   --shadow-sm: 0 6px 18px rgb(35 30 24 / 9%);
@@ -227,9 +246,9 @@
   --neutral-40: #eae1d3; --neutral-50: #ded3c5; --neutral-60: #c7bbae; --neutral-70: #9f958c;
   --neutral-80: #776f6a; --neutral-90: #5a5352; --neutral-100: #474143; --neutral-110: #383238; --neutral-120: #2f2a31;
   --color-canvas: #efe8db; --color-surface: #fffaf0; --color-surface-subtle: #f6eedf;
-  --color-surface-raised: #fffef9; --color-surface-sunken: #ebe3d6; --color-rail: #34303a;
+  --color-surface-raised: #fffef9; --color-surface-sunken: #ebe3d6; --color-rail: #f0cc82;
   --color-text: #2f2a31; --color-text-strong: #211d23; --color-text-secondary: #6e6566;
-  --color-text-tertiary: #928889; --color-text-inverse: #fffaf0;
+  --color-text-tertiary: #928889; --color-text-inverse: #34303a;
   --color-border: #cfc3b7; --color-border-strong: #34303a;
   --color-accent: #aa70ab; --color-accent-hover: #985e9a; --color-accent-pressed: #633d65;
   --color-accent-subtle: #efddef; --color-accent-subtle-hover: #e7cce7;
@@ -241,6 +260,11 @@
   --color-message-hover: #f7e9d1; --color-message-selected: #efddef;
   --color-reader-surface: #fff8e9; --color-reader-toolbar: #f4ead9;
   --color-mail-body: #fff0bd; --color-mail-body-border: #34303a;
+  --color-rail-text: #34303a; --color-rail-muted: #5f5361;
+  --color-rail-control: #fff4cf; --color-rail-control-hover: #fffaf0;
+  --color-rail-control-active: #c9a2ca; --color-rail-control-active-text: #2f2431;
+  --color-rail-accent: #8c568e; --color-rail-border: #34303a;
+  --shadow-rail-control: 3px 3px 0 #34303a;
   --radius-xs: 0.25rem; --radius-sm: 0.375rem; --radius-md: 0.5rem;
   --radius-lg: 0.6875rem; --radius-xl: 0.875rem;
   --shadow-sm: 3px 3px 0 #34303a;

@@ -8,7 +8,8 @@ describe('custom theme runtime', () => {
     expect(customBrandVariants('#336699')[70]).toBe('#336699');
     expect(customThemeCssVariables(defaultCustomTheme)).toMatchObject({
       '--color-accent': '#d06f52', '--color-canvas': '#e9edf4', '--color-reader-surface': '#f9fafe',
-      '--color-mail-body': '#faf6f6', '--color-message-selected': '#f8e8e2',
+      '--color-mail-body': '#faf6f6', '--color-message-selected': '#f8e8e2', '--color-rail-accent': '#d06f52',
+      '--color-rail-control-active': '#f8e8e2',
     });
   });
 
