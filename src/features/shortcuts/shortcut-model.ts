@@ -1,6 +1,7 @@
 import type { ShortcutActionId, ShortcutBindings } from '../../app-model';
 
 export const shortcutStorageKey = 'imail.shortcut-bindings.v1';
+export function shortcutStorageKeyFor(userId: string) { return `${shortcutStorageKey}:${userId}`; }
 
 export const shortcutDefinitions: Array<{ id: ShortcutActionId; label: string; description: string; scope: 'global' | 'mail' }> = [
   { id: 'focusSearch', label: '搜索邮件', description: '聚焦并选中搜索框', scope: 'global' },
@@ -45,9 +46,9 @@ export function shortcutLabel(binding: string) {
   return binding.split('+').map((part) => part === 'Mod' ? (isMac ? '⌘' : 'Ctrl') : part === 'Shift' ? '⇧' : part === 'Alt' ? (isMac ? '⌥' : 'Alt') : part).join(isMac ? '' : ' + ');
 }
 
-export function loadShortcutBindings(storage: Pick<Storage, 'getItem'> = localStorage): ShortcutBindings {
+export function loadShortcutBindings(storage: Pick<Storage, 'getItem'> = localStorage, key = shortcutStorageKey): ShortcutBindings {
   try {
-    const saved = JSON.parse(storage.getItem(shortcutStorageKey) ?? '{}') as Partial<Record<ShortcutActionId, unknown>>;
+    const saved = JSON.parse(storage.getItem(key) ?? '{}') as Partial<Record<ShortcutActionId, unknown>>;
     return Object.fromEntries(shortcutDefinitions.map(({ id }) => {
       const binding = typeof saved[id] === 'string' ? saved[id] : defaultShortcutBindings[id];
       return [id, id === 'sync' && binding === 'Mod+R' ? '' : binding];

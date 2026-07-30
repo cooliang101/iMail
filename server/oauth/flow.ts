@@ -6,8 +6,10 @@ import type { MailAccount, ProviderId } from '../types.js';
 import { fetchIdentity, tokenRequest, tokenToSecret } from './client.js';
 import { describeOAuthCallbackError, oauthKeyFor, providerConfig, type OAuthProviderKey } from './config.js';
 import { validateStoredAccountConnection } from './secrets.js';
+import { currentUserId, enterUserContext } from '../auth/context.js';
 
 type PendingOAuth = {
+  ownerId: string;
   providerKey: OAuthProviderKey;
   accountProvider: ProviderId;
   codeVerifier: string;
@@ -20,7 +22,7 @@ type PendingOAuth = {
   expectedEmail?: string;
 };
 
-const completed = new Map<string, { accountId: string; completedAt: number }>();
+const completed = new Map<string, { accountId: string; ownerId: string; completedAt: number }>();
 
 function cleanupCompleted() {
   const cutoff = Date.now() - 10 * 60_000;
@@ -36,7 +38,9 @@ export async function beginOAuth(input: { provider: ProviderId; displayName?: st
   const nonce = crypto.randomBytes(24).toString('base64url');
   const codeVerifier = crypto.randomBytes(48).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+  const ownerId = currentUserId() ?? '__legacy__';
   const session: PendingOAuth = {
+    ownerId,
     providerKey, accountProvider: input.provider, codeVerifier, nonce, createdAt: Date.now(), displayName: input.displayName,
     group: input.group?.trim() || '个人', color: input.color || '#168f78', accountId: input.accountId, expectedEmail: input.expectedEmail?.toLowerCase(),
   };
@@ -65,6 +69,7 @@ export async function completeOAuth(input: { providerKey: OAuthProviderKey; stat
   cleanupCompleted();
   const remembered = input.state ? completed.get(input.state) : undefined;
   if (remembered) {
+    enterUserContext(remembered.ownerId);
     const existing = await readStore();
     const account = existing.accounts.find((item) => item.id === remembered.accountId);
     if (account) return account;
@@ -76,6 +81,8 @@ export async function completeOAuth(input: { providerKey: OAuthProviderKey; stat
   try { session = await decryptPayload<PendingOAuth>(input.state); }
   catch { throw new Error('OAuth state 无效或已过期，请重新开始'); }
   if (session.providerKey !== input.providerKey || Date.now() - session.createdAt > 10 * 60_000) throw new Error('OAuth state 无效或已过期，请重新开始');
+  if (!session.ownerId) throw new Error('OAuth state 缺少应用账号归属，请重新开始');
+  enterUserContext(session.ownerId);
   const config = providerConfig(input.providerKey, session.accountProvider);
   const token = await tokenRequest(config, new URLSearchParams({ grant_type: 'authorization_code', code: input.code, redirect_uri: config.redirectUri, code_verifier: session.codeVerifier }));
   const identity = await fetchIdentity(config, token, session.nonce);
@@ -93,7 +100,7 @@ export async function completeOAuth(input: { providerKey: OAuthProviderKey; stat
       data.accounts[index] = reconnected;
     });
     const validated = await validateStoredAccountConnection(reconnected);
-    completed.set(input.state, { accountId: validated.id, completedAt: Date.now() });
+    completed.set(input.state, { accountId: validated.id, ownerId: session.ownerId, completedAt: Date.now() });
     return validated;
   }
   if (existing.accounts.some((account) => account.email === identity.email)) throw new Error('这个邮箱已经添加');
@@ -108,6 +115,6 @@ export async function completeOAuth(input: { providerKey: OAuthProviderKey; stat
     data.accounts.push(account);
   });
   const validated = await validateStoredAccountConnection(account);
-  completed.set(input.state, { accountId: validated.id, completedAt: Date.now() });
+  completed.set(input.state, { accountId: validated.id, ownerId: session.ownerId, completedAt: Date.now() });
   return validated;
 }

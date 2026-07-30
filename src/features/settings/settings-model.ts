@@ -2,6 +2,7 @@ import type { AppPreferences } from '../../app-model';
 import { defaultShortcutBindings } from '../shortcuts/shortcut-model';
 
 export const preferencesStorageKey = 'imail.preferences.v1';
+export function preferencesStorageKeyFor(userId: string) { return `${preferencesStorageKey}:${userId}`; }
 
 export const defaultAppPreferences: AppPreferences = {
   startupView: 'inbox',
@@ -11,9 +12,9 @@ export const defaultAppPreferences: AppPreferences = {
   shortcutBindings: { ...defaultShortcutBindings },
 };
 
-export function loadAppPreferences(storage: Pick<Storage, 'getItem'> = localStorage): AppPreferences {
+export function loadAppPreferences(storage: Pick<Storage, 'getItem'> = localStorage, key = preferencesStorageKey): AppPreferences {
   try {
-    const saved = JSON.parse(storage.getItem(preferencesStorageKey) ?? '{}') as Partial<AppPreferences>;
+    const saved = JSON.parse(storage.getItem(key) ?? '{}') as Partial<AppPreferences>;
     return {
       startupView: saved.startupView === 'starred' ? 'starred' : 'inbox',
       markReadOnOpen: typeof saved.markReadOnOpen === 'boolean' ? saved.markReadOnOpen : true,

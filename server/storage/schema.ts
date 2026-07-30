@@ -21,13 +21,14 @@ export function ensureSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS messages_account_date ON messages(account_id, received_at DESC);
     CREATE INDEX IF NOT EXISTS messages_date ON messages(received_at DESC);
     CREATE TABLE IF NOT EXISTS contacts (
-      address TEXT PRIMARY KEY COLLATE NOCASE, name TEXT NOT NULL, message_count INTEGER NOT NULL,
-      last_contact_at TEXT NOT NULL, logo_key TEXT, logo_content_type TEXT, logo_source_url TEXT, logo_fetched_at TEXT
+      user_id TEXT NOT NULL DEFAULT '__legacy__', address TEXT NOT NULL COLLATE NOCASE, name TEXT NOT NULL, message_count INTEGER NOT NULL,
+      last_contact_at TEXT NOT NULL, logo_key TEXT, logo_content_type TEXT, logo_source_url TEXT, logo_fetched_at TEXT,
+      PRIMARY KEY (user_id, address)
     ) STRICT;
     CREATE INDEX IF NOT EXISTS contacts_last_contact ON contacts(last_contact_at DESC);
     CREATE TABLE IF NOT EXISTS logo_fetch_attempts (
-      target TEXT PRIMARY KEY, domain_key TEXT NOT NULL, status TEXT NOT NULL,
-      detail TEXT NOT NULL, attempted_at TEXT NOT NULL
+      user_id TEXT NOT NULL DEFAULT '__legacy__', target TEXT NOT NULL, domain_key TEXT NOT NULL, status TEXT NOT NULL,
+      detail TEXT NOT NULL, attempted_at TEXT NOT NULL, PRIMARY KEY (user_id, target)
     ) STRICT;
     CREATE INDEX IF NOT EXISTS logo_fetch_attempts_domain ON logo_fetch_attempts(domain_key, attempted_at DESC);
     CREATE TABLE IF NOT EXISTS drafts (
@@ -125,9 +126,30 @@ export function ensureSchema(db: DatabaseSync) {
   if (!columns.has('labels_json')) db.exec("ALTER TABLE messages ADD COLUMN labels_json TEXT NOT NULL DEFAULT '[]'");
   if (!columns.has('snoozed_until')) db.exec('ALTER TABLE messages ADD COLUMN snoozed_until TEXT');
   const accountColumns = new Set((db.prepare('PRAGMA table_info(accounts)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
+  if (!accountColumns.has('user_id')) db.exec("ALTER TABLE accounts ADD COLUMN user_id TEXT NOT NULL DEFAULT '__legacy__'");
   if (!accountColumns.has('mailboxes_json')) db.exec("ALTER TABLE accounts ADD COLUMN mailboxes_json TEXT NOT NULL DEFAULT '[]'");
   if (!accountColumns.has('group_icon')) db.exec("ALTER TABLE accounts ADD COLUMN group_icon TEXT NOT NULL DEFAULT 'folder'");
   const draftColumns = new Set((db.prepare('PRAGMA table_info(drafts)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
   if (!draftColumns.has('html_body')) db.exec("ALTER TABLE drafts ADD COLUMN html_body TEXT NOT NULL DEFAULT ''");
   if (!draftColumns.has('attachments_json')) db.exec("ALTER TABLE drafts ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");
+  const tokenColumns = new Set((db.prepare('PRAGMA table_info(developer_tokens)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
+  if (!tokenColumns.has('user_id')) db.exec("ALTER TABLE developer_tokens ADD COLUMN user_id TEXT NOT NULL DEFAULT '__legacy__'");
+  const contactColumns = new Set((db.prepare('PRAGMA table_info(contacts)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
+  if (!contactColumns.has('user_id')) db.exec(`
+    ALTER TABLE contacts RENAME TO contacts_legacy_owner;
+    CREATE TABLE contacts (user_id TEXT NOT NULL, address TEXT NOT NULL COLLATE NOCASE, name TEXT NOT NULL, message_count INTEGER NOT NULL,
+      last_contact_at TEXT NOT NULL, logo_key TEXT, logo_content_type TEXT, logo_source_url TEXT, logo_fetched_at TEXT, PRIMARY KEY (user_id, address)) STRICT;
+    INSERT INTO contacts SELECT '__legacy__', address, name, message_count, last_contact_at, logo_key, logo_content_type, logo_source_url, logo_fetched_at FROM contacts_legacy_owner;
+    DROP TABLE contacts_legacy_owner;
+    CREATE INDEX contacts_last_contact ON contacts(user_id, last_contact_at DESC);
+  `);
+  const attemptColumns = new Set((db.prepare('PRAGMA table_info(logo_fetch_attempts)').all() as Array<Record<string, unknown>>).map((row) => String(row.name)));
+  if (!attemptColumns.has('user_id')) db.exec(`
+    ALTER TABLE logo_fetch_attempts RENAME TO logo_fetch_attempts_legacy_owner;
+    CREATE TABLE logo_fetch_attempts (user_id TEXT NOT NULL, target TEXT NOT NULL, domain_key TEXT NOT NULL, status TEXT NOT NULL,
+      detail TEXT NOT NULL, attempted_at TEXT NOT NULL, PRIMARY KEY (user_id, target)) STRICT;
+    INSERT INTO logo_fetch_attempts SELECT '__legacy__', target, domain_key, status, detail, attempted_at FROM logo_fetch_attempts_legacy_owner;
+    DROP TABLE logo_fetch_attempts_legacy_owner;
+    CREATE INDEX logo_fetch_attempts_domain ON logo_fetch_attempts(user_id, domain_key, attempted_at DESC);
+  `);
 }

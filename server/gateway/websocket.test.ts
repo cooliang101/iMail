@@ -48,8 +48,9 @@ beforeAll(async () => {
     encryptedSecret: 'cipher', createdAt: new Date().toISOString(), lastSyncAt: new Date().toISOString(), status: 'connected',
   };
   otherAccount = { ...account, id: crypto.randomUUID(), email: 'other@example.com' };
-  await updateStore((data) => { data.accounts = [account, otherAccount]; data.messages = []; data.tokens = []; });
-  rawToken = (await tokens.issueToken({ name: 'WebSocket test', scopes: ['messages:read'], accountIds: [account.id], ttlSeconds: 3600 })).raw;
+  const { withUserContext } = await import('../auth/context.js');
+  await withUserContext('websocket-test-user', () => updateStore((data) => { data.accounts = [account, otherAccount]; data.messages = []; data.tokens = []; }));
+  rawToken = (await withUserContext('websocket-test-user', () => tokens.issueToken({ name: 'WebSocket test', scopes: ['messages:read'], accountIds: [account.id], ttlSeconds: 3600 }))).raw;
   server = createServer(createApp());
   websocket.attachGatewayWebSocket(server, { syncIntervalMs: 60_000, sync: vi.fn(async () => ({ synced: 0 })) });
   server.listen(0, '127.0.0.1');

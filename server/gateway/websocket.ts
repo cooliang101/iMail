@@ -38,7 +38,7 @@ export function attachGatewayWebSocket(server: Server, _deprecatedOptions: Recor
     session.authenticating = true;
     const token = await authenticateToken(rawToken, 'messages:read').catch(() => null);
     session.authenticating = false;
-    if (!token) {
+    if (!token || !token.ownerId || token.ownerId === '__legacy__') {
       send(session.socket, { type: 'error', error: { code: 'UNAUTHORIZED', message: 'Token 无效、已过期或缺少 messages:read 权限' } });
       session.socket.close(1008, 'Unauthorized');
       return;
@@ -94,7 +94,7 @@ export function attachGatewayWebSocket(server: Server, _deprecatedOptions: Recor
       if (!session.token?.accountIds.includes(event.accountId) || !session.rawToken) continue;
       session.delivery = session.delivery.then(async () => {
         const active = await authenticateToken(session.rawToken, 'messages:read');
-        if (!active) { session.socket.close(1008, 'Token expired or revoked'); return; }
+        if (!active || !active.ownerId || active.ownerId === '__legacy__') { session.socket.close(1008, 'Token expired or revoked'); return; }
         send(session.socket, { id: event.id, type: event.type, occurredAt: event.occurredAt, data: event.data });
       }).catch(() => session.socket.close(1011, 'Event delivery failed'));
     }

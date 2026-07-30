@@ -57,11 +57,13 @@ syncRouter.get('/sync-status', asyncRoute(async (_req, res) => {
 
 syncRouter.get('/sync-jobs/:id', asyncRoute(async (req, res) => {
   const job = getSyncStore().getJob(String(req.params.id));
-  if (!job) { res.status(404).json({ error: '同步任务不存在' }); return; }
+  const accountIds = new Set((await readStore()).accounts.map((account) => account.id));
+  if (!job || !accountIds.has(job.accountId)) { res.status(404).json({ error: '同步任务不存在' }); return; }
   res.json({ job });
 }));
 
-syncRouter.get('/events', (req, res) => {
+syncRouter.get('/events', asyncRoute(async (req, res) => {
+  const accountIds = new Set((await readStore()).accounts.map((account) => account.id));
   res.status(200);
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -73,6 +75,7 @@ syncRouter.get('/events', (req, res) => {
   const send = () => {
     for (const event of getSyncStore().listEvents(cursor)) {
       cursor = event.id;
+      if (!accountIds.has(event.accountId)) continue;
       res.write(`id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     }
   };
@@ -81,4 +84,4 @@ syncRouter.get('/events', (req, res) => {
   const eventTimer = setInterval(send, 1_000);
   const heartbeatTimer = setInterval(() => res.write(`: heartbeat ${Date.now()}\n\n`), 15_000);
   req.once('close', () => { clearInterval(eventTimer); clearInterval(heartbeatTimer); });
-});
+}));

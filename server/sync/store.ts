@@ -9,6 +9,7 @@ import type {
   SyncJob, SyncJobReason, SyncPolicy, SyncPolicySettings, SyncState,
 } from '../types.js';
 import { gatewayMessageSummary } from '../gateway/presenters.js';
+import { currentUserId } from '../auth/context.js';
 
 type Row = Record<string, string | number | bigint | null>;
 
@@ -80,7 +81,8 @@ export class SyncStore {
   close() { this.db.close(); }
 
   getDefaultPolicy(): SyncPolicySettings {
-    const row = this.db.prepare("SELECT value FROM metadata WHERE key = 'sync_default_policy'").get() as Row | undefined;
+    const key = `sync_default_policy:${currentUserId() ?? '__legacy__'}`;
+    const row = this.db.prepare('SELECT value FROM metadata WHERE key = ?').get(key) as Row | undefined;
     if (!row) return defaultSettings();
     try { return { ...defaultSettings(), ...JSON.parse(String(row.value)) as Partial<SyncPolicySettings> }; }
     catch { return defaultSettings(); }
@@ -88,7 +90,8 @@ export class SyncStore {
 
   updateDefaultPolicy(changes: Partial<SyncPolicySettings>): SyncPolicySettings {
     const updated = { ...this.getDefaultPolicy(), ...changes };
-    this.db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES ('sync_default_policy', ?)").run(JSON.stringify(updated));
+    const key = `sync_default_policy:${currentUserId() ?? '__legacy__'}`;
+    this.db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)').run(key, JSON.stringify(updated));
     return updated;
   }
 

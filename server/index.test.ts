@@ -21,6 +21,9 @@ let baseUrl: string;
 let updateStore: typeof import('./store.js')['updateStore'];
 let closeStore: typeof import('./store.js')['closeStore'];
 let getSyncStore: typeof import('./sync/store.js')['getSyncStore'];
+let withUserContext: typeof import('./auth/context.js')['withUserContext'];
+let authCookie = '';
+let appUserId = '';
 
 const account: MailAccount = {
   id: '11111111-1111-4111-8111-111111111111', provider: 'gmail', email: 'owner@example.com', displayName: 'Owner',
@@ -33,32 +36,38 @@ beforeAll(async () => {
   process.env.IMAIL_DATA_DIR = directory;
   process.env.APP_MASTER_KEY = '11'.repeat(32);
   vi.resetModules();
-  const [{ app }, store, syncStore] = await Promise.all([import('./index.js'), import('./store.js'), import('./sync/store.js')]);
+  const [{ app }, store, syncStore, authContext] = await Promise.all([import('./index.js'), import('./store.js'), import('./sync/store.js'), import('./auth/context.js')]);
   updateStore = store.updateStore;
   closeStore = store.closeStore;
   getSyncStore = syncStore.getSyncStore;
+  withUserContext = authContext.withUserContext;
   server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('测试服务器启动失败');
   baseUrl = `http://127.0.0.1:${address.port}`;
+  const registered = await fetch(`${baseUrl}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'test-owner', displayName: 'Test Owner', password: 'test-password-123' }) });
+  appUserId = (await registered.json()).user.id;
+  authCookie = registered.headers.get('set-cookie')?.split(';')[0] ?? '';
 });
 
 afterAll(async () => {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   closeStore();
+  (await import('./auth/http.js')).closeAuthStore();
   delete process.env.IMAIL_DATA_DIR; delete process.env.APP_MASTER_KEY;
   await rm(directory, { recursive: true, force: true });
 });
 
 beforeEach(async () => {
-  await updateStore((data) => { data.accounts = [account]; data.messages = []; data.tokens = []; data.drafts = []; });
+  await withUserContext(appUserId, () => updateStore((data) => { data.accounts = [account]; data.messages = []; data.tokens = []; data.drafts = []; }));
   getSyncStore().deleteAccountData(account.id); getSyncStore().ensurePolicy(account.id);
   await request('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startupView: 'inbox', markReadOnOpen: true, defaultMessageView: 'source', notificationKinds: { unread: true, snooze: true, error: true } }) });
 });
 
 async function request(route: string, init?: RequestInit) {
-  const response = await fetch(`${baseUrl}${route}`, init);
+  const headers = new Headers(init?.headers); headers.set('Cookie', authCookie);
+  const response = await fetch(`${baseUrl}${route}`, { ...init, headers });
   const body = response.status === 204 ? undefined : await response.json();
   return { response, body };
 }
@@ -74,6 +83,25 @@ describe('iMail HTTP API', () => {
     expect(updated.body.preferences).toMatchObject({ startupView: 'starred', markReadOnOpen: true, defaultMessageView: 'rendered', notificationKinds: { unread: true, snooze: false, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
     expect((await request('/api/preferences')).body.preferences).toEqual(updated.body.preferences);
     expect((await request('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startupView: 'invalid' }) })).response.status).toBe(400);
+  });
+
+  it('blocks unauthenticated application access and isolates another application account', async () => {
+    expect((await fetch(`${baseUrl}/api/accounts`)).status).toBe(401);
+    await request('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startupView: 'starred' }) });
+    const registered = await fetch(`${baseUrl}/api/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'other-user', displayName: 'Other User', password: 'other-password-123' }),
+    });
+    expect(registered.status).toBe(201);
+    const otherCookie = registered.headers.get('set-cookie')?.split(';')[0] ?? '';
+    const isolated = await fetch(`${baseUrl}/api/accounts`, { headers: { Cookie: otherCookie } });
+    expect(isolated.status).toBe(200);
+    expect((await isolated.json()).accounts).toEqual([]);
+    const isolatedPreferences = await fetch(`${baseUrl}/api/preferences`, { headers: { Cookie: otherCookie } });
+    expect((await isolatedPreferences.json()).preferences.startupView).toBe('inbox');
+    expect((await request('/api/preferences')).body.preferences.startupView).toBe('starred');
+    const wrongPassword = await fetch(`${baseUrl}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'test-owner', password: 'wrong-password' }) });
+    expect(wrongPassword.status).toBe(401);
   });
 
   it('serves a full mail-management MCP endpoint only to mcp:full authorization codes', async () => {
@@ -312,7 +340,7 @@ describe('iMail HTTP API', () => {
   });
 
   it('streams attachment downloads with safe response headers', async () => {
-    const response = await fetch(`${baseUrl}/api/messages/message-file/attachments/0`);
+    const response = await fetch(`${baseUrl}/api/messages/message-file/attachments/0`, { headers: { Cookie: authCookie } });
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/plain');
     expect(response.headers.get('content-disposition')).toContain("filename*=UTF-8''report.txt");
@@ -379,7 +407,7 @@ describe('iMail HTTP API', () => {
     expect(html.toLowerCase()).not.toContain('swagger');
     expect(html).not.toContain('<script src=');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
-    expect((await fetch(`${baseUrl}/api/dev/v1/health`)).status).toBe(404);
+    expect((await fetch(`${baseUrl}/api/dev/v1/health`, { headers: { Cookie: authCookie } })).status).toBe(404);
   });
 
   it('deletes account-owned cache and removes it from token grants', async () => {

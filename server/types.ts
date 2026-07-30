@@ -34,6 +34,7 @@ export type AccountSecret = {
 };
 
 export type MailAccount = {
+  ownerId?: string;
   id: string;
   provider: ProviderId;
   email: string;
@@ -81,6 +82,7 @@ export type ContactLogo = {
 };
 
 export type MailContact = {
+  ownerId?: string;
   address: string;
   name: string;
   messageCount: number;
@@ -89,6 +91,7 @@ export type MailContact = {
 };
 
 export type LogoFetchAttempt = {
+  ownerId?: string;
   target: string;
   domainKey: string;
   status: 'success' | 'failed';
@@ -120,6 +123,7 @@ export type DraftAttachment = {
 export type TokenScope = 'messages:read' | 'messages:send' | 'accounts:read' | 'mcp:full';
 
 export type DeveloperToken = {
+  ownerId?: string;
   id: string;
   name: string;
   tokenHash: string;

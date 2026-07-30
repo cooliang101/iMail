@@ -9,6 +9,7 @@ import { readSnapshot } from './storage/snapshot.js';
 import { replaceData } from './storage/write-data.js';
 import type { CachedMessage, StoreData } from './types.js';
 import { reconcileContacts } from './contact-model.js';
+import { currentUserId, userMetadataKey } from './auth/context.js';
 
 export type { MessageQuery, MessageStats } from './storage/models.js';
 
@@ -55,17 +56,19 @@ export class SQLiteStore {
     replaceData(this.db, readSnapshot(this.db));
   }
 
-  private all(statement: StatementSync): Row[] { return statement.all() as Row[]; }
+  private all(statement: StatementSync, ...values: SqlValue[]): Row[] { return statement.all(...values) as Row[]; }
 
   async read(): Promise<StoreData> {
     await this.queue;
-    return readSnapshot(this.db);
+    return readSnapshot(this.db, currentUserId());
   }
 
   async listMessages(input: MessageQuery): Promise<{ messages: CachedMessage[]; total: number }> {
     await this.queue;
     const where: string[] = [];
     const values: SqlValue[] = [];
+    const userId = currentUserId();
+    if (userId) { where.push('a.user_id = ?'); values.push(userId); }
     if (input.accountId) { where.push('m.account_id = ?'); values.push(input.accountId); }
     if (input.group) { where.push('a.group_name = ?'); values.push(input.group); }
     if (input.unread) where.push('m.unread = 1');
@@ -95,20 +98,25 @@ export class SQLiteStore {
 
   async getMessage(id: string): Promise<CachedMessage | undefined> {
     await this.queue;
-    const row = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as Row | undefined;
+    const userId = currentUserId();
+    const row = (userId
+      ? this.db.prepare('SELECT m.* FROM messages m JOIN accounts a ON a.id = m.account_id WHERE m.id = ? AND a.user_id = ?').get(id, userId)
+      : this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id)) as Row | undefined;
     return row ? messageFromRow(row) : undefined;
   }
 
   async messageStats(): Promise<MessageStats> {
     await this.queue;
+    const userId = currentUserId();
+    const owner = userId ? ' AND a.user_id = ?' : '';
     const activeInbox = "mailbox_role = 'inbox' AND (snoozed_until IS NULL OR snoozed_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))";
-    const overall = this.db.prepare(`SELECT count(*) AS total, coalesce(sum(unread), 0) AS unread FROM messages WHERE ${activeInbox}`).get() as Row;
+    const overall = this.db.prepare(`SELECT count(*) AS total, coalesce(sum(m.unread), 0) AS unread FROM messages m JOIN accounts a ON a.id = m.account_id WHERE m.${activeInbox}${owner}`).get(...(userId ? [userId] : [])) as Row;
     const byAccount = this.all(this.db.prepare(`SELECT account_id, count(*) AS total, coalesce(sum(unread), 0) AS unread
-      FROM messages WHERE ${activeInbox} GROUP BY account_id ORDER BY account_id`)).map((row) => ({
+      FROM messages m JOIN accounts a ON a.id = m.account_id WHERE m.${activeInbox}${owner} GROUP BY account_id ORDER BY account_id`), ...(userId ? [userId] : [])).map((row) => ({
       accountId: text(row, 'account_id'), total: integer(row, 'total'), unread: integer(row, 'unread'),
     }));
     const byGroup = this.all(this.db.prepare(`SELECT a.group_name, count(*) AS total, coalesce(sum(m.unread), 0) AS unread
-      FROM messages m JOIN accounts a ON a.id = m.account_id WHERE m.mailbox_role = 'inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) GROUP BY a.group_name ORDER BY a.group_name`)).map((row) => ({
+      FROM messages m JOIN accounts a ON a.id = m.account_id WHERE m.mailbox_role = 'inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))${owner} GROUP BY a.group_name ORDER BY a.group_name`), ...(userId ? [userId] : [])).map((row) => ({
       group: text(row, 'group_name'), total: integer(row, 'total'), unread: integer(row, 'unread'),
     }));
     return { total: integer(overall, 'total'), unread: integer(overall, 'unread'), byAccount, byGroup };
@@ -133,9 +141,10 @@ export class SQLiteStore {
     const operation = this.queue.catch(() => undefined).then(async () => {
       this.db.exec('BEGIN IMMEDIATE');
       try {
-        const data = readSnapshot(this.db);
+        const userId = currentUserId();
+        const data = readSnapshot(this.db, userId);
         await mutator(data);
-        replaceData(this.db, data, undefined, false);
+        replaceData(this.db, data, undefined, false, userId);
         this.db.exec('COMMIT');
         output = data;
       } catch (error) {
@@ -199,11 +208,12 @@ export class SQLiteStore {
         this.db.prepare("UPDATE accounts SET status = 'connected', last_sync_at = ?, last_error = NULL, mailboxes_json = ? WHERE id = ?")
           .run(input.completedAt, JSON.stringify(input.folders), input.accountId);
 
-        const snapshot = readSnapshot(this.db);
+        const owner = this.db.prepare('SELECT user_id FROM accounts WHERE id = ?').get(input.accountId) as { user_id: string } | undefined;
+        const snapshot = readSnapshot(this.db, owner?.user_id);
         const contacts = reconcileContacts(snapshot);
-        this.db.exec('DELETE FROM contacts');
-        const insertContact = this.db.prepare('INSERT INTO contacts (address, name, message_count, last_contact_at, logo_key, logo_content_type, logo_source_url, logo_fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        for (const contact of contacts) insertContact.run(contact.address, contact.name, contact.messageCount, contact.lastContactAt, contact.logo?.key ?? null, contact.logo?.contentType ?? null, contact.logo?.sourceUrl ?? null, contact.logo?.fetchedAt ?? null);
+        if (owner) this.db.prepare('DELETE FROM contacts WHERE user_id = ?').run(owner.user_id); else this.db.exec('DELETE FROM contacts');
+        const insertContact = this.db.prepare('INSERT INTO contacts (address, name, message_count, last_contact_at, logo_key, logo_content_type, logo_source_url, logo_fetched_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        for (const contact of contacts) insertContact.run(contact.address, contact.name, contact.messageCount, contact.lastContactAt, contact.logo?.key ?? null, contact.logo?.contentType ?? null, contact.logo?.sourceUrl ?? null, contact.logo?.fetchedAt ?? null, owner?.user_id ?? contact.ownerId ?? '__legacy__');
         this.db.exec('COMMIT');
       } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     });
@@ -240,8 +250,8 @@ export function updateStore(mutator: (data: StoreData) => void | Promise<void>):
 export function listCachedMessages(input: MessageQuery) { return configuredStore().listMessages(input); }
 export function getCachedMessage(id: string) { return configuredStore().getMessage(id); }
 export function getMessageStats() { return configuredStore().messageStats(); }
-export function getMetadata(key: string) { return configuredStore().getMetadata(key); }
-export function setMetadata(key: string, value: string) { return configuredStore().setMetadata(key, value); }
+export function getMetadata(key: string) { return configuredStore().getMetadata(userMetadataKey(key)); }
+export function setMetadata(key: string, value: string) { return configuredStore().setMetadata(userMetadataKey(key), value); }
 export function setAccountSyncStatus(accountId: string, status: 'connected' | 'syncing' | 'error', lastError?: string) { return configuredStore().setAccountSyncStatus(accountId, status, lastError); }
 export function commitMailboxSync(input: MailboxSyncCommit) { return configuredStore().commitMailboxSync(input); }
 export function closeStore() {

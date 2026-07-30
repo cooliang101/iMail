@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { Router, type Request, type Response } from 'express';
 import { createMailMcpServer } from './server.js';
 import { authenticateToken } from '../tokens.js';
+import { enterUserContext } from '../auth/context.js';
 
 const handler = createMcpHandler(() => createMailMcpServer());
 
@@ -62,6 +63,8 @@ mcpRouter.all('/mcp', async (req, res) => {
     res.status(401).json({ error: 'MCP 授权码无效、已过期或已撤销' });
     return;
   }
+  if (!token.ownerId || token.ownerId === '__legacy__') { res.status(401).json({ error: 'MCP 授权码缺少应用账号归属，请登录后重新创建' }); return; }
+  enterUserContext(token.ownerId);
   const auth: AuthInfo = {
     token: raw!, clientId: token.id, scopes: token.scopes,
     expiresAt: Math.floor(new Date(token.expiresAt).getTime() / 1000), extra: { authorizationCodeId: token.id },

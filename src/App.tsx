@@ -11,9 +11,10 @@ import { AddAccountModal } from './features/accounts';
 import { ComposePane, DraftWorkspace, type ComposePaneHandle } from './features/compose';
 import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal } from './features/organize';
 import { CreateApiTokenModal, CreateMcpTokenModal, TokenWorkspace } from './features/developer';
-import { isBrowserRefreshShortcut, isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKey } from './features/shortcuts';
+import { isBrowserRefreshShortcut, isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKeyFor } from './features/shortcuts';
 import { AppContextMenu } from './features/context-menu';
-import { loadAppPreferences, preferencesStorageKey, SettingsModal, type SettingsTab } from './features/settings';
+import { loadAppPreferences, preferencesStorageKeyFor, SettingsModal, type SettingsTab } from './features/settings';
+import { useAuth } from './features/auth';
 
 type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
@@ -24,6 +25,7 @@ type MessageStats = {
   byGroup: Array<{ group: string; total: number; unread: number }>;
 };
 function App() {
+  const { user, logout } = useAuth();
   const [realAccounts, setRealAccounts] = useState<Account[]>([]);
   const [realMessages, setRealMessages] = useState<Message[]>([]);
   const [tokens, setTokens] = useState<DeveloperToken[]>([]);
@@ -31,8 +33,10 @@ function App() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [labels, setLabels] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
-  const [preferences, setPreferences] = useState<AppPreferences>(() => loadAppPreferences());
-  const [view, setView] = useState<View>(() => loadAppPreferences().startupView);
+  const localPreferencesKey = preferencesStorageKeyFor(user.id);
+  const localShortcutsKey = shortcutStorageKeyFor(user.id);
+  const [preferences, setPreferences] = useState<AppPreferences>(() => loadAppPreferences(localStorage, localPreferencesKey));
+  const [view, setView] = useState<View>(() => loadAppPreferences(localStorage, localPreferencesKey).startupView);
   const [accountFilter, setAccountFilter] = useState('all');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -42,7 +46,7 @@ function App() {
   const [composeMode, setComposeMode] = useState<'new' | 'reply' | 'forward' | null>(null);
   const [tokenOpen, setTokenOpen] = useState<'api' | 'mcp' | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
-  const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(() => loadShortcutBindings());
+  const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(() => loadShortcutBindings(localStorage, localShortcutsKey));
   const [contextTarget, setContextTarget] = useState<ContextTarget | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<MailNotification[]>([]);
@@ -100,8 +104,8 @@ function App() {
   useEffect(() => {
     void api<{ preferences: AppPreferences }>('/api/preferences').then((result) => {
       setPreferences(result.preferences); setShortcutBindings(result.preferences.shortcutBindings); setView(result.preferences.startupView);
-      localStorage.setItem(preferencesStorageKey, JSON.stringify(result.preferences));
-      localStorage.setItem(shortcutStorageKey, JSON.stringify(result.preferences.shortcutBindings));
+      localStorage.setItem(localPreferencesKey, JSON.stringify(result.preferences));
+      localStorage.setItem(localShortcutsKey, JSON.stringify(result.preferences.shortcutBindings));
     }).catch(() => undefined);
   }, []);
   useEffect(() => { realMessagesRef.current = realMessages; }, [realMessages]);
@@ -385,20 +389,20 @@ function App() {
 
   function saveShortcutBindings(bindings: ShortcutBindings) {
     setShortcutBindings(bindings);
-    localStorage.setItem(shortcutStorageKey, JSON.stringify(bindings));
+    localStorage.setItem(localShortcutsKey, JSON.stringify(bindings));
     savePreferences({ ...preferences, shortcutBindings: bindings });
     setNotice({ kind: 'success', text: '快捷键已保存' });
   }
 
   function savePreferences(next: AppPreferences) {
     setPreferences(next);
-    localStorage.setItem(preferencesStorageKey, JSON.stringify(next));
+    localStorage.setItem(localPreferencesKey, JSON.stringify(next));
     preferencesSaveQueue.current = preferencesSaveQueue.current.then(async () => {
       const result = await api<{ preferences: AppPreferences }>('/api/preferences', { method: 'PATCH', body: JSON.stringify(next) });
       setPreferences(result.preferences);
       setShortcutBindings(result.preferences.shortcutBindings);
-      localStorage.setItem(preferencesStorageKey, JSON.stringify(result.preferences));
-      localStorage.setItem(shortcutStorageKey, JSON.stringify(result.preferences.shortcutBindings));
+      localStorage.setItem(localPreferencesKey, JSON.stringify(result.preferences));
+      localStorage.setItem(localShortcutsKey, JSON.stringify(result.preferences.shortcutBindings));
     }).catch((error) => {
       setNotice({ kind: 'error', text: error instanceof Error ? `设置已保存在本机，但服务端同步失败：${error.message}` : '设置已保存在本机，但服务端同步失败' });
     });
@@ -508,7 +512,7 @@ function App() {
       {labels.length > 0 && <><div className="section-label"><span>邮件标签</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} data-icon-tone="info" className={activeLabel === label ? 'active' : ''} onClick={() => selectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
       <div className="sidebar-spacer" />
       <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => selectScope('tokens')}><Code size={19} /><span><strong>外部接入</strong><small>MCP 与邮件 API</small></span><ArrowRight size={16} /></button>
-      <div className="user-strip"><UserCircle size={32} weight="duotone" /><span><strong>本地工作区</strong><small>数据仅存储在本机</small></span><CaretDown size={15} /></div>
+      <button className="user-strip" type="button" onClick={() => void logout()} title="退出并切换应用账号"><UserCircle size={32} weight="duotone" /><span><strong>{user.displayName}</strong><small>{user.login} · 切换账号</small></span><CaretDown size={15} /></button>
     </aside>
 
     <main className="workspace">

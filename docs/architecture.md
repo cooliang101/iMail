@@ -4,6 +4,16 @@
 
 邮箱同步是后端持久化任务，不以任何前端页面、用户会话、SSE/WebSocket 或 MCP 连接作为生命周期条件。默认启动器同时运行 API 与独立 Worker；外部进程管理模式也可以分别运行二者。
 
+## 应用身份与数据边界
+
+`app_users` 保存应用用户与 scrypt 密码派生值，`app_sessions` 只保存随机会话令牌的 SHA-256 哈希。浏览器使用 HttpOnly、SameSite=Lax Cookie；前端 `AuthGate` 在渲染邮件工作区前检查会话，并在任意数据 API 返回 401 时立即退回登录页。
+
+HTTP 会话、API 网关 Token 与 MCP 授权码都会恢复同一个服务端用户上下文。存储层按该上下文过滤 `accounts.user_id`、`developer_tokens.user_id`、`contacts.user_id` 与 `logo_fetch_attempts.user_id`，邮件和草稿通过所属邮箱账户间接隔离。后台同步不依赖浏览器会话，而是按全局唯一邮箱账户 ID 工作；提交联系人快照时重新取得该账户的用户归属。
+
+设置中心使用同一用户上下文，将 `app_preferences_v1` 保存为 `metadata` 中的用户命名空间键。HTTP `preferences` 路由和 MCP `settings_get` / `settings_update` 因此读取各自应用账号的启动、阅读、通知、邮件展示与快捷键设置，不共享全局设置。
+
+旧数据库行在迁移时先标记为 `__legacy__`。第一个成功注册的应用用户在同一事务中接管这些行，并将旧的全局 `app_preferences_v1` 设置迁入其用户命名空间，避免升级后丢失本地数据与偏好；未完成归属的旧 MCP/API 授权码不会被外部入口接受。
+
 ```text
 Frontend / MCP ── settings, status, sync-now ──► API
                                                    │
@@ -52,7 +62,7 @@ Agent
 
 ### 权限模型
 
-`mcp:full` 是独立的管理权限。MCP 入口只接受包含该 scope 的 Token；`messages:read`、`messages:send` 和 `accounts:read` 仍只用于开发者网关。MCP 授权码以 `imail_mcp_` 开头，语义覆盖全部当前与未来账户，因此新增账户后无需重新签发。
+`mcp:full` 是独立的管理权限。MCP 入口只接受包含该 scope 的 Token；`messages:read`、`messages:send` 和 `accounts:read` 仍只用于开发者网关。MCP 授权码以 `imail_mcp_` 开头，语义覆盖所属应用用户的全部当前与未来邮箱账户，因此新增邮箱后无需重新签发，也不能访问其他应用用户的数据。
 
 授权码仍使用既有 `developer_tokens`、`developer_token_scopes` 和 `developer_token_accounts` 表，没有新增明文凭据列。`accountIds` 为兼容现有 Token 展示继续写入，但 MCP 管理权限不以创建时账户快照作为访问边界。
 

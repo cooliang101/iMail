@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { app } from './app.js';
 import { attachGatewayWebSocket } from './gateway/websocket.js';
+import { closeAuthStore } from './auth/http.js';
 
 export { app, createApp } from './app.js';
 
@@ -29,7 +30,7 @@ export function startServer() {
     };
     spawnWorker();
   }
-  server.once('close', () => { closing = true; if (workerRestartTimer) clearTimeout(workerRestartTimer); if (syncWorker?.connected) syncWorker.disconnect(); });
+  server.once('close', () => { closing = true; if (workerRestartTimer) clearTimeout(workerRestartTimer); if (syncWorker?.connected) syncWorker.disconnect(); closeAuthStore(); });
   return server.listen(port, host, () => console.log(`iMail API running at http://${host}:${port}`));
 }
 

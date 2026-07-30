@@ -2,6 +2,8 @@
 
 iMail 为可信 Agent 提供 Streamable HTTP MCP 接入，使用“外部接入”页面签发的短期 `mcp:full` 授权码。普通 API 网关 Token 不能调用 MCP。
 
+每个 MCP 授权码都归属于创建它的应用账号。`mcp:full` 表示管理该应用账号当前及未来接入的全部邮箱，不会越过应用账号边界读取其他用户的数据。
+
 ## 1. 签发授权码
 
 1. 启动 iMail，进入“外部接入”，切换到“MCP”标签页。
@@ -77,5 +79,6 @@ Authorization: Bearer imail_mcp_xxx
 - HTTP 默认限制 Host/Origin 为回环地址；远程部署必须配置 HTTPS 和 `MCP_ALLOWED_HOSTS`。
 - 附件上传总大小限制 15 MB，工具参数和邮件正文继续受现有 Zod 限制。
 - 授权码撤销或过期后，后续 HTTP 请求会立即拒绝认证。
+- 旧版本升级前创建、尚未绑定应用账号的授权码不会被 MCP 接受；请登录后重新签发。
 
 更多运维和冒烟检查见 [operator-runbook.md](operator-runbook.md)，内部实现见 [architecture.md](architecture.md)。

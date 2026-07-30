@@ -12,13 +12,16 @@ import { mcpRouter } from './mcp/http.js';
 import { oauthRouter } from './routes/oauth-routes.js';
 import { systemRouter } from './routes/system.js';
 import { syncRouter } from './routes/sync.js';
+import { authRouter, requireAppSession } from './auth/http.js';
 
 export function createApp() {
   const app = express();
   const origins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map((item) => item.trim());
 
-  app.use(cors({ origin: origins }));
+  app.use(cors({ origin: origins, credentials: true }));
   app.use(express.json({ limit: '25mb' }));
+  app.use('/api', authRouter);
+  app.use('/api', requireAppSession);
   app.use('/api', systemRouter);
   app.use('/api', oauthRouter);
   app.use('/api', accountsRouter);
