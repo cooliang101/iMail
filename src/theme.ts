@@ -2,7 +2,9 @@ import { createLightTheme, type BrandVariants, type Theme } from '@fluentui/reac
 import type { AppThemeId } from './app-model';
 
 /** Keep these Fluent scales aligned with the brand primitives in theme.css. */
-const brands: Record<AppThemeId, BrandVariants> = {
+type BuiltInThemeId = Exclude<AppThemeId, 'custom'>;
+
+const brands: Record<BuiltInThemeId, BrandVariants> = {
   'mint-fresh': {
     10: '#061b17', 20: '#0b2b24', 30: '#0d4035', 40: '#105646',
     50: '#126c58', 60: '#14826a', 70: '#168f78', 80: '#2aa089',
@@ -34,4 +36,4 @@ export const imailFontFamily = "'Segoe UI Variable Text', 'Segoe UI Variable', '
 export const appThemes = Object.fromEntries(Object.entries(brands).map(([id, brand]) => [id, {
   ...createLightTheme(brand),
   fontFamilyBase: imailFontFamily,
-}])) as Record<AppThemeId, Theme>;
+}])) as Record<BuiltInThemeId, Theme>;

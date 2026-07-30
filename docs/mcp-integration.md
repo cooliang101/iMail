@@ -43,6 +43,7 @@ Authorization: Bearer imail_mcp_xxx
 | --- | --- | --- |
 | 状态 | `imail_status` | 账户、邮件、未读、草稿和最近同步概览 |
 | 设置 | `settings_get` / `settings_update` | 读取或更新主题、启动、阅读、通知、邮件展示与快捷键偏好 |
+| 主题 | `theme_custom_get` / `theme_custom_update` | 读取或保存经过校验的自定义主题令牌，不接受任意 CSS |
 | 账户 | `accounts_list` | 非敏感账户元数据与文件夹 |
 | 账户 | `account_add_with_code` | 用服务商授权码/应用专用密码添加 IMAP/SMTP 账户 |
 | 账户 | `account_start_oauth` | 开始 Gmail、Outlook、Hotmail 或 Yahoo OAuth |
@@ -65,6 +66,8 @@ Authorization: Bearer imail_mcp_xxx
 | 整理 | `labels_list` / `notifications_list` | 标签与连接/未读/稍后通知 |
 
 `settings_update.theme` 接受 `mint-fresh`、`tech`、`business-blue` 或 `soft-neubrutalism`；未提供该字段时保持当前主题。
+
+`theme_custom_update` 接受 9 个 `#RRGGBB` 颜色字段以及受限的圆角、阴影和字体枚举。它使用独立的 MCP 用户存储，不扩展 `/api/preferences` HTTP 网关；返回的 `theme` JSON 可直接粘贴到“设置 → 主题 → 自定义主题”。完整生成约束见 [`custom-theme.md`](custom-theme.md)。
 
 ## 4. 推荐工作流
 

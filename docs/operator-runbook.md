@@ -36,12 +36,13 @@ npm run worker
 
 1. 在“外部接入”的“MCP”标签页签发 `mcp:full` 授权码。
 2. 用 MCP Inspector 或任意标准客户端连接 `http://127.0.0.1:8787/mcp`。
-3. 确认 `tools/list` 包含 `accounts_list`、`messages_list`、`message_send` 和 `account_remove`。
+3. 确认 `tools/list` 包含 `accounts_list`、`messages_list`、`message_send`、`account_remove`、`theme_custom_get` 和 `theme_custom_update`。
 4. 调用 `imail_status` 与 `accounts_list`，确认响应不含 `encryptedSecret`、密码或 OAuth Token。
 5. 使用普通 `messages:read` Token 连接，预期得到 HTTP 401。
 6. 在 UI 撤销授权码，再次请求，预期得到 HTTP 401。
 7. 请求 `GET /api/sync-status`，确认 `worker.workers` 至少有一个十秒内更新的心跳。
 8. 关闭浏览器，等待一个同步周期后再次查询，确认 `lastSuccessAt` 和 `nextSyncAt` 继续推进。
+9. 调用 `theme_custom_update` 写入测试主题，再用 `theme_custom_get` 读取并确认相等；`GET /api/preferences` 不应出现 `customTheme`。
 
 仓库级自动验证：
 

@@ -10,7 +10,9 @@
 
 HTTP 会话、API 网关 Token 与 MCP 授权码都会恢复同一个服务端用户上下文。存储层按该上下文过滤 `accounts.user_id`、`developer_tokens.user_id`、`contacts.user_id` 与 `logo_fetch_attempts.user_id`，邮件和草稿通过所属邮箱账户间接隔离。后台同步不依赖浏览器会话，而是按全局唯一邮箱账户 ID 工作；提交联系人快照时重新取得该账户的用户归属。
 
-设置中心使用同一用户上下文，将 `app_preferences_v1` 保存为 `metadata` 中的用户命名空间键。HTTP `preferences` 路由和 MCP `settings_get` / `settings_update` 因此读取各自应用账号的主题、启动、阅读、通知、邮件展示与快捷键设置，不共享全局设置。客户端切换主题时，`AppThemeProvider` 同步更新 Fluent 品牌色与根 `data-theme` token；本地 `imail.theme.v1` 仅用于首屏回退，服务端用户偏好仍是跨会话权威来源。主题集合包含经典薄荷清新、霓虹终端、深海蓝图和 Soft Neubrutalism。
+设置中心使用同一用户上下文，将 `app_preferences_v1` 保存为 `metadata` 中的用户命名空间键。HTTP `preferences` 路由和 MCP `settings_get` / `settings_update` 继续负责内置主题、启动、阅读、通知、邮件展示与快捷键设置。自定义主题不扩展 HTTP schema：客户端以用户作用域的本地偏好保存完整安全令牌，向 `/api/preferences` 发送时剔除 `customTheme`，选择 `custom` 时也不发送主题 ID。MCP 的 `theme_custom_get` / `theme_custom_update` 使用独立的用户命名空间键 `mcp_custom_theme_v1`，返回的 JSON 可导入客户端，但不会经 HTTP 网关自动下发。
+
+客户端切换主题时，`AppThemeProvider` 同步更新 Fluent 品牌色、根 `data-theme` 与运行时 CSS token。四套内置主题继续来自静态色阶；`custom` 只接受名称、九个六位十六进制颜色、圆角/阴影/字体枚举，由 `theme-runtime.ts` 派生完整中性色阶、品牌色阶和语义 token，不执行任意 CSS、URL 或脚本。
 
 旧数据库行在迁移时先标记为 `__legacy__`。第一个成功注册的应用用户在同一事务中接管这些行，并将旧的全局 `app_preferences_v1` 设置迁入其用户命名空间，避免升级后丢失本地数据与偏好；未完成归属的旧 MCP/API 授权码不会被外部入口接受。
 
@@ -58,6 +60,7 @@ Agent
 
 - `server/mcp/http.ts`：Host/Origin 防护、Bearer 授权码认证、Express 与 Web Standard MCP 响应流转换。
 - `server/mcp/server.ts`：注册工具、Zod 参数模型、structured content 和 destructive/read-only annotations。
+- `server/mcp/custom-theme.ts`：校验并按应用用户保存 MCP 自定义主题令牌；与 HTTP preferences schema 隔离。
 - `server/tokens.ts`：生成高熵授权码、SHA-256 哈希、常量时间比较、过期与撤销检查。
 
 ### 权限模型

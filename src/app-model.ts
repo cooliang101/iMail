@@ -10,11 +10,31 @@ export type MessageStats = {
 
 export type MessageBodyView = 'source' | 'rendered';
 export type StartupView = 'inbox' | 'starred';
-export type AppThemeId = 'mint-fresh' | 'tech' | 'business-blue' | 'soft-neubrutalism';
+export type AppThemeId = 'mint-fresh' | 'tech' | 'business-blue' | 'soft-neubrutalism' | 'custom';
+export type CustomThemeRadius = 'compact' | 'balanced' | 'rounded';
+export type CustomThemeShadow = 'none' | 'soft' | 'offset';
+export type CustomThemeTypography = 'system' | 'technical' | 'rounded';
+
+export type CustomThemeDefinition = {
+  name: string;
+  canvas: string;
+  surface: string;
+  surfaceSubtle: string;
+  rail: string;
+  text: string;
+  textSecondary: string;
+  border: string;
+  accent: string;
+  accentSubtle: string;
+  radius: CustomThemeRadius;
+  shadow: CustomThemeShadow;
+  typography: CustomThemeTypography;
+};
 export type NotificationKind = MailNotification['kind'];
 
 export type AppPreferences = {
   theme: AppThemeId;
+  customTheme: CustomThemeDefinition;
   startupView: StartupView;
   markReadOnOpen: boolean;
   defaultMessageView: MessageBodyView;

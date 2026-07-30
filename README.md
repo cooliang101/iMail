@@ -16,8 +16,8 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - SQLite 本地数据库、外键约束、事务写入与旧 JSON 自动迁移
 - 应用账号注册、密码登录、30 天 HttpOnly 会话与登录页账号切换
 - 邮箱、邮件、联系人、草稿和开发授权码按应用账号强制隔离；未登录 API 统一拒绝访问
-- 设置中心的主题、启动、阅读、通知、邮件展示与快捷键偏好按应用账号同步保存
-- 内置经典薄荷清新、霓虹终端科技风、深海蓝图商业风和 Soft Neubrutalism 柔和撞色四套即时切换主题
+- 设置中心的内置主题、启动、阅读、通知、邮件展示与快捷键偏好按应用账号同步保存；自定义主题令牌保存在当前设备
+- 内置经典薄荷清新、霓虹终端科技风、深海蓝图商业风和 Soft Neubrutalism 柔和撞色四套即时切换主题，并支持安全令牌式自定义主题、AI JSON 导入与规范复制
 - 后端持久化同步策略与独立 Worker；前端关闭后仍按账户频率同步，进程重启后自动恢复到期任务
 - 收件箱 IMAP IDLE 实时唤醒；连接失败时仍由持久化周期轮询兜底
 - 设置页可配置新账户默认策略和账户级频率、文件夹范围、启动补同步、失败重试与通知
@@ -255,7 +255,7 @@ MCP_ALLOWED_HOSTS=mail.example.com
 | 领域 | 工具 |
 | --- | --- |
 | 状态 | `imail_status` |
-| 设置 | `settings_get`、`settings_update` |
+| 设置 | `settings_get`、`settings_update`、`theme_custom_get`、`theme_custom_update` |
 | 账户 | `accounts_list`、`account_add_with_code`、`account_start_oauth`、`account_reconnect_oauth`、`account_update`、`account_update_authorization_code`、`account_test_connection`、`account_remove` |
 | 同步 | `mailbox_sync`、`sync_policy_get`、`sync_policy_update` |
 | 邮件与附件 | `messages_list`、`message_get`、`message_update`、`message_move`、`message_send`、`attachment_download` |
@@ -264,7 +264,7 @@ MCP_ALLOWED_HOSTS=mail.example.com
 
 带副作用的工具提供 MCP annotations：读取工具标记为只读，账户移除、邮件移动和草稿删除标记为 destructive。邮箱授权码、应用专用密码、OAuth Token 和加密字段永远不会出现在 MCP 响应中。
 
-完整接入流程、工具参数、安全模型和排障见 [`docs/mcp-integration.md`](docs/mcp-integration.md)、[`docs/architecture.md`](docs/architecture.md) 与 [`docs/operator-runbook.md`](docs/operator-runbook.md)。
+完整接入流程、工具参数、安全模型和排障见 [`docs/mcp-integration.md`](docs/mcp-integration.md)、[`docs/architecture.md`](docs/architecture.md) 与 [`docs/operator-runbook.md`](docs/operator-runbook.md)。AI 自定义主题生成格式见 [`docs/custom-theme.md`](docs/custom-theme.md)。
 
 ## 数据与安全边界
 

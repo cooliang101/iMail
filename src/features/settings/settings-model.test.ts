@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultAppPreferences, loadAppPreferences, preferencesStorageKey, preferencesStorageKeyFor } from './settings-model';
+import { defaultAppPreferences, gatewayPreferencesPayload, loadAppPreferences, mergeGatewayPreferences, preferencesStorageKey, preferencesStorageKeyFor } from './settings-model';
 
 describe('settings model', () => {
   it('returns defaults when no preferences were saved', () => {
@@ -23,5 +23,15 @@ describe('settings model', () => {
     const legacy = { getItem: () => JSON.stringify({ theme: 'imail-light' }) };
     expect(loadAppPreferences(selected).theme).toBe('soft-neubrutalism');
     expect(loadAppPreferences(legacy).theme).toBe('mint-fresh');
+  });
+
+  it('keeps custom appearance data out of the HTTP gateway payload', () => {
+    const custom = { ...defaultAppPreferences, theme: 'custom' as const, customTheme: { ...defaultAppPreferences.customTheme, accent: '#123456' } };
+    const payload = gatewayPreferencesPayload(custom);
+    expect(payload).not.toHaveProperty('customTheme');
+    expect(payload).not.toHaveProperty('theme');
+    const remote = { ...defaultAppPreferences, theme: 'tech' as const };
+    const { customTheme: _customTheme, ...gateway } = remote;
+    expect(mergeGatewayPreferences(custom, gateway)).toMatchObject({ theme: 'custom', customTheme: { accent: '#123456' }, startupView: remote.startupView });
   });
 });

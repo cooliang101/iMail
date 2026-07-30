@@ -36,6 +36,7 @@
 1. `src/theme.ts`：生成 Fluent UI 的 `Theme`，只维护 Fluent 品牌色阶和基础字体。
 2. `src/theme.css`：产品主题 token，是颜色、排版、间距、形状、阴影、动效、层级和布局尺寸的唯一入口。
 3. `src/styles.css`：组件和响应式规则，只消费语义 token，不定义主题。
+4. `src/features/appearance/theme-runtime.ts`：仅为经过校验的 `custom` 主题派生 Fluent 色阶与语义 CSS token。
 
 `main.tsx` 必须先导入 `theme.css`，再导入 `styles.css`。`AppThemeProvider` 同时切换根 `FluentProvider` 品牌色和 `data-theme` 语义 token；不要在业务组件中判断主题并切换 class。
 
@@ -47,8 +48,11 @@
 | `tech` | 霓虹终端 | 冷白、深墨青、青色信号光、细网格与利落几何 |
 | `business-blue` | 深海蓝图 | 海军蓝、清晰操作层级和克制阴影 |
 | `soft-neubrutalism` | 柔和撞色 | 奶油底、粉彩、深色描边和轻微错位阴影 |
+| `custom` | 自定义主题 | 用户提供安全颜色令牌和受限形态枚举，运行时派生完整视觉变量 |
 
-主题元数据与安全归一化放在 `src/features/appearance/theme-model.ts`，Fluent 色阶放在 `src/theme.ts`，完整 CSS token 契约放在 `src/theme.css`。新增主题必须同时补齐这三处，并为无效或已移除的主题 ID 保留安全回退。
+主题元数据与安全归一化放在 `src/features/appearance/theme-model.ts`，内置 Fluent 色阶放在 `src/theme.ts`，完整 CSS token 契约放在 `src/theme.css`。新增内置主题必须同时补齐这三处，并为无效或已移除的主题 ID 保留安全回退。
+
+自定义主题是受限数据协议，不是 CSS 编辑器。输入只允许 `docs/custom-theme.md` 定义的九个 `#RRGGBB` 颜色和三个形态枚举；客户端与 MCP 分别校验，`theme-runtime.ts` 再派生中性色、品牌色、圆角和阴影。禁止把任意 CSS、渐变、URL、透明色或脚本加入这一协议。
 
 ### Token 分层
 

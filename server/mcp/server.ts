@@ -12,6 +12,7 @@ import type { Draft, MailAccount, MailSettings, ProviderId } from '../types.js';
 import { getSyncStore } from '../sync/store.js';
 import { canonicalSyncTarget } from '../mail/mailbox-role.js';
 import { appPreferencesUpdateSchema, readAppPreferences, updateAppPreferences } from '../preferences.js';
+import { customThemeSchema, readMcpCustomTheme, updateMcpCustomTheme } from './custom-theme.js';
 
 const providerSchema = z.enum(['outlook', 'gmail', 'qq', 'yahoo', 'hotmail', 'icloud', 'custom']);
 const mailboxRoleSchema = z.enum(['inbox', 'sent', 'archive', 'drafts', 'trash', 'junk', 'custom']);
@@ -72,6 +73,16 @@ export function createMailMcpServer() {
     title: '更新 iMail 设置', description: '更新主题、启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。',
     inputSchema: appPreferencesUpdateSchema, annotations: { idempotentHint: true },
   }, async (changes) => output({ preferences: await updateAppPreferences(changes) }));
+
+  server.registerTool('theme_custom_get', {
+    title: '读取自定义主题', description: '读取当前应用账号由 MCP 保存的安全自定义主题令牌，可复制到 iMail 自定义主题编辑器中。',
+    inputSchema: z.object({}), annotations: { readOnlyHint: true, idempotentHint: true },
+  }, async () => output({ theme: await readMcpCustomTheme() }));
+
+  server.registerTool('theme_custom_update', {
+    title: '保存自定义主题', description: '校验并保存颜色、圆角、阴影和字体令牌；不接受 CSS、URL 或可执行内容，也不经过 HTTP 网关。',
+    inputSchema: customThemeSchema, annotations: { idempotentHint: true },
+  }, async (theme) => output({ theme: await updateMcpCustomTheme(theme) }));
 
   server.registerTool('accounts_list', {
     title: '列出邮箱账户', description: '列出所有邮箱账户、连接状态和文件夹，不返回任何凭据。',

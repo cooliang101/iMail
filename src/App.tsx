@@ -13,14 +13,14 @@ import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceModal } from './f
 import { CreateApiTokenModal, CreateMcpTokenModal, TokenWorkspace } from './features/developer';
 import { isBrowserRefreshShortcut, isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKeyFor } from './features/shortcuts';
 import { AppContextMenu } from './features/context-menu';
-import { loadAppPreferences, preferencesStorageKeyFor, SettingsModal, type SettingsTab } from './features/settings';
+import { gatewayPreferencesPayload, loadAppPreferences, mergeGatewayPreferences, preferencesStorageKeyFor, SettingsModal, type GatewayPreferences, type SettingsTab } from './features/settings';
 import { useAuth } from './features/auth';
 import { useAppTheme } from './features/appearance';
 
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
 function App() {
   const { user, logout } = useAuth();
-  const { setThemeId } = useAppTheme();
+  const { setTheme } = useAppTheme();
   const [realAccounts, setRealAccounts] = useState<Account[]>([]);
   const [realMessages, setRealMessages] = useState<Message[]>([]);
   const [tokens, setTokens] = useState<DeveloperToken[]>([]);
@@ -96,12 +96,14 @@ function App() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { setThemeId(preferences.theme); }, [preferences.theme]);
+  useEffect(() => { setTheme(preferences.theme, preferences.customTheme); }, [preferences.customTheme, preferences.theme]);
   useEffect(() => {
-    void api<{ preferences: AppPreferences }>('/api/preferences').then((result) => {
-      setPreferences(result.preferences); setShortcutBindings(result.preferences.shortcutBindings); setView(result.preferences.startupView);
-      localStorage.setItem(localPreferencesKey, JSON.stringify(result.preferences));
-      localStorage.setItem(localShortcutsKey, JSON.stringify(result.preferences.shortcutBindings));
+    void api<{ preferences: GatewayPreferences }>('/api/preferences').then((result) => {
+      const local = loadAppPreferences(localStorage, localPreferencesKey);
+      const merged = mergeGatewayPreferences(local, result.preferences);
+      setPreferences(merged); setShortcutBindings(merged.shortcutBindings); setView(merged.startupView);
+      localStorage.setItem(localPreferencesKey, JSON.stringify(merged));
+      localStorage.setItem(localShortcutsKey, JSON.stringify(merged.shortcutBindings));
     }).catch(() => undefined);
   }, []);
   useEffect(() => { realAccountsRef.current = realAccounts; }, [realAccounts]);
@@ -345,11 +347,12 @@ function App() {
     setPreferences(next);
     localStorage.setItem(localPreferencesKey, JSON.stringify(next));
     preferencesSaveQueue.current = preferencesSaveQueue.current.then(async () => {
-      const result = await api<{ preferences: AppPreferences }>('/api/preferences', { method: 'PATCH', body: JSON.stringify(next) });
-      setPreferences(result.preferences);
-      setShortcutBindings(result.preferences.shortcutBindings);
-      localStorage.setItem(localPreferencesKey, JSON.stringify(result.preferences));
-      localStorage.setItem(localShortcutsKey, JSON.stringify(result.preferences.shortcutBindings));
+      const result = await api<{ preferences: GatewayPreferences }>('/api/preferences', { method: 'PATCH', body: JSON.stringify(gatewayPreferencesPayload(next)) });
+      const merged = mergeGatewayPreferences(next, result.preferences);
+      setPreferences(merged);
+      setShortcutBindings(merged.shortcutBindings);
+      localStorage.setItem(localPreferencesKey, JSON.stringify(merged));
+      localStorage.setItem(localShortcutsKey, JSON.stringify(merged.shortcutBindings));
     }).catch((error) => {
       setNotice({ kind: 'error', text: error instanceof Error ? `设置已保存在本机，但服务端同步失败：${error.message}` : '设置已保存在本机，但服务端同步失败' });
     });

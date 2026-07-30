@@ -135,7 +135,7 @@ describe('iMail HTTP API', () => {
     const listed = await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     const toolNames = listed.body.result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toEqual(expect.arrayContaining([
-      'settings_get', 'settings_update', 'accounts_list', 'account_add_with_code', 'account_start_oauth', 'account_update_authorization_code', 'account_remove',
+      'settings_get', 'settings_update', 'theme_custom_get', 'theme_custom_update', 'accounts_list', 'account_add_with_code', 'account_start_oauth', 'account_update_authorization_code', 'account_remove',
       'mailbox_sync', 'sync_policy_get', 'sync_policy_update', 'messages_list', 'message_get', 'message_update', 'message_move', 'message_send', 'attachment_download',
       'drafts_list', 'draft_get', 'draft_save', 'draft_delete', 'labels_list', 'notifications_list',
     ]));
@@ -151,6 +151,16 @@ describe('iMail HTTP API', () => {
     expect(settingsUpdated.body.result.structuredContent.preferences).toMatchObject({ theme: 'soft-neubrutalism', defaultMessageView: 'rendered', notificationKinds: { unread: false, snooze: true, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
     const settingsRead = await mcp({ jsonrpc: '2.0', id: 34, method: 'tools/call', params: { name: 'settings_get', arguments: {} } });
     expect(settingsRead.body.result.structuredContent.preferences).toEqual(settingsUpdated.body.result.structuredContent.preferences);
+    const customTheme = {
+      name: 'Agent Ocean', canvas: '#edf3f7', surface: '#ffffff', surfaceSubtle: '#f2f7fa', rail: '#13293d', text: '#17212b',
+      textSecondary: '#5d6b78', border: '#cad7e0', accent: '#168aad', accentSubtle: '#dff3f8', radius: 'rounded', shadow: 'soft', typography: 'technical',
+    };
+    const themeUpdated = await mcp({ jsonrpc: '2.0', id: 35, method: 'tools/call', params: { name: 'theme_custom_update', arguments: customTheme } });
+    expect(themeUpdated.body.result.structuredContent.theme).toEqual(customTheme);
+    const themeRead = await mcp({ jsonrpc: '2.0', id: 36, method: 'tools/call', params: { name: 'theme_custom_get', arguments: {} } });
+    expect(themeRead.body.result.structuredContent.theme).toEqual(customTheme);
+    const gatewayPreferences = await request('/api/preferences');
+    expect(gatewayPreferences.body.preferences).not.toHaveProperty('customTheme');
 
     await updateStore((data) => { data.messages = [{
       id: 'mcp-message', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 42,
