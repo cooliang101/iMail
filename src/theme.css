@@ -1,0 +1,159 @@
+/*
+ * iMail design tokens. Components consume semantic tokens; primitive tokens are
+ * the only values that should change during a visual refresh. See
+ * docs/style-system.md before adding or changing a token.
+ */
+:root,
+[data-theme='imail-light'] {
+  color-scheme: light;
+
+  /* Typography */
+  --font-family-ui: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-family-display: 'Segoe UI Variable Display', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-family-mono: 'Cascadia Code', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --font-size-1: 0.6875rem;
+  --font-size-2: 0.75rem;
+  --font-size-3: 0.8125rem;
+  --font-size-4: 0.875rem;
+  --font-size-5: 1rem;
+  --font-size-6: 1.125rem;
+  --font-size-7: 1.375rem;
+  --font-size-8: clamp(1.75rem, 2.5vw, 2.25rem);
+  --line-height-tight: 1.2;
+  --line-height-compact: 1.35;
+  --line-height-body: 1.6;
+  --line-height-reading: 1.75;
+  --letter-spacing-heading: -0.035em;
+  --letter-spacing-label: 0.06em;
+
+  /* Spacing: 4px base rhythm */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Shape */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.4375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1rem;
+  --radius-round: 999px;
+
+  /* Brand primitives */
+  --brand-10: #061b17;
+  --brand-20: #0b2b24;
+  --brand-30: #0d4035;
+  --brand-40: #105646;
+  --brand-50: #126c58;
+  --brand-60: #14826a;
+  --brand-70: #168f78;
+  --brand-80: #2aa089;
+  --brand-90: #45b09b;
+  --brand-100: #64c0ad;
+  --brand-110: #83cfbe;
+  --brand-120: #a2ddcf;
+  --brand-130: #c0e9df;
+  --brand-140: #d9f2ec;
+  --brand-150: #edf8f5;
+  --brand-160: #f8fcfb;
+
+  /* Neutral primitives: one cool green-gray family */
+  --neutral-0: #ffffff;
+  --neutral-10: #fbfdfc;
+  --neutral-20: #f7faf9;
+  --neutral-30: #edf3f1;
+  --neutral-40: #e4ece9;
+  --neutral-50: #dce6e3;
+  --neutral-60: #b9ccc6;
+  --neutral-70: #91a09c;
+  --neutral-80: #70807c;
+  --neutral-90: #52645f;
+  --neutral-100: #384944;
+  --neutral-110: #243630;
+  --neutral-120: #182421;
+
+  /* Semantic color contract */
+  --color-canvas: var(--neutral-30);
+  --color-surface: var(--neutral-10);
+  --color-surface-subtle: var(--neutral-20);
+  --color-surface-raised: var(--neutral-0);
+  --color-surface-sunken: #f0f5f3;
+  --color-rail: #10231f;
+  --color-text: var(--neutral-120);
+  --color-text-strong: #17241f;
+  --color-text-secondary: var(--neutral-80);
+  --color-text-tertiary: var(--neutral-70);
+  --color-text-inverse: #f5fffc;
+  --color-border: var(--neutral-50);
+  --color-border-strong: var(--neutral-60);
+  --color-accent: var(--brand-70);
+  --color-accent-hover: var(--brand-60);
+  --color-accent-pressed: var(--brand-50);
+  --color-accent-subtle: #e2f2ee;
+  --color-accent-subtle-hover: #e8f1ee;
+  --color-focus: var(--brand-90);
+  --color-focus-ring: rgb(69 170 148 / 9%);
+  --color-info: #4f7f93;
+  --color-info-subtle: #eaf2f5;
+  --color-warning: #a9782f;
+  --color-warning-subtle: #f8f0df;
+  --color-danger: #ad6258;
+  --color-danger-strong: #923c34;
+  --color-danger-subtle: #faece9;
+  --color-success: #21816b;
+  --color-success-subtle: #e6f4f0;
+
+  /* Identity colors are intentionally separate from the UI accent. */
+  --color-provider-outlook: #1677b8;
+  --color-provider-yahoo: #7650a8;
+  --color-workspace-coral: #db7965;
+  --color-workspace-indigo: #6579ce;
+  --color-workspace-amber: #ca963e;
+
+  /* Elevation, motion and layering */
+  --shadow-sm: 0 5px 18px rgb(23 60 50 / 8%);
+  --shadow-md: 0 16px 38px rgb(23 54 46 / 14%);
+  --shadow-lg: 0 24px 70px rgb(15 41 35 / 29%);
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --z-base: 0;
+  --z-sticky: 5;
+  --z-dropdown: 10;
+  --z-sidebar: 20;
+  --z-overlay: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+
+  /* Application geometry */
+  --layout-account-rail: 4.5rem;
+  --layout-sidebar: 14.75rem;
+  --layout-message-list: 24.375rem;
+  --layout-topbar: 3.875rem;
+  --layout-shell-gap: 0.5625rem;
+  --content-reading-width: 50rem;
+
+  /* Temporary aliases for existing selectors. Do not use in new CSS. */
+  --accent: var(--color-accent);
+  --accent-dark: var(--color-accent-pressed);
+  --accent-soft: var(--color-accent-subtle);
+  --ink: var(--color-text);
+  --muted: var(--color-text-secondary);
+  --line: var(--color-border);
+  --surface: var(--color-surface);
+  --radius: var(--radius-lg);
+  --text-caption: var(--font-size-1);
+  --text-secondary: var(--font-size-2);
+  --text-control: var(--font-size-3);
+  --text-body: var(--font-size-4);
+  --leading-compact: var(--line-height-compact);
+  --leading-copy: var(--line-height-body);
+}

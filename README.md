@@ -297,7 +297,7 @@ server/providers.ts  服务商预设
 .data/               本地数据与密钥，不进入 Git
 ```
 
-详细的服务端模块边界见 [`server/README.md`](server/README.md)。
+详细的服务端模块边界见 [`server/README.md`](server/README.md)。界面主题、排版、布局、响应式与新增样式的维护规则见 [`docs/style-system.md`](docs/style-system.md)。
 
 ## 品牌素材
 
