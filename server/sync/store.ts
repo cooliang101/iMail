@@ -153,9 +153,14 @@ export class SyncStore {
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
     const mailboxRole = input.mailboxRole ?? 'inbox';
+    const priority = input.priority ?? 0;
+    const notBefore = input.notBefore ?? now;
     this.db.prepare(`INSERT OR IGNORE INTO sync_jobs
       (id, account_id, mailbox, mailbox_role, reason, status, priority, not_before, attempts, created_at)
-      VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 0, ?)`).run(id, input.accountId, input.mailbox ?? null, mailboxRole, input.reason, input.priority ?? 0, input.notBefore ?? now, now);
+      VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 0, ?)`).run(id, input.accountId, input.mailbox ?? null, mailboxRole, input.reason, priority, notBefore, now);
+    this.db.prepare(`UPDATE sync_jobs SET priority = max(priority, ?), not_before = min(not_before, ?)
+      WHERE account_id = ? AND coalesce(mailbox, '') = coalesce(?, '') AND mailbox_role = ? AND status = 'queued'`)
+      .run(priority, notBefore, input.accountId, input.mailbox ?? null, mailboxRole);
     const row = this.db.prepare(`SELECT * FROM sync_jobs WHERE account_id = ? AND coalesce(mailbox, '') = coalesce(?, '') AND mailbox_role = ?
       AND status IN ('queued', 'running') ORDER BY created_at LIMIT 1`).get(input.accountId, input.mailbox ?? null, mailboxRole) as Row | undefined;
     if (!row) throw new Error('无法创建同步任务');

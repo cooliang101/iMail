@@ -157,8 +157,13 @@ describe('iMail HTTP API', () => {
     expect(updated.body.policy).toMatchObject({ accountId: account.id, intervalMinutes: 15, folderMode: 'standard' });
     const queued = await request(`/api/accounts/${account.id}/sync`, { method: 'POST' });
     expect(queued.body).toMatchObject({ queued: true, synced: 0, jobId: expect.any(String) });
+    const duplicate = await request(`/api/accounts/${account.id}/mailboxes/sync`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mailbox: 'INBOX' }),
+    });
+    expect(duplicate.body.jobId).toBe(queued.body.jobId);
     const status = await request('/api/sync-status');
     expect(status.body.accounts[0]).toMatchObject({ accountId: account.id, policy: { intervalMinutes: 15 }, jobs: [{ id: queued.body.jobId, status: 'queued', reason: 'manual' }] });
+    expect(status.body.accounts[0].jobs).toHaveLength(1);
     expect(JSON.stringify(status.body)).not.toContain(account.encryptedSecret);
   });
 

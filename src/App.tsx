@@ -6,12 +6,12 @@ import type { Account, Contact, DeveloperToken, Draft, MailboxRole, Message } fr
 import type { ContextTarget, MailNotification, Notice, ShortcutBindings, WorkspaceFolder } from './app-model';
 import { AccountProviderMark, ProviderIcon, providerLabel } from './components/shared';
 import { AppInput } from './components/form-controls';
-import { VirtualMessageList, MessageReader } from './features/mail';
+import { VirtualMessageList, MessageReader, reconcileMessageCache } from './features/mail';
 import { AddAccountModal, AccountSettingsModal } from './features/accounts';
 import { ComposePane, DraftWorkspace, type ComposePaneHandle } from './features/compose';
 import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceFolderItem, WorkspaceIcon, WorkspaceModal } from './features/organize';
 import { CreateApiTokenModal, CreateMcpTokenModal, TokenWorkspace } from './features/developer';
-import { isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKey, ShortcutSettingsModal } from './features/shortcuts';
+import { isBrowserRefreshShortcut, isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKey, ShortcutSettingsModal } from './features/shortcuts';
 import { AppContextMenu } from './features/context-menu';
 
 type View = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'folder' | 'drafts' | 'tokens';
@@ -64,6 +64,8 @@ function App() {
   const [messageRevision, setMessageRevision] = useState(0);
   const [messageStats, setMessageStats] = useState<MessageStats>({ total: 0, unread: 0, byAccount: [], byGroup: [] });
   const messageQueryRef = useRef('');
+  const realMessagesRef = useRef<Message[]>([]);
+  const implicitSelectedIdRef = useRef<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const folderDiscoveryStarted = useRef(false);
   const composePaneRef = useRef<ComposePaneHandle | null>(null);
@@ -93,16 +95,7 @@ function App() {
   }
 
   useEffect(() => { void load(); }, []);
-  useEffect(() => {
-    const refresh = () => { void load(); setMessageRevision((value) => value + 1); };
-    const events = new EventSource('/api/events');
-    events.addEventListener('sync.completed', refresh);
-    events.addEventListener('message.created', refresh);
-    const onVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
-    document.addEventListener('visibilitychange', onVisibility);
-    const fallback = window.setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 30_000);
-    return () => { events.close(); document.removeEventListener('visibilitychange', onVisibility); window.clearInterval(fallback); };
-  }, []);
+  useEffect(() => { realMessagesRef.current = realMessages; }, [realMessages]);
   useEffect(() => {
     if (folderDiscoveryStarted.current || accounts.length === 0 || accounts.some((account) => account.mailboxes.length > 0)) return;
     folderDiscoveryStarted.current = true;
@@ -145,7 +138,47 @@ function App() {
     if (mailFilter === 'attachments') params.set('hasAttachments', 'true');
     return params.toString();
   }, [accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox]);
-  const selected = messages.find((message) => message.id === selectedId) ?? messages[0];
+  messageQueryRef.current = messageQuery;
+  useEffect(() => {
+    let refreshTimer: number | undefined;
+    let refreshing = false;
+    let refreshAgain = false;
+    const scheduleRefresh = () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => { refreshTimer = undefined; void refreshSilently(); }, 800);
+    };
+    const refreshSilently = async () => {
+      if (refreshing) { refreshAgain = true; return; }
+      refreshing = true;
+      const query = messageQueryRef.current;
+      try {
+        const [result, stats] = await Promise.all([
+          api<MessagePage>(`/api/messages?${query}&limit=${Math.max(60, realMessagesRef.current.length)}&offset=0`),
+          api<MessageStats>('/api/message-stats'),
+        ]);
+        if (messageQueryRef.current !== query) return;
+        setRealMessages((current) => reconcileMessageCache(current, result.messages));
+        setMessageTotal(result.total);
+        setMessagesHasMore(result.hasMore);
+        setMessageStats((current) => JSON.stringify(current) === JSON.stringify(stats) ? current : stats);
+      } catch {
+        // Background reconciliation must never interrupt or reset the current view.
+      } finally {
+        refreshing = false;
+        if (refreshAgain) { refreshAgain = false; scheduleRefresh(); }
+      }
+    };
+    const events = new EventSource('/api/events');
+    events.addEventListener('sync.completed', scheduleRefresh);
+    events.addEventListener('message.created', scheduleRefresh);
+    const onVisibility = () => { if (document.visibilityState === 'visible') scheduleRefresh(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      events.close(); document.removeEventListener('visibilitychange', onVisibility);
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+    };
+  }, []);
+  const selected = messages.find((message) => message.id === (selectedId ?? implicitSelectedIdRef.current)) ?? messages[0];
   const selectedIndex = selected ? messages.findIndex((message) => message.id === selected.id) : -1;
   const activeAccount = accountFilter === 'all' ? undefined : accounts.find((account) => account.id === accountFilter);
   const visibleMessages = mailFilter === 'unread' ? messages.filter((message) => message.unread) : messages;
@@ -157,6 +190,7 @@ function App() {
       setMessagesLoading(true);
       void api<MessagePage>(`/api/messages?${messageQuery}&limit=60&offset=0`).then((result) => {
         if (cancelled) return;
+        implicitSelectedIdRef.current = result.messages[0]?.id ?? null;
         setRealMessages(result.messages); setMessageTotal(result.total); setMessagesHasMore(result.hasMore); setSelectedId(null);
       }).catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件缓存加载失败' }); })
         .finally(() => { if (!cancelled) { setMessagesLoading(false); setReady(true); } });
@@ -167,9 +201,8 @@ function App() {
   useEffect(() => {
     if ((view !== 'sent' && view !== 'archive') || accounts.length === 0) return;
     let cancelled = false; setSyncing(true);
-    void api(`/api/mailboxes/${view}/sync`, { method: 'POST' }).then(() => {
-      if (!cancelled) { void load(); setMessageRevision((value) => value + 1); }
-    }).catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
+    void api(`/api/mailboxes/${view}/sync`, { method: 'POST' })
+      .catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
       .finally(() => { if (!cancelled) setSyncing(false); });
     return () => { cancelled = true; };
   }, [view]);
@@ -177,9 +210,8 @@ function App() {
   useEffect(() => {
     if (view !== 'folder' || !activeMailbox) return;
     let cancelled = false; setSyncing(true);
-    void Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) }))).then(() => {
-      if (!cancelled) { void load(); setMessageRevision((value) => value + 1); }
-    }).catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
+    void Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) })))
+      .catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
       .finally(() => { if (!cancelled) setSyncing(false); });
     return () => { cancelled = true; };
   }, [view, activeMailbox]);
@@ -377,6 +409,7 @@ function App() {
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || addOpen || tokenOpen || settingsOpen || notificationsOpen || labelOpen || snoozeOpen || workspaceOpen !== undefined || shortcutSettingsOpen) return;
+      if (isBrowserRefreshShortcut(event)) return;
       const definition = shortcutDefinitions.find(({ id }) => shortcutMatches(event, shortcutBindings[id]));
       if (!definition) return;
       if (isEditableShortcutTarget(event.target) && definition.id !== 'focusSearch' && definition.id !== 'openShortcutSettings') return;

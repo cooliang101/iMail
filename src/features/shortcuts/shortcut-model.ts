@@ -18,7 +18,7 @@ export const shortcutDefinitions: Array<{ id: ShortcutActionId; label: string; d
 ];
 
 export const defaultShortcutBindings: ShortcutBindings = {
-  focusSearch: 'Mod+K', compose: 'C', sync: 'Mod+R', nextMessage: 'J', previousMessage: 'K', reply: 'R', forward: 'F',
+  focusSearch: 'Mod+K', compose: 'C', sync: '', nextMessage: 'J', previousMessage: 'K', reply: 'R', forward: 'F',
   toggleStar: 'S', markUnread: 'U', archive: 'E', delete: 'Shift+#', openShortcutSettings: 'Mod+/',
 };
 
@@ -35,6 +35,10 @@ export function shortcutMatches(event: KeyboardLike, binding: string) {
   return Boolean(binding) && shortcutFromEvent(event) === binding;
 }
 
+export function isBrowserRefreshShortcut(event: KeyboardLike) {
+  return (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLocaleLowerCase() === 'r';
+}
+
 export function shortcutLabel(binding: string) {
   if (!binding) return '未设置';
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -44,7 +48,10 @@ export function shortcutLabel(binding: string) {
 export function loadShortcutBindings(storage: Pick<Storage, 'getItem'> = localStorage): ShortcutBindings {
   try {
     const saved = JSON.parse(storage.getItem(shortcutStorageKey) ?? '{}') as Partial<Record<ShortcutActionId, unknown>>;
-    return Object.fromEntries(shortcutDefinitions.map(({ id }) => [id, typeof saved[id] === 'string' ? saved[id] : defaultShortcutBindings[id]])) as ShortcutBindings;
+    return Object.fromEntries(shortcutDefinitions.map(({ id }) => {
+      const binding = typeof saved[id] === 'string' ? saved[id] : defaultShortcutBindings[id];
+      return [id, id === 'sync' && binding === 'Mod+R' ? '' : binding];
+    })) as ShortcutBindings;
   } catch {
     return { ...defaultShortcutBindings };
   }
