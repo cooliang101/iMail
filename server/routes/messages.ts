@@ -105,7 +105,9 @@ messagesRouter.patch('/messages/:id', asyncRoute(async (req, res) => {
     if (!updated) throw new Error('邮件不存在');
     Object.assign(updated, input, { snoozedUntil: input.snoozedUntil ?? undefined });
   });
-  res.json({ message: updated });
+  const data = await readStore();
+  const logo = (data.contacts ?? []).find((contact) => contact.address.toLocaleLowerCase() === updated!.from.address.toLocaleLowerCase())?.logo;
+  res.json({ message: { ...updated!, from: contactView({ ...updated!.from, logo }) } });
 }));
 
 messagesRouter.post('/messages/:id/move', asyncRoute(async (req, res) => {
@@ -119,7 +121,9 @@ messagesRouter.post('/messages/:id/move', asyncRoute(async (req, res) => {
     if (result.uid) moved.uid = result.uid;
     moved.snoozedUntil = undefined;
   });
-  res.json({ message: moved, destination, mailbox: result.mailbox });
+  const data = await readStore();
+  const logo = (data.contacts ?? []).find((contact) => contact.address.toLocaleLowerCase() === moved!.from.address.toLocaleLowerCase())?.logo;
+  res.json({ message: { ...moved!, from: contactView({ ...moved!.from, logo }) }, destination, mailbox: result.mailbox });
 }));
 
 messagesRouter.get('/messages/:id/attachments/:index', asyncRoute(async (req, res) => {

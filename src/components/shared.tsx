@@ -34,12 +34,13 @@ export function initials(value: string) {
   return (parts.length > 1 ? parts.map((part) => part[0]).join('') : value.slice(0, 2)).toUpperCase();
 }
 
-export function SenderAvatar({ logo, name, color, large = false }: { logo: ContactLogo; name: string; color: string; large?: boolean }) {
+export function SenderAvatar({ logo, name, color, large = false }: { logo?: ContactLogo; name: string; color: string; large?: boolean }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => { setFailed(false); }, [logo.url]);
+  const logoUrl = logo?.url;
+  useEffect(() => { setFailed(false); }, [logoUrl]);
   return <span className={`sender-avatar ${large ? 'large' : ''}`} style={{ '--avatar-color': color } as CSSProperties}>
     {initials(name)}
-    {!failed && <img src={logo.url} alt="" loading="lazy" onError={() => setFailed(true)} />}
+    {logoUrl && !failed && <img src={logoUrl} alt="" loading="lazy" onError={() => setFailed(true)} />}
   </span>;
 }
 

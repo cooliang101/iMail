@@ -234,6 +234,7 @@ describe('iMail HTTP API', () => {
     });
     expect(markedRead.response.status).toBe(200);
     expect(markedRead.body.message).toMatchObject({ id: 'message-lazy', unread: false });
+    expect(markedRead.body.message.from.logo.url).toBe('/api/contacts/logo?address=sender%40example.com');
     expect((await request('/api/message-stats')).body).toMatchObject({ total: 1, unread: 0, byAccount: [{ accountId: account.id, total: 1, unread: 0 }] });
     expect((await request('/api/messages?unread=true&limit=10&offset=0')).body).toMatchObject({ total: 0, messages: [] });
     const archived = await request('/api/messages/message-lazy/move', {
@@ -241,6 +242,7 @@ describe('iMail HTTP API', () => {
     });
     expect(archived.response.status).toBe(200);
     expect(archived.body).toMatchObject({ destination: 'archive', mailbox: 'Archive', message: { id: 'message-lazy' } });
+    expect(archived.body.message.from.logo.url).toBe('/api/contacts/logo?address=sender%40example.com');
     expect((await request('/api/messages/message-lazy')).body.message).toMatchObject({ mailbox: 'Archive', mailboxRole: 'archive' });
     expect((await request('/api/messages?mailboxRole=archive')).body).toMatchObject({ total: 1, messages: [{ id: 'message-lazy', mailboxRole: 'archive' }] });
     expect((await request('/api/message-stats')).body).toMatchObject({ total: 0, unread: 0 });
@@ -276,6 +278,7 @@ describe('iMail HTTP API', () => {
     await updateStore((data) => { data.messages = [{ id: 'organize-me', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 10, from: { name: 'Sender', address: 'sender@example.com' }, to: [], subject: 'Organize', preview: '', text: 'Body', date: '2026-07-29T00:00:00.000Z', unread: true, flagged: false, hasAttachments: false, attachments: [], labels: [] }]; });
     const organized = await request('/api/messages/organize-me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ labels: ['客户'], snoozedUntil: '2999-01-01T09:00:00.000Z' }) });
     expect(organized.body.message).toMatchObject({ labels: ['客户'], snoozedUntil: '2999-01-01T09:00:00.000Z' });
+    expect(organized.body.message.from.logo.url).toBe('/api/contacts/logo?address=sender%40example.com');
     expect((await request('/api/labels')).body.labels).toEqual(['客户']);
     expect((await request('/api/messages?mailboxRole=inbox')).body.total).toBe(0);
     expect((await request('/api/messages?mailboxRole=inbox&snoozed=true')).body.messages[0].id).toBe('organize-me');

@@ -8,13 +8,18 @@ import { readStore, updateStore } from './store.js';
 import type { CachedMessage } from './types.js';
 
 type CachedLogo = { contentType: string; sourceUrl: string; fetchedAt: string };
-type MissingLogo = { unavailableAt: string };
+type MissingLogo = { unavailableAt: string; version?: number; permanent?: boolean };
 export type LogoResult = { content: Buffer; contentType: string; sourceUrl: string; fetchedAt: string; key: string };
 type LogoSource = Pick<CachedMessage, 'from' | 'html' | 'text'>;
 
+const PERMANENT_FAILURE = Symbol('permanent-logo-failure');
 const pending = new Map<string, Promise<void>>();
 const MAX_HTML_BYTES = 512 * 1024;
 const MAX_IMAGE_BYTES = 1024 * 1024;
+const FAILURE_CACHE_TTL_MS = 24 * 60 * 60_000;
+const NEGATIVE_CACHE_VERSION = 3;
+
+class PermanentLogoFailure extends Error {}
 
 function cacheDirectory() {
   return path.join(path.resolve(process.env.IMAIL_DATA_DIR ?? '.data'), 'sender-logos');
@@ -69,10 +74,17 @@ async function safeFetch(initialUrl: URL, accepts: string, signal: AbortSignal, 
       current = new URL(location, current);
       continue;
     }
+    if (isCloudflareForbidden(response)) throw new PermanentLogoFailure('Cloudflare 返回 403，停止重试');
     if (!response.ok) throw new Error(`远程请求失败：${response.status}`);
     return response;
   }
   throw new Error('重定向过多');
+}
+
+function isCloudflareForbidden(response: Response) {
+  return response.status === 403 && (response.headers.has('cf-ray')
+    || response.headers.has('cf-mitigated')
+    || response.headers.get('server')?.toLocaleLowerCase().includes('cloudflare') === true);
 }
 
 async function readLimited(response: Response, limit: number) {
@@ -122,6 +134,7 @@ function siteCandidates(message: LogoSource) {
   if (domain) {
     urls.push(new URL(`https://${domain.hostname}`));
     if (domain.hostname !== domain.registrable) urls.push(new URL(`https://${domain.registrable}`));
+    urls.push(new URL(`https://www.${domain.registrable}`));
   }
   return [...new Map(urls.map((url) => [url.origin, url])).values()].slice(0, 8);
 }
@@ -142,34 +155,49 @@ function isChallengePage(html: string) {
   return /(?:<title>\s*(?:just a moment|attention required[^<]*cloudflare)|cdn-cgi\/challenge-platform|cf-browser-verification|\bcf-chl-)/i.test(html);
 }
 
-async function fetchLogo(message: LogoSource): Promise<LogoResult | null> {
-  const signal = AbortSignal.timeout(10_000);
+async function fetchLogo(message: LogoSource): Promise<LogoResult | typeof PERMANENT_FAILURE | null> {
   const domainKey = senderKey(message);
-  const attempted = new Set((await readStore()).logoFetchAttempts?.map((item) => item.target) ?? []);
+  const attempted = new Set((await readStore()).logoFetchAttempts
+    ?.filter((item) => item.status === 'success' || (isFreshFailure(item.attemptedAt) && !/^远程请求失败：403$/.test(item.detail)))
+    .map((item) => item.target) ?? []);
   for (const site of siteCandidates(message)) {
     const target = site.origin.toLocaleLowerCase();
     if (attempted.has(target)) continue;
     let detail = '未找到有效的网站图标';
+    let iconUrls = [new URL('/favicon.ico', site)];
     try {
-      const page = await safeFetch(site, 'text/html,application/xhtml+xml', signal);
+      const page = await safeFetch(site, 'text/html,application/xhtml+xml', AbortSignal.timeout(10_000));
       const contentType = page.headers.get('content-type') ?? '';
       if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) throw new Error('网站未返回 HTML');
       const html = (await readLimited(page, MAX_HTML_BYTES)).toString('utf8');
       if (isChallengePage(html)) throw new Error('网站返回了访问验证页');
-      for (const iconUrl of discoverIcons(html, new URL(page.url || site.href))) {
-        try {
-          const icon = await safeFetch(iconUrl, 'image/png,image/jpeg,image/webp,image/gif,image/x-icon', signal);
-          const content = await readLimited(icon, MAX_IMAGE_BYTES);
-          const detected = imageType(content);
-          if (detected) {
-            const result = { content, contentType: detected, sourceUrl: icon.url || iconUrl.href, fetchedAt: new Date().toISOString(), key: `domain:${site.hostname.toLocaleLowerCase()}` };
-            await recordAttempt(target, domainKey, 'success', result.sourceUrl);
-            return result;
-          }
-          detail = '图标内容不是受支持的图片格式';
-        } catch (error) { detail = errorMessage(error); }
+      iconUrls = discoverIcons(html, new URL(page.url || site.href));
+    } catch (error) {
+      detail = errorMessage(error);
+      if (error instanceof PermanentLogoFailure) {
+        await recordAttempt(target, domainKey, 'failed', detail);
+        return PERMANENT_FAILURE;
       }
-    } catch (error) { detail = errorMessage(error); }
+    }
+    for (const iconUrl of iconUrls) {
+      try {
+        const icon = await safeFetch(iconUrl, 'image/png,image/jpeg,image/webp,image/gif,image/x-icon', AbortSignal.timeout(10_000));
+        const content = await readLimited(icon, MAX_IMAGE_BYTES);
+        const detected = imageType(content);
+        if (detected) {
+          const result = { content, contentType: detected, sourceUrl: icon.url || iconUrl.href, fetchedAt: new Date().toISOString(), key: `domain:${site.hostname.toLocaleLowerCase()}` };
+          await recordAttempt(target, domainKey, 'success', result.sourceUrl);
+          return result;
+        }
+        detail = '图标内容不是受支持的图片格式';
+      } catch (error) {
+        detail = errorMessage(error);
+        if (error instanceof PermanentLogoFailure) {
+          await recordAttempt(target, domainKey, 'failed', detail);
+          return PERMANENT_FAILURE;
+        }
+      }
+    }
     await recordAttempt(target, domainKey, 'failed', detail);
     attempted.add(target);
   }
@@ -184,24 +212,31 @@ async function recordAttempt(target: string, domainKey: string, status: 'success
   const attemptedAt = new Date().toISOString();
   await updateStore((data) => {
     data.logoFetchAttempts ??= [];
-    if (!data.logoFetchAttempts.some((item) => item.target === target)) data.logoFetchAttempts.push({ target, domainKey, status, detail, attemptedAt });
+    const existing = data.logoFetchAttempts.find((item) => item.target === target);
+    if (existing) Object.assign(existing, { domainKey, status, detail, attemptedAt });
+    else data.logoFetchAttempts.push({ target, domainKey, status, detail, attemptedAt });
   });
   console.info(`[sender-logo] ${status} target=${target} domain=${domainKey} detail=${detail}`);
+}
+
+function isFreshFailure(attemptedAt: string, now = Date.now()) {
+  const timestamp = Date.parse(attemptedAt);
+  return Number.isFinite(timestamp) && now - timestamp < FAILURE_CACHE_TTL_MS;
 }
 
 async function readCache(key: string): Promise<LogoResult | null | undefined> {
   const files = cachePaths(key);
   try {
     const meta = JSON.parse(await readFile(files.meta, 'utf8')) as CachedLogo | MissingLogo;
-    if ('unavailableAt' in meta) return null;
+    if ('unavailableAt' in meta) return meta.version === NEGATIVE_CACHE_VERSION && (meta.permanent || isFreshFailure(meta.unavailableAt)) ? null : undefined;
     return { content: await readFile(files.image), contentType: meta.contentType, sourceUrl: meta.sourceUrl, fetchedAt: meta.fetchedAt, key };
   } catch { return undefined; }
 }
 
-async function persist(key: string, result: LogoResult | null) {
+async function persist(key: string, result: LogoResult | null, permanent = false) {
   const files = cachePaths(key);
   await mkdir(files.directory, { recursive: true });
-  if (!result) { await writeFile(files.meta, JSON.stringify({ unavailableAt: new Date().toISOString() } satisfies MissingLogo)); return; }
+  if (!result) { await writeFile(files.meta, JSON.stringify({ unavailableAt: new Date().toISOString(), version: NEGATIVE_CACHE_VERSION, ...(permanent ? { permanent: true } : {}) } satisfies MissingLogo)); return; }
   const temporary = `${files.image}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temporary, result.content);
   await rename(temporary, files.image);
@@ -227,10 +262,12 @@ export async function senderLogo(message: LogoSource) {
     return (await readCache(exactKey)) || (rootKey !== exactKey ? (await readCache(rootKey)) || null : null);
   }
   const request = (async () => {
-    const result = await fetchLogo(message);
+    const outcome = await fetchLogo(message);
+    const permanent = outcome === PERMANENT_FAILURE;
+    const result = permanent ? null : outcome;
     if (!result) {
-      await persist(exactKey, null);
-      if (rootKey !== exactKey && await readCache(rootKey) === undefined) await persist(rootKey, null);
+      await persist(exactKey, null, permanent);
+      if (rootKey !== exactKey && (permanent || await readCache(rootKey) === undefined)) await persist(rootKey, null, permanent);
       return;
     }
     await persist(result.key, result);
@@ -244,4 +281,4 @@ export async function senderLogo(message: LogoSource) {
   return (await readCache(exactKey)) || (rootKey !== exactKey ? (await readCache(rootKey)) || null : null);
 }
 
-export const senderLogoInternals = { isPublicIp, siteCandidates, discoverIcons, imageType, isChallengePage, contactDomain, senderKey, rootSenderKey };
+export const senderLogoInternals = { isPublicIp, siteCandidates, discoverIcons, imageType, isChallengePage, isCloudflareForbidden, contactDomain, senderKey, rootSenderKey, isFreshFailure, FAILURE_CACHE_TTL_MS };
