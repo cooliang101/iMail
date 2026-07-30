@@ -29,6 +29,12 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .app-checkbox { width: 22px; min-width: 22px; height: 22px; flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
 .app-checkbox .fui-Checkbox__indicator { margin: 3px; }
 .app-checkbox .fui-Checkbox__input { inset: 0; width: 22px; height: 22px; }
+.app-color-input { position: relative; width: 32px; height: 32px; display: inline-grid; place-items: center; flex: 0 0 32px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface-raised); overflow: hidden; cursor: pointer; transition: border-color var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard), transform var(--duration-fast) var(--ease-standard); }
+.app-color-input:hover { border-color: var(--color-accent); transform: translateY(-1px); }
+.app-color-input:active { transform: translateY(1px); }
+.app-color-input:focus-within { border-color: var(--color-focus); box-shadow: 0 0 0 3px var(--color-focus-ring); }
+.app-color-input-swatch { position: absolute; inset: 3px; border-radius: calc(var(--radius-sm) - 2px); background: var(--app-color-value); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 10%); pointer-events: none; }
+.app-color-input input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; border: 0; padding: 0; opacity: 0; cursor: pointer; }
 
 .app-shell { height: 100dvh; display: grid; grid-template-columns: var(--layout-account-rail) var(--layout-sidebar) minmax(0, 1fr); background: var(--color-canvas); overflow: hidden; transition: grid-template-columns var(--duration-normal) var(--ease-standard); }
 [data-theme='tech'] .workspace { background-color: var(--color-canvas); background-image: linear-gradient(rgb(189 87 27 / 7%) 1px, transparent 1px), linear-gradient(90deg, rgb(17 26 32 / 5%) 1px, transparent 1px); background-size: 24px 24px; }

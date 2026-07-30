@@ -54,6 +54,8 @@
 
 自定义主题是受限数据协议，不是 CSS 编辑器。输入只允许 `docs/custom-theme.md` 定义的九个 `#RRGGBB` 颜色和三个形态枚举；客户端与 MCP 分别校验，`theme-runtime.ts` 再派生中性色、品牌色、圆角和阴影。禁止把任意 CSS、渐变、URL、透明色或脚本加入这一协议。
 
+自定义主题的颜色字段同时提供可点击的 `AppColorInput` 色块和精确的十六进制文本输入。颜色选择器只负责回写合法的 `#RRGGBB` 值，最终保存仍经过同一套主题校验，不改变 MCP 或存储协议。
+
 ### Token 分层
 
 - **Primitive**：如 `--brand-70`、`--neutral-50`，表达色阶中的固定位置。只在 `theme.css` 内使用。

@@ -1,7 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, ClipboardText, Code, WarningCircle } from '@phosphor-icons/react';
 import type { AppPreferences, CustomThemeDefinition } from '../../app-model';
-import { AppInput, AppSelect, AppTextarea } from '../../components/form-controls';
+import { AppColorInput, AppInput, AppSelect, AppTextarea } from '../../components/form-controls';
 import { parseCustomThemeJson } from '../appearance';
 import customThemeGuide from '../../../docs/custom-theme.md?raw';
 
@@ -57,10 +57,14 @@ export function CustomThemeEditor({ preferences, onChange }: { preferences: AppP
 
     <div className="custom-theme-fields">
       <label className="custom-theme-name"><span>主题名称</span><AppInput value={draft.name} maxLength={40} onChange={(_, data) => setDraft({ ...draft, name: data.value })} /></label>
-      {colorFields.map((field) => <label key={field.key} className="custom-theme-color-field">
-        <span>{field.label}</span><i style={{ '--custom-color': draft[field.key] } as CSSProperties} />
-        <AppInput value={draft[field.key]} maxLength={7} onChange={(_, data) => setDraft({ ...draft, [field.key]: data.value })} />
-      </label>)}
+      {colorFields.map((field) => {
+        const inputId = `custom-theme-${field.key}`;
+        return <div key={field.key} className="custom-theme-color-field">
+          <label htmlFor={inputId}>{field.label}</label>
+          <AppColorInput value={draft[field.key]} aria-label={`选择${field.label}颜色`} title={`选择${field.label}颜色`} onValueChange={(value) => setDraft({ ...draft, [field.key]: value })} />
+          <AppInput id={inputId} value={draft[field.key]} maxLength={7} onChange={(_, data) => setDraft({ ...draft, [field.key]: data.value })} />
+        </div>;
+      })}
       <label><span>圆角</span><AppSelect value={draft.radius} onValueChange={(value) => setDraft({ ...draft, radius: value as CustomThemeDefinition['radius'] })} options={[{ value: 'compact', label: '紧凑' }, { value: 'balanced', label: '平衡' }, { value: 'rounded', label: '圆润' }]} /></label>
       <label><span>阴影</span><AppSelect value={draft.shadow} onValueChange={(value) => setDraft({ ...draft, shadow: value as CustomThemeDefinition['shadow'] })} options={[{ value: 'none', label: '无阴影' }, { value: 'soft', label: '柔和' }, { value: 'offset', label: '错位描边' }]} /></label>
       <label><span>字体气质</span><AppSelect value={draft.typography} onValueChange={(value) => setDraft({ ...draft, typography: value as CustomThemeDefinition['typography'] })} options={[{ value: 'system', label: '系统清晰' }, { value: 'technical', label: '技术感' }, { value: 'rounded', label: '柔和圆体' }]} /></label>
