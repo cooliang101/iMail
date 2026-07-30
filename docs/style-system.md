@@ -65,6 +65,8 @@
 
 邮件界面还使用 `--color-message-hover/selected`、`--color-reader-surface/toolbar` 与 `--color-mail-body/border`。每套主题必须显式定义这些阅读场景；柔和粗野主义允许邮件行在奶黄、薄荷和粉紫之间轮换，但选中态必须保持唯一且可辨认。邮件 HTML 内部仍受清洗规则约束，主题只控制安全容器背景，不覆盖邮件自身经过允许的内联排版。
 
+弹窗主题使用 `--color-overlay-scrim`、`--color-dialog-surface/border/control/control-hover/control-selected/control-selected-text/callout/callout-text` 与 `--shadow-dialog/control`。新增邮箱的服务商卡片、OAuth 状态和操作按钮必须消费这些语义；自定义主题从九个安全颜色令牌派生它们，不增加任意 CSS 输入。柔和粗野主义的虚拟邮件行需在固定行槽内为实体阴影保留上下间距，不能让相邻描边或阴影直接相接。
+
 ## 3. 文本与排版
 
 ### 字体

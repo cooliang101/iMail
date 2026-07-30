@@ -120,7 +120,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
     catch (value) { setError(value instanceof Error ? value.message : '连接失败'); }
     finally { setBusy(false); }
   }
-  return <Overlay onClose={onClose} wide><form className="account-modal" onSubmit={submit}>
+  return <Overlay onClose={onClose} wide dialogClassName="account-modal-shell"><form className="account-modal" onSubmit={submit}>
     <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>选择你的邮箱平台，登录后即可在 iMail 中统一收发邮件。</p></div><button type="button" aria-label="关闭添加邮箱窗口" onClick={onClose}><X size={21} /></button></div>
     <ProviderPicker value={provider} busy={busy} onChange={(nextProvider) => { const item = providers.find((candidate) => candidate.id === nextProvider)!; const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(nextProvider); setManualMode(nextProvider === 'yahoo' && status?.configured === false); setError(''); }} />
     <AccountConnectionFields provider={provider} usesOAuth={usesOAuth} oauthConfigured={oauthStatus?.configured} credentialGuide={credentialGuide} workspaceOptions={workspaceOptions} busy={busy} advanced={advanced} onAdvancedChange={setAdvanced} onManualModeChange={setManualMode} onCancelOAuth={cancelOAuth} />
