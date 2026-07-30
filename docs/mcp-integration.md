@@ -1,11 +1,11 @@
 # MCP 接入指南
 
-iMail 为可信 Agent 提供 Streamable HTTP 与 stdio 两种 MCP 接入。两者暴露同一组工具，并使用开发者网关签发的短期 `mcp:full` 授权码。普通网关 Token 不能调用 MCP。
+iMail 为可信 Agent 提供 Streamable HTTP 与 stdio 两种 MCP 接入。两者暴露同一组工具，并使用“外部接入”页面签发的短期 `mcp:full` 授权码。普通 API 网关 Token 不能调用 MCP。
 
 ## 1. 签发授权码
 
-1. 启动 iMail，进入“开发者网关”。
-2. 点击“创建临时 Token”，勾选“MCP 完整控制”。
+1. 启动 iMail，进入“外部接入”，切换到“MCP”标签页。
+2. 点击“创建 MCP 授权码”。
 3. 选择有效时间并创建，立即复制以 `imail_mcp_` 开头的授权码。
 4. 用完后在同一页面撤销。
 

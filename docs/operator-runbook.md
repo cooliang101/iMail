@@ -42,7 +42,7 @@ npm run mcp
 
 ## 冒烟检查
 
-1. 在开发者网关签发 `mcp:full` 授权码。
+1. 在“外部接入”的“MCP”标签页签发 `mcp:full` 授权码。
 2. 用 MCP Inspector 或任意标准客户端连接 `http://127.0.0.1:8787/mcp`。
 3. 确认 `tools/list` 包含 `accounts_list`、`messages_list`、`message_send` 和 `account_remove`。
 4. 调用 `imail_status` 与 `accounts_list`，确认响应不含 `encryptedSecret`、密码或 OAuth Token。
