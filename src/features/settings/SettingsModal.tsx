@@ -37,10 +37,11 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
     <section className="settings-modal">
       <div className="settings-layout">
         <aside className="settings-sidebar">
-          <header className="settings-sidebar-header"><div><span>iMail 偏好设置</span><h1>设置</h1></div><button type="button" aria-label="关闭设置" onClick={onClose}><X size={21} /></button></header>
+          <header className="settings-sidebar-header"><div><span>iMail 偏好设置</span><h1>设置</h1></div></header>
           <nav className="settings-tabs" aria-label="设置分类">{tabs.map((tab) => { const Icon = tab.icon; return <button type="button" key={tab.id} className={activeTab === tab.id ? 'is-active' : ''} aria-current={activeTab === tab.id ? 'page' : undefined} onClick={() => setActiveTab(tab.id)}><Icon size={18} /><span><strong>{tab.label}</strong><small>{tab.detail}</small></span></button>; })}</nav>
         </aside>
         <main className="settings-content">
+          <button className="settings-close" type="button" aria-label="关闭设置" title="关闭设置" onClick={onClose}><X size={21} /></button>
           {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
           {(activeTab === 'accounts' || activeTab === 'sync') && <AccountSettingsPanel accounts={accounts} section={activeTab} onAddAccount={onAddAccount} onReload={onReload} setNotice={setNotice} />}
           {activeTab === 'shortcuts' && <ShortcutPanel bindings={bindings} onChange={onBindingsChange} />}
@@ -59,18 +60,18 @@ function PanelHeading({ eyebrow, title, description }: { eyebrow: string; title:
 
 function GeneralPanel({ preferences, onChange }: { preferences: AppPreferences; onChange: (value: AppPreferences) => void }) {
   return <section className="settings-feature-panel"><PanelHeading eyebrow="应用行为" title="通用" description="控制 iMail 启动后的默认位置和邮件状态变化。" />
-    <div className="settings-section"><label className="settings-row"><span><strong>启动页面</strong><small>下次打开 iMail 时首先显示的邮箱范围。</small></span><AppSelect className="settings-startup-select" positioning={{ position: 'below', align: 'end' }} value={preferences.startupView} onValueChange={(startupView) => onChange({ ...preferences, startupView: startupView as AppPreferences['startupView'] })} options={[{ value: 'inbox', label: '统一收件箱' }, { value: 'starred', label: '已加星标' }]} /></label>
-      <label className="settings-row"><span><strong>打开邮件时标记为已读</strong><small>关闭后，阅读邮件不会自动改变未读状态。</small></span><AppCheckbox checked={preferences.markReadOnOpen} onChange={(_, data) => onChange({ ...preferences, markReadOnOpen: Boolean(data.checked) })} /></label>
+    <div className="settings-panel-body"><div className="settings-section"><label className="settings-row"><span><strong>启动页面</strong><small>下次打开 iMail 时首先显示的邮箱范围。</small></span><AppSelect className="settings-startup-select" listbox={{ className: 'settings-startup-listbox' }} positioning={{ position: 'below', align: 'end' }} value={preferences.startupView} onValueChange={(startupView) => onChange({ ...preferences, startupView: startupView as AppPreferences['startupView'] })} options={[{ value: 'inbox', label: '统一收件箱' }, { value: 'starred', label: '已加星标' }]} /></label>
+      <label className="settings-row"><span><strong>打开邮件时标记为已读</strong><small>关闭后，阅读邮件不会自动改变未读状态。</small></span><AppCheckbox checked={preferences.markReadOnOpen} onChange={(_, data) => onChange({ ...preferences, markReadOnOpen: Boolean(data.checked) })} /></label></div>
     </div>
   </section>;
 }
 
 function DisplayPanel({ preferences, onChange }: { preferences: AppPreferences; onChange: (value: AppPreferences) => void }) {
   return <section className="settings-feature-panel"><PanelHeading eyebrow="阅读体验" title="邮件展示" description="选择每封邮件正文首次打开时的查看方式，仍可在邮件内随时切换。" />
-    <div className="display-choice-grid" role="radiogroup" aria-label="默认邮件正文视图">
+    <div className="settings-panel-body"><div className="display-choice-grid" role="radiogroup" aria-label="默认邮件正文视图">
       <button type="button" role="radio" aria-checked={preferences.defaultMessageView === 'source'} className={preferences.defaultMessageView === 'source' ? 'is-selected' : ''} onClick={() => onChange({ ...preferences, defaultMessageView: 'source' })}><Database size={22} /><span><strong>原始内容</strong><small>直接显示服务器返回的 HTML 源码或纯文本，便于检查邮件结构。</small></span><i>{preferences.defaultMessageView === 'source' && <Check size={14} />}</i></button>
       <button type="button" role="radio" aria-checked={preferences.defaultMessageView === 'rendered'} className={preferences.defaultMessageView === 'rendered' ? 'is-selected' : ''} onClick={() => onChange({ ...preferences, defaultMessageView: 'rendered' })}><Eye size={22} /><span><strong>渲染邮件</strong><small>在受限 iframe 中按邮件设计排版，脚本、对象和表单均被禁用。</small></span><i>{preferences.defaultMessageView === 'rendered' && <Check size={14} />}</i></button>
-    </div>
+    </div></div>
   </section>;
 }
 
@@ -81,15 +82,15 @@ function NotificationPanel({ preferences, onChange }: { preferences: AppPreferen
     { key: 'error', title: '连接与同步异常', detail: '账户授权或后台同步持续失败时显示提醒。' },
   ];
   return <section className="settings-feature-panel"><PanelHeading eyebrow="减少打扰" title="通知" description="选择通知中心保留哪些类型的动态；关键账户错误仍会显示在对应设置中。" />
-    <div className="settings-section">{options.map((option) => <label className="settings-row" key={option.key}><span><strong>{option.title}</strong><small>{option.detail}</small></span><AppCheckbox checked={preferences.notificationKinds[option.key]} onChange={(_, data) => onChange({ ...preferences, notificationKinds: { ...preferences.notificationKinds, [option.key]: Boolean(data.checked) } })} /></label>)}</div>
+    <div className="settings-panel-body"><div className="settings-section">{options.map((option) => <label className="settings-row" key={option.key}><span><strong>{option.title}</strong><small>{option.detail}</small></span><AppCheckbox checked={preferences.notificationKinds[option.key]} onChange={(_, data) => onChange({ ...preferences, notificationKinds: { ...preferences.notificationKinds, [option.key]: Boolean(data.checked) } })} /></label>)}</div></div>
   </section>;
 }
 
 function PrivacyPanel({ accountCount }: { accountCount: number }) {
   return <section className="settings-feature-panel"><PanelHeading eyebrow="安全边界" title="隐私与数据" description="了解 iMail 如何保存账户、邮件与外部访问凭据。" />
-    <div className="privacy-summary"><LockKey size={26} /><div><strong>本地优先</strong><p>邮件缓存和账户配置保存在当前设备，邮箱凭据、OAuth Token 与加密字段不会出现在设置响应中。</p></div></div>
-    <dl className="settings-facts"><div><dt>已连接邮箱</dt><dd>{accountCount} 个</dd></div><div><dt>邮件内容</dt><dd>本机缓存</dd></div><div><dt>渲染隔离</dt><dd>受限 iframe</dd></div><div><dt>账户管理授权</dt><dd>仅 MCP Full</dd></div></dl>
-    <p className="settings-note">删除邮箱账户会同时删除该账户在本机的邮件缓存；执行前会要求二次确认。</p>
+    <div className="settings-panel-body"><div className="privacy-summary"><LockKey size={26} /><div><strong>本地优先</strong><p>邮件缓存和账户配置保存在当前设备，邮箱凭据、OAuth Token 与加密字段不会出现在设置响应中。</p></div></div>
+      <dl className="settings-facts"><div><dt>已连接邮箱</dt><dd>{accountCount} 个</dd></div><div><dt>邮件内容</dt><dd>本机缓存</dd></div><div><dt>渲染隔离</dt><dd>受限 iframe</dd></div><div><dt>账户管理授权</dt><dd>仅 MCP Full</dd></div></dl>
+      <p className="settings-note">删除邮箱账户会同时删除该账户在本机的邮件缓存；执行前会要求二次确认。</p></div>
   </section>;
 }
 
@@ -110,7 +111,8 @@ function ShortcutPanel({ bindings, onChange }: { bindings: ShortcutBindings; onC
     setDraft((current) => ({ ...current, [actionId]: candidate })); setRecording(null); setError('');
   }
   return <section className="settings-feature-panel"><header className="settings-panel-heading"><div><span>键盘效率</span><h2>快捷键</h2><p>点击绑定后按下新组合键；Backspace 清除，Esc 取消录制。</p></div><div className="settings-heading-actions"><button type="button" onClick={() => { setDraft({ ...defaultShortcutBindings }); setError(''); }}><ArrowCounterClockwise size={15} />恢复默认</button><Button appearance="primary" onClick={() => onChange(draft)}>保存快捷键</Button></div></header>
+    <div className="settings-panel-body">
     <div className="shortcut-groups">{(['global', 'mail'] as const).map((scope) => <section key={scope}><h3>{scope === 'global' ? '全局操作' : '邮件操作'}</h3><div className="shortcut-list">{shortcutDefinitions.filter((item) => item.scope === scope).map((item) => <div className="shortcut-row" key={item.id}><i><Keyboard size={18} /></i><span><strong>{item.label}</strong><small>{item.description}</small></span><button type="button" className={recording === item.id ? 'is-recording' : ''} onClick={() => { setRecording(item.id); setError(''); }} onKeyDown={(event) => capture(event, item.id)}>{recording === item.id ? '请按键…' : <kbd>{shortcutLabel(draft[item.id])}</kbd>}</button></div>)}</div></section>)}</div>
-    {error && <div className="shortcut-error">{error}</div>}
+    {error && <div className="shortcut-error">{error}</div>}</div>
   </section>;
 }

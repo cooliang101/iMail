@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@fluentui/react-components';
-import { ArrowClockwise, CaretDown, Envelope, Key, PencilSimple, Plus, SlidersHorizontal, Trash, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, CaretDown, Envelope, Key, PencilSimple, SlidersHorizontal, Trash, WarningCircle } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { credentialGuideFor, oauthCallbackOrigins } from '../../provider-guides';
 import type { Account, AccountSyncStatus, SyncPolicy, SyncWorkerHealth } from '../../types';
@@ -168,7 +168,8 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   const workerOnline = workerHealth?.workers.some((worker) => Date.now() - new Date(worker.heartbeatAt).getTime() < 30_000) ?? false;
 
   return <section className="settings-feature-panel">
-    <header className="settings-panel-heading"><div><span>{section === 'accounts' ? '连接与身份' : '后台同步'}</span><h2>{section === 'accounts' ? '邮箱管理' : '同步'}</h2><p>{section === 'accounts' ? '管理邮箱资料、授权状态与本地连接。' : '设置后台同步频率、范围与失败恢复策略。'}</p></div>{section === 'accounts' && <button type="button" className="settings-add-account" aria-label="新增邮箱" title="新增邮箱" onClick={onAddAccount}><Plus size={20} weight="bold" /></button>}</header>
+    <header className="settings-panel-heading"><div><span>{section === 'accounts' ? '连接与身份' : '后台同步'}</span><h2>{section === 'accounts' ? '邮箱管理' : '同步'}</h2><p>{section === 'accounts' ? '管理邮箱资料、授权状态与本地连接。' : '设置后台同步频率、范围与失败恢复策略。'}</p></div></header>
+    <div className="settings-panel-body">
     {section === 'sync' && workerHealth && <div className={`sync-worker-health ${workerOnline ? 'is-online' : 'is-offline'}`}><span>{workerOnline ? '同步 Worker 运行正常' : '同步 Worker 未运行或心跳已过期'}</span><small>{workerHealth.queuedJobs > 0 ? `${workerHealth.queuedJobs} 个任务正在等待` : '当前没有积压任务'}</small></div>}
     {section === 'sync' && defaultPolicy && <form className="sync-default-policy" onSubmit={(event) => void updateDefaultSyncPolicy(event)}>
       <header><span><strong>新账户默认同步策略</strong><small>新接入邮箱自动继承；已有账户仍使用各自设置。</small></span><Button appearance="primary" type="submit" disabled={busyId === 'defaults'}>{busyId === 'defaults' ? '保存中…' : '保存默认值'}</Button></header>
@@ -191,13 +192,13 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
           {section === 'accounts' && editing ? <form className="account-inline-editor" onSubmit={(event) => void updateProfile(event, account)}>
             <header className="settings-account-summary">
               <i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i>
-              <span>
-                <label className="account-name-editor"><strong>{providerLabel[account.provider]} ·</strong><span className="sr-only">显示名称</span><AppInput name="displayName" defaultValue={account.displayName} maxLength={80} autoFocus required /></label>
-                <label className="account-workspace-editor"><small>{account.email} ·</small><span className="sr-only">所属工作空间</span><AppSelect name="group" defaultValue={account.group} options={workspaceOptions} /></label>
+              <span className="account-edit-fields">
+                <label className="account-edit-name"><strong>{providerLabel[account.provider]} ·</strong><span className="sr-only">显示名称</span><AppInput name="displayName" defaultValue={account.displayName} maxLength={80} autoFocus required /></label>
+                <span className="account-edit-meta"><small title={account.email}>{account.email}</small><span aria-hidden="true">·</span><label className="account-edit-workspace"><span className="sr-only">所属工作空间</span><AppSelect name="group" defaultValue={account.group} options={workspaceOptions} /></label></span>
                 <em className={`connection-${account.status}`}>{connectionText}</em>
               </span>
             </header>
-            <footer className="settings-account-actions card-editor-actions"><button type="button" onClick={() => setEditingId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '保存中…' : '保存修改'}</Button></footer>
+            <footer className="settings-account-actions card-editor-actions"><button type="button" onClick={() => setEditingId(null)}>取消</button><Button appearance="primary" type="submit" disabled={busyId === account.id}>{busyId === account.id ? '保存中…' : '保存'}</Button></footer>
           </form> : <>
             <div className="settings-account-main"><header className="settings-account-summary"><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · {account.group}</small><em className={`connection-${account.status}`}>{connectionText}</em></span></header>
             {section === 'sync' && syncStatus && <AccountSyncSummary status={syncStatus} />}</div>
@@ -211,6 +212,6 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
       })}
     </div>}
     </div>}
-    {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
+    {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}</div>
   </section>;
 }
