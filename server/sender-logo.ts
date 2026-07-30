@@ -3,23 +3,29 @@ import { lookup } from 'node:dns/promises';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
+import { contactDomain, contactLogoKey, contactLogoKeys, contactRootLogoKey } from './contact-model.js';
+import { readStore, updateStore } from './store.js';
 import type { CachedMessage } from './types.js';
 
 type CachedLogo = { contentType: string; sourceUrl: string; fetchedAt: string };
 type MissingLogo = { unavailableAt: string };
-export type LogoResult = { content: Buffer; contentType: string; sourceUrl: string };
+export type LogoResult = { content: Buffer; contentType: string; sourceUrl: string; fetchedAt: string; key: string };
+type LogoSource = Pick<CachedMessage, 'from' | 'html' | 'text'>;
 
-const pending = new Map<string, Promise<LogoResult | null>>();
+const pending = new Map<string, Promise<void>>();
 const MAX_HTML_BYTES = 512 * 1024;
 const MAX_IMAGE_BYTES = 1024 * 1024;
-const NEGATIVE_CACHE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function cacheDirectory() {
   return path.join(path.resolve(process.env.IMAIL_DATA_DIR ?? '.data'), 'sender-logos');
 }
 
-function senderKey(message: CachedMessage) {
-  return message.from.address.trim().toLowerCase() || message.from.name.trim().toLowerCase();
+function senderKey(message: LogoSource) {
+  return contactLogoKey(message.from.address) ?? `sender:${message.from.address.trim().toLowerCase() || message.from.name.trim().toLowerCase()}`;
+}
+
+function rootSenderKey(message: LogoSource) {
+  return contactRootLogoKey(message.from.address) ?? senderKey(message);
 }
 
 function cachePaths(key: string) {
@@ -95,22 +101,29 @@ function imageType(content: Buffer) {
   return null;
 }
 
-function siteCandidates(message: CachedMessage) {
-  const combined = `${message.html ?? ''}\n${message.text ?? ''}`;
+function siteCandidates(message: LogoSource) {
+  const html = message.html ?? '';
+  const text = message.text ?? '';
   const urls: URL[] = [];
-  const pattern = /(?:href\s*=\s*["']([^"']+)["']|https?:\/\/[^\s<>"']+)/gi;
-  for (const match of combined.matchAll(pattern)) {
-    const value = match[1] ?? match[0];
+  const values = [
+    ...Array.from(html.matchAll(/\bhref\s*=\s*["']([^"']+)["']/gi), (match) => match[1]),
+    ...Array.from(text.matchAll(/https?:\/\/[^\s<>"']+/gi), (match) => match[0]),
+  ];
+  const domain = contactDomain(message.from.address);
+  for (const value of values) {
     try {
       const parsed = new URL(value.replace(/&amp;/g, '&'));
       if (!['http:', 'https:'].includes(parsed.protocol)) continue;
       if (/unsubscribe|optout|tracking|\/track|\/click/i.test(`${parsed.hostname}${parsed.pathname}`)) continue;
+      if (domain && contactDomain(`x@${parsed.hostname}`)?.registrable !== domain.registrable) continue;
       urls.push(new URL(parsed.origin));
     } catch { /* Ignore malformed links in untrusted email content. */ }
   }
-  const domain = message.from.address.split('@').at(-1)?.trim().toLowerCase();
-  if (domain && /^[a-z0-9.-]+$/i.test(domain)) urls.push(new URL(`https://${domain}`));
-  return [...new Map(urls.map((url) => [url.origin, url])).values()].slice(0, 6);
+  if (domain) {
+    urls.push(new URL(`https://${domain.hostname}`));
+    if (domain.hostname !== domain.registrable) urls.push(new URL(`https://${domain.registrable}`));
+  }
+  return [...new Map(urls.map((url) => [url.origin, url])).values()].slice(0, 8);
 }
 
 function discoverIcons(html: string, pageUrl: URL) {
@@ -125,33 +138,63 @@ function discoverIcons(html: string, pageUrl: URL) {
   return [...new Map(icons.map((url) => [url.href, url])).values()].slice(0, 5);
 }
 
-async function fetchLogo(message: CachedMessage): Promise<LogoResult | null> {
+function isChallengePage(html: string) {
+  return /(?:<title>\s*(?:just a moment|attention required[^<]*cloudflare)|cdn-cgi\/challenge-platform|cf-browser-verification|\bcf-chl-)/i.test(html);
+}
+
+async function fetchLogo(message: LogoSource): Promise<LogoResult | null> {
   const signal = AbortSignal.timeout(10_000);
+  const domainKey = senderKey(message);
+  const attempted = new Set((await readStore()).logoFetchAttempts?.map((item) => item.target) ?? []);
   for (const site of siteCandidates(message)) {
+    const target = site.origin.toLocaleLowerCase();
+    if (attempted.has(target)) continue;
+    let detail = '未找到有效的网站图标';
     try {
       const page = await safeFetch(site, 'text/html,application/xhtml+xml', signal);
       const contentType = page.headers.get('content-type') ?? '';
-      if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) continue;
+      if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) throw new Error('网站未返回 HTML');
       const html = (await readLimited(page, MAX_HTML_BYTES)).toString('utf8');
+      if (isChallengePage(html)) throw new Error('网站返回了访问验证页');
       for (const iconUrl of discoverIcons(html, new URL(page.url || site.href))) {
         try {
           const icon = await safeFetch(iconUrl, 'image/png,image/jpeg,image/webp,image/gif,image/x-icon', signal);
           const content = await readLimited(icon, MAX_IMAGE_BYTES);
           const detected = imageType(content);
-          if (detected) return { content, contentType: detected, sourceUrl: icon.url || iconUrl.href };
-        } catch { /* Try the next declared icon. */ }
+          if (detected) {
+            const result = { content, contentType: detected, sourceUrl: icon.url || iconUrl.href, fetchedAt: new Date().toISOString(), key: `domain:${site.hostname.toLocaleLowerCase()}` };
+            await recordAttempt(target, domainKey, 'success', result.sourceUrl);
+            return result;
+          }
+          detail = '图标内容不是受支持的图片格式';
+        } catch (error) { detail = errorMessage(error); }
       }
-    } catch { /* Try the next website candidate. */ }
+    } catch (error) { detail = errorMessage(error); }
+    await recordAttempt(target, domainKey, 'failed', detail);
+    attempted.add(target);
   }
   return null;
+}
+
+function errorMessage(error: unknown) {
+  return (error instanceof Error ? error.message : String(error)).replace(/[\r\n]+/g, ' ').slice(0, 300);
+}
+
+async function recordAttempt(target: string, domainKey: string, status: 'success' | 'failed', detail: string) {
+  const attemptedAt = new Date().toISOString();
+  await updateStore((data) => {
+    data.logoFetchAttempts ??= [];
+    if (!data.logoFetchAttempts.some((item) => item.target === target)) data.logoFetchAttempts.push({ target, domainKey, status, detail, attemptedAt });
+  });
+  console.info(`[sender-logo] ${status} target=${target} domain=${domainKey} detail=${detail}`);
 }
 
 async function readCache(key: string): Promise<LogoResult | null | undefined> {
   const files = cachePaths(key);
   try {
     const meta = JSON.parse(await readFile(files.meta, 'utf8')) as CachedLogo | MissingLogo;
-    if ('unavailableAt' in meta) return Date.now() - new Date(meta.unavailableAt).getTime() < NEGATIVE_CACHE_MS ? null : undefined;
-    return { content: await readFile(files.image), contentType: meta.contentType, sourceUrl: meta.sourceUrl };
+    if ('unavailableAt' in meta) return null;
+    return { content: await readFile(files.image), contentType: meta.contentType, sourceUrl: meta.sourceUrl, fetchedAt: meta.fetchedAt, key };
   } catch { return undefined; }
 }
 
@@ -162,19 +205,43 @@ async function persist(key: string, result: LogoResult | null) {
   const temporary = `${files.image}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temporary, result.content);
   await rename(temporary, files.image);
-  await writeFile(files.meta, JSON.stringify({ contentType: result.contentType, sourceUrl: result.sourceUrl, fetchedAt: new Date().toISOString() } satisfies CachedLogo));
+  await writeFile(files.meta, JSON.stringify({ contentType: result.contentType, sourceUrl: result.sourceUrl, fetchedAt: result.fetchedAt } satisfies CachedLogo));
 }
 
-export async function senderLogo(message: CachedMessage) {
-  const key = senderKey(message);
-  if (!key) return null;
-  const cached = await readCache(key);
-  if (cached !== undefined) return cached;
-  const active = pending.get(key);
-  if (active) return active;
-  const request = fetchLogo(message).then(async (result) => { await persist(key, result); return result; }).finally(() => pending.delete(key));
-  pending.set(key, request);
-  return request;
+export async function senderLogo(message: LogoSource) {
+  const keys = contactLogoKeys(message.from.address);
+  const exactKey = keys?.exact ?? senderKey(message);
+  const rootKey = keys?.root ?? exactKey;
+  const exact = await readCache(exactKey);
+  if (exact) return exact;
+  if (rootKey !== exactKey) {
+    const root = await readCache(rootKey);
+    if (root) return root;
+    if (exact === null && root === null) return null;
+  } else if (exact === null) return null;
+
+  const pendingKey = rootSenderKey(message);
+  const active = pending.get(pendingKey);
+  if (active) {
+    await active;
+    return (await readCache(exactKey)) || (rootKey !== exactKey ? (await readCache(rootKey)) || null : null);
+  }
+  const request = (async () => {
+    const result = await fetchLogo(message);
+    if (!result) {
+      await persist(exactKey, null);
+      if (rootKey !== exactKey && await readCache(rootKey) === undefined) await persist(rootKey, null);
+      return;
+    }
+    await persist(result.key, result);
+    if (result.key !== rootKey) {
+      const root = await readCache(rootKey);
+      if (!root) await persist(rootKey, { ...result, key: rootKey });
+    }
+  })().finally(() => pending.delete(pendingKey));
+  pending.set(pendingKey, request);
+  await request;
+  return (await readCache(exactKey)) || (rootKey !== exactKey ? (await readCache(rootKey)) || null : null);
 }
 
-export const senderLogoInternals = { isPublicIp, siteCandidates, discoverIcons, imageType };
+export const senderLogoInternals = { isPublicIp, siteCandidates, discoverIcons, imageType, isChallengePage, contactDomain, senderKey, rootSenderKey };

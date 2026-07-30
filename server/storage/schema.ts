@@ -20,6 +20,16 @@ export function ensureSchema(db: DatabaseSync) {
     ) STRICT;
     CREATE INDEX IF NOT EXISTS messages_account_date ON messages(account_id, received_at DESC);
     CREATE INDEX IF NOT EXISTS messages_date ON messages(received_at DESC);
+    CREATE TABLE IF NOT EXISTS contacts (
+      address TEXT PRIMARY KEY COLLATE NOCASE, name TEXT NOT NULL, message_count INTEGER NOT NULL,
+      last_contact_at TEXT NOT NULL, logo_key TEXT, logo_content_type TEXT, logo_source_url TEXT, logo_fetched_at TEXT
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS contacts_last_contact ON contacts(last_contact_at DESC);
+    CREATE TABLE IF NOT EXISTS logo_fetch_attempts (
+      target TEXT PRIMARY KEY, domain_key TEXT NOT NULL, status TEXT NOT NULL,
+      detail TEXT NOT NULL, attempted_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS logo_fetch_attempts_domain ON logo_fetch_attempts(domain_key, attempted_at DESC);
     CREATE TABLE IF NOT EXISTS drafts (
       id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
       to_json TEXT NOT NULL, cc_json TEXT NOT NULL, subject TEXT NOT NULL, text_body TEXT NOT NULL,

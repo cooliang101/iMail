@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { DeveloperToken, Draft, MailAccount, StoreData, TokenScope } from '../types.js';
+import type { DeveloperToken, Draft, LogoFetchAttempt, MailAccount, MailContact, StoreData, TokenScope } from '../types.js';
 import { json, messageFromRow, optionalText, text, type Row } from './rows.js';
 
 function all(db: DatabaseSync, sql: string) { return db.prepare(sql).all() as Row[]; }
@@ -20,6 +20,20 @@ export function readSnapshot(db: DatabaseSync): StoreData {
     return account;
   });
   const messages = all(db, 'SELECT * FROM messages ORDER BY received_at DESC').map(messageFromRow);
+  const contacts = all(db, 'SELECT * FROM contacts ORDER BY last_contact_at DESC, message_count DESC, address').map((row): MailContact => {
+    const contact: MailContact = {
+      address: text(row, 'address'), name: text(row, 'name'), messageCount: Number(row.message_count), lastContactAt: text(row, 'last_contact_at'),
+    };
+    const logoKey = optionalText(row, 'logo_key');
+    if (logoKey) contact.logo = {
+      key: logoKey, contentType: text(row, 'logo_content_type'), sourceUrl: text(row, 'logo_source_url'), fetchedAt: text(row, 'logo_fetched_at'),
+    };
+    return contact;
+  });
+  const logoFetchAttempts = all(db, 'SELECT * FROM logo_fetch_attempts ORDER BY attempted_at DESC').map((row): LogoFetchAttempt => ({
+    target: text(row, 'target'), domainKey: text(row, 'domain_key'), status: text(row, 'status') as LogoFetchAttempt['status'],
+    detail: text(row, 'detail'), attemptedAt: text(row, 'attempted_at'),
+  }));
   const drafts = all(db, 'SELECT * FROM drafts ORDER BY updated_at DESC').map((row): Draft => ({
     id: text(row, 'id'), accountId: text(row, 'account_id'), to: json(row, 'to_json'), cc: json(row, 'cc_json'),
     subject: text(row, 'subject'), text: text(row, 'text_body'), html: text(row, 'html_body'), attachments: json(row, 'attachments_json'), createdAt: text(row, 'created_at'), updatedAt: text(row, 'updated_at'),
@@ -36,5 +50,5 @@ export function readSnapshot(db: DatabaseSync): StoreData {
     const lastUsedAt = optionalText(row, 'last_used_at'); if (lastUsedAt) token.lastUsedAt = lastUsedAt;
     return token;
   });
-  return { accounts, messages, tokens, drafts };
+  return { accounts, messages, tokens, drafts, contacts, logoFetchAttempts };
 }

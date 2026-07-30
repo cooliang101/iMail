@@ -8,4 +8,5 @@
 - 保持现有本地优先、安全边界和响应式行为；结构重构不得改变 API 协议。
 - MCP 能力统一放在 `server/mcp/`，账户管理只允许 `mcp:full` 授权码；任何响应都不得暴露邮箱凭据、OAuth Token 或加密字段。
 - 新增邮件或账户管理行为时，同步评估 HTTP API、MCP 工具与 `docs/mcp-integration.md`，避免两个控制面能力漂移。
+- 联系人与邮件发件人必须复用 `contacts` 数据和其中的 Logo 字段；Logo 使用子域键与可注册主域兜底键，已有成功或失败采集记录的域名不得自动重试。
 - 提交前运行 `npm run typecheck`、`npm test` 和 `npm run build`。

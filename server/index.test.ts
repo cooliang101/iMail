@@ -199,9 +199,11 @@ describe('iMail HTTP API', () => {
     }]; });
     const page = await request('/api/messages?limit=1&offset=0');
     expect(page.body).toMatchObject({ total: 1, nextOffset: 1, hasMore: false });
+    expect(page.body.messages[0].from.logo.url).toBe('/api/contacts/logo?address=sender%40example.com');
     expect(page.body.messages[0]).not.toHaveProperty('text'); expect(page.body.messages[0]).not.toHaveProperty('html');
     const detail = await request('/api/messages/message-lazy');
     expect(detail.body.message).toMatchObject({ text: 'Full body', html: '<p>Full body</p>' });
+    expect(detail.body.message.from.logo.url).toBe('/api/contacts/logo?address=sender%40example.com');
     expect((await request('/api/messages/missing')).response.status).toBe(404);
     expect((await request('/api/message-stats')).body).toMatchObject({ total: 1, unread: 1, byAccount: [{ accountId: account.id, total: 1, unread: 1 }] });
     const markedRead = await request('/api/messages/message-lazy', {
@@ -230,8 +232,8 @@ describe('iMail HTTP API', () => {
     const result = await request('/api/contacts');
     expect(result.response.status).toBe(200);
     expect(result.body.contacts).toEqual([
-      { address: 'alice@example.com', name: 'Alice Zhang', messageCount: 2, lastContactAt: '2026-07-29T03:00:00.000Z' },
-      { address: 'bob@example.com', name: 'Bob', messageCount: 1, lastContactAt: '2026-07-29T03:00:00.000Z' },
+      { address: 'alice@example.com', name: 'Alice Zhang', messageCount: 2, lastContactAt: '2026-07-29T03:00:00.000Z', logo: { url: '/api/contacts/logo?address=alice%40example.com' } },
+      { address: 'bob@example.com', name: 'Bob', messageCount: 1, lastContactAt: '2026-07-29T03:00:00.000Z', logo: { url: '/api/contacts/logo?address=bob%40example.com' } },
     ]);
     expect(JSON.stringify(result.body)).not.toContain(account.email);
   });

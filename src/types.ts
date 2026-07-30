@@ -33,7 +33,7 @@ export type Message = {
   accountId: string;
   mailbox: string;
   mailboxRole: MailboxRole;
-  from: { name: string; address: string };
+  from: { name: string; address: string; logo: ContactLogo };
   to: Array<{ name: string; address: string }>;
   subject: string;
   preview: string;
@@ -53,6 +53,15 @@ export type Contact = {
   name: string;
   messageCount: number;
   lastContactAt: string;
+  logo: ContactLogo;
+};
+
+export type ContactLogo = {
+  url: string;
+  key?: string;
+  contentType?: string;
+  sourceUrl?: string;
+  fetchedAt?: string;
 };
 
 export type Draft = {

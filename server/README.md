@@ -13,6 +13,8 @@ mail/                    IMAP/SMTP 连接、同步、远程操作和发送
 oauth/                   服务商配置、OAuth 客户端、授权流程和密钥刷新
 storage/                 SQLite schema、行转换、快照和事务写入
 store.ts                 存储门面与 SQLiteStore 协调器
+contact-model.ts         联系人聚合、主域识别和共享 Logo 引用
+sender-logo.ts           安全网站探测、图片缓存和采集审计
 mail.ts / oauth.ts       稳定的公共导出入口
 ```
 
@@ -26,5 +28,7 @@ mail.ts / oauth.ts       稳定的公共导出入口
 - `mcp/` 复用业务门面与存储能力，只接受独立的 `mcp:full` 授权码，不返回邮箱凭据。
 - `mail/`、`oauth/` 通过 `store.ts` 访问持久化，不直接操作 HTTP 请求或响应。
 - `storage/` 只关心 SQLite 与领域数据之间的转换。
+- `contacts` 是联系人建议和邮件发件人资料的唯一来源；Logo 元数据属于联系人字段，优先引用子域缓存，缺失时引用可注册主域缓存。
+- Logo 探测只访问发件人同主域，且 `logo_fetch_attempts` 中已有成功或失败记录的域名/子域名永不自动重试。
 
 新增接口时优先放入对应资源路由；只有多个路由复用的参数模型或响应转换才进入 `http/`。新增邮件/OAuth 行为应放进对应目录，并通过顶层门面文件导出，避免调用方依赖内部实现路径。
