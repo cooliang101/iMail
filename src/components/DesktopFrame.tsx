@@ -27,11 +27,16 @@ function DesktopTitlebar() {
     if (appWindow) void action(appWindow).catch((error) => console.error('[window]', error));
   };
 
+  const toggleMaximize = () => run((window) => window.toggleMaximize());
+
   return <header className="desktop-titlebar">
-    <div className="desktop-titlebar-drag" data-tauri-drag-region onDoubleClick={() => run((window) => window.toggleMaximize())}>
+    <div className="desktop-titlebar-brand" data-tauri-drag-region onDoubleClick={toggleMaximize}>
       <BrandLogo className="desktop-titlebar-logo" />
+    </div>
+    <div className="desktop-titlebar-name" data-tauri-drag-region onDoubleClick={toggleMaximize}>
       <span>iMail</span>
     </div>
+    <div className="desktop-titlebar-drag" data-tauri-drag-region onDoubleClick={toggleMaximize} />
     <nav className="desktop-window-controls" aria-label="窗口控制">
       <button type="button" aria-label="最小化" title="最小化" onClick={() => run((window) => window.minimize())}><Minus size={14} weight="bold" /></button>
       <button type="button" aria-label={maximized ? '还原窗口' : '最大化'} title={maximized ? '还原窗口' : '最大化'} onClick={() => run((window) => window.toggleMaximize())}>
