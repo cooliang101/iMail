@@ -51,10 +51,23 @@
   letter-spacing: -.01em;
 }
 .desktop-titlebar-drag { background: var(--color-canvas); }
+.desktop-titlebar-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 18px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  pointer-events: none;
+}
+.desktop-titlebar-context > i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-subtle); }
+.desktop-titlebar-context > small { padding-left: 9px; border-left: 1px solid var(--color-border); color: var(--color-text-tertiary); font: 600 9px/1 var(--font-family-mono); letter-spacing: .08em; }
 
 .desktop-titlebar-logo { width: 20px; height: 20px; color: var(--color-rail-accent); }
 .desktop-titlebar-name > span { color: var(--color-text-strong); }
-.desktop-window-controls { display: grid; grid-auto-flow: column; background: var(--color-surface-raised); }
+.desktop-window-controls { display: grid; grid-auto-flow: column; background: transparent; }
 .desktop-window-controls button {
   width: 46px;
   height: 37px;
@@ -81,12 +94,8 @@
 [data-theme='mint-fresh'] .desktop-titlebar-logo,
 [data-theme='imail-light'] .desktop-titlebar-logo { color: var(--color-rail-accent); }
 
-[data-theme='tech'] .desktop-titlebar {
-  border-bottom-style: dashed;
-}
 [data-theme='tech'] .desktop-titlebar-drag { background-image: linear-gradient(rgb(189 87 27 / 3%) 1px, transparent 1px), linear-gradient(90deg, rgb(17 26 32 / 3%) 1px, transparent 1px); background-size: 24px 24px; }
 [data-theme='tech'] .desktop-titlebar-logo { color: var(--color-rail-accent); filter: drop-shadow(0 0 6px rgb(223 129 67 / 48%)); }
-[data-theme='tech'] .desktop-window-controls button { border-left: 1px solid rgb(89 104 115 / 12%); }
 
 [data-theme='business-blue'] .desktop-titlebar {
   background: var(--color-canvas);
@@ -128,7 +137,7 @@
 .desktop-frame:has(.auth-page) .desktop-titlebar-name { padding-inline: 0 18px; }
 .desktop-frame:has(.auth-page) .desktop-titlebar-name > span { color: #f3faf8; }
 .desktop-frame:has(.auth-page) .desktop-titlebar-logo { color: #75d4bf; }
-.desktop-frame:has(.auth-page) .desktop-window-controls { background: #f5f8f7; }
+.desktop-frame:has(.auth-page) .desktop-titlebar-context { display: none; }
 
 @media (max-width: 1050px) {
   .desktop-frame:has(.app-shell) .desktop-titlebar { grid-template-columns: 64px 210px minmax(0, 1fr) auto; }

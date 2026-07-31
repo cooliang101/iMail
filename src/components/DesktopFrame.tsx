@@ -36,7 +36,9 @@ function DesktopTitlebar() {
     <div className="desktop-titlebar-name" data-tauri-drag-region onDoubleClick={toggleMaximize}>
       <span>iMail</span>
     </div>
-    <div className="desktop-titlebar-drag" data-tauri-drag-region onDoubleClick={toggleMaximize} />
+    <div className="desktop-titlebar-drag" data-tauri-drag-region onDoubleClick={toggleMaximize}>
+      <span className="desktop-titlebar-context"><i />统一通信工作台<small>DESKTOP</small></span>
+    </div>
     <nav className="desktop-window-controls" aria-label="窗口控制">
       <button type="button" aria-label="最小化" title="最小化" onClick={() => run((window) => window.minimize())}><Minus size={14} weight="bold" /></button>
       <button type="button" aria-label={maximized ? '还原窗口' : '最大化'} title={maximized ? '还原窗口' : '最大化'} onClick={() => run((window) => window.toggleMaximize())}>
