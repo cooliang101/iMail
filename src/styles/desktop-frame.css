@@ -33,29 +33,16 @@
 }
 .desktop-titlebar-name {
   padding-inline: 24px;
+  gap: 10px;
   background: var(--color-surface-subtle);
   border-right: 1px solid var(--color-border);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: -.01em;
+  white-space: nowrap;
 }
 .desktop-titlebar-drag { background: var(--color-canvas); }
-.desktop-titlebar-context {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 18px;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .01em;
-  pointer-events: none;
-}
-.desktop-titlebar-context > i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-subtle); }
-.desktop-titlebar-context > small { padding-left: 9px; border-left: 1px solid var(--color-border); color: var(--color-text-tertiary); font: 600 9px/1 var(--font-family-mono); letter-spacing: .08em; }
 
 .desktop-titlebar-logo { width: 20px; height: 20px; color: var(--color-rail-accent); }
-.desktop-titlebar-name > span { color: var(--color-text-strong); }
+.desktop-titlebar-name > strong { color: var(--color-text-strong); font-size: 12px; font-weight: 700; letter-spacing: -.02em; }
+.desktop-titlebar-name > span { padding-left: 10px; border-left: 1px solid var(--color-border); color: var(--color-text-tertiary); font-size: 10px; font-weight: 550; letter-spacing: .02em; }
 .desktop-window-controls { display: grid; grid-auto-flow: column; background: transparent; }
 .desktop-window-controls button {
   width: 46px;
@@ -101,6 +88,9 @@
 
 .desktop-content { min-width: 0; min-height: 0; overflow: hidden; }
 .desktop-content .app-shell { height: 100%; }
+.desktop-content .app-shell .brand-mark,
+.desktop-content .app-shell .sidebar-heading { display: none; }
+.desktop-content .app-shell .rail-accounts { margin-top: 0; padding-top: 0; border-top: 0; }
 .desktop-content .auth-loading,
 .desktop-content .auth-page,
 .desktop-content .auth-brand-panel,
@@ -117,9 +107,9 @@
 .desktop-frame:has(.auth-page) .desktop-titlebar-name,
 .desktop-frame:has(.auth-page) .desktop-titlebar-drag { background: transparent; border-right: 0; }
 .desktop-frame:has(.auth-page) .desktop-titlebar-name { padding-inline: 0 18px; }
-.desktop-frame:has(.auth-page) .desktop-titlebar-name > span { color: #f3faf8; }
+.desktop-frame:has(.auth-page) .desktop-titlebar-name > strong { color: #f3faf8; }
+.desktop-frame:has(.auth-page) .desktop-titlebar-name > span { display: none; }
 .desktop-frame:has(.auth-page) .desktop-titlebar-logo { color: #75d4bf; }
-.desktop-frame:has(.auth-page) .desktop-titlebar-context { display: none; }
 
 @media (max-width: 1050px) {
   .desktop-frame:has(.app-shell) .desktop-titlebar { grid-template-columns: 64px 210px minmax(0, 1fr) auto; }
