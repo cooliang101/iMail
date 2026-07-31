@@ -16,7 +16,7 @@ type Row = Record<string, string | number | bigint | null>;
 export const defaultSyncPolicy = (accountId: string, now = new Date().toISOString()): SyncPolicy => ({
   accountId,
   enabled: true,
-  intervalMinutes: 5,
+  intervalMinutes: 1,
   folderMode: 'inbox',
   selectedMailboxes: [],
   syncOnStart: true,
@@ -76,9 +76,36 @@ export class SyncStore {
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     if (databasePath !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     ensureSchema(this.db);
+    this.migrateFastInboxPollingDefault();
   }
 
   close() { this.db.close(); }
+
+  private migrateFastInboxPollingDefault() {
+    const migrationKey = 'sync_fast_inbox_polling_v1';
+    if (this.db.prepare('SELECT 1 AS applied FROM metadata WHERE key = ?').get(migrationKey)) return;
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      // Five minutes was the original implicit default. Move untouched/default-looking
+      // policies to the one-minute safety net used when IMAP IDLE is unavailable.
+      this.db.prepare('UPDATE sync_policies SET interval_minutes = 1 WHERE interval_minutes = 5').run();
+      const rows = this.db.prepare("SELECT key, value FROM metadata WHERE key LIKE 'sync_default_policy:%'").all() as Row[];
+      for (const row of rows) {
+        try {
+          const value = JSON.parse(String(row.value)) as Partial<SyncPolicySettings>;
+          if (value.intervalMinutes !== 5) continue;
+          this.db.prepare('UPDATE metadata SET value = ? WHERE key = ?').run(JSON.stringify({ ...value, intervalMinutes: 1 }), String(row.key));
+        } catch {
+          // Malformed optional defaults already fall back safely in getDefaultPolicy().
+        }
+      }
+      this.db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)').run(migrationKey, new Date().toISOString());
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
 
   getDefaultPolicy(): SyncPolicySettings {
     const key = `sync_default_policy:${currentUserId() ?? '__legacy__'}`;

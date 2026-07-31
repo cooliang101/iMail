@@ -7,7 +7,7 @@ type Watcher = { client?: ImapFlow; closing: boolean };
 
 export function startIdleWatchers(options: { syncStore?: SyncStore; reconcileIntervalMs?: number; loadStore?: typeof readAllStore; createClient?: typeof imapClientFor; autoStart?: boolean } = {}) {
   const syncStore = options.syncStore ?? getSyncStore();
-  const reconcileIntervalMs = Math.max(5_000, options.reconcileIntervalMs ?? Number(process.env.IMAIL_SYNC_IDLE_RECONCILE_MS ?? 30_000));
+  const reconcileIntervalMs = Math.max(5_000, options.reconcileIntervalMs ?? Number(process.env.IMAIL_SYNC_IDLE_RECONCILE_MS ?? 5_000));
   const enabled = process.env.IMAIL_SYNC_IDLE_ENABLED !== 'false';
   const loadStore = options.loadStore ?? readAllStore;
   const createClient = options.createClient ?? imapClientFor;

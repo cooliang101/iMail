@@ -243,7 +243,7 @@ describe('iMail HTTP API', () => {
 
   it('persists backend sync policy and queues work without executing IMAP in the request', async () => {
     const defaults = await request('/api/sync-policy');
-    expect(defaults.body.policy).toMatchObject({ enabled: true, intervalMinutes: 5, folderMode: 'inbox' });
+    expect(defaults.body.policy).toMatchObject({ enabled: true, intervalMinutes: 1, folderMode: 'inbox' });
     const updated = await request(`/api/accounts/${account.id}/sync-policy`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ intervalMinutes: 15, folderMode: 'standard', syncOnStart: true }),

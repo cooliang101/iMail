@@ -50,7 +50,7 @@ export async function enqueueDueSyncs(reason: SyncJobReason = 'scheduled', syncS
 
 export function startScheduler(options: { intervalMs?: number; syncStore?: SyncStore } = {}) {
   const syncStore = options.syncStore ?? getSyncStore();
-  const intervalMs = Math.max(5_000, options.intervalMs ?? Number(process.env.IMAIL_SYNC_SCHEDULER_INTERVAL_MS ?? 30_000));
+  const intervalMs = Math.max(5_000, options.intervalMs ?? Number(process.env.IMAIL_SYNC_SCHEDULER_INTERVAL_MS ?? 5_000));
   let running = false;
   const scan = async (reason: SyncJobReason = 'scheduled') => {
     if (running) return [];

@@ -44,7 +44,7 @@ afterEach(async () => {
 describe('persistent synchronization control plane', () => {
   it('persists defaults and account-level policy overrides', async () => {
     const store = await temporarySyncStore();
-    expect(store.getDefaultPolicy()).toMatchObject({ enabled: true, intervalMinutes: 5, folderMode: 'inbox' });
+    expect(store.getDefaultPolicy()).toMatchObject({ enabled: true, intervalMinutes: 1, folderMode: 'inbox' });
     store.updateDefaultPolicy({ intervalMinutes: 15, folderMode: 'standard' });
     expect(store.ensurePolicy(account().id)).toMatchObject({ intervalMinutes: 15, folderMode: 'standard' });
     expect(store.updatePolicy(account().id, { enabled: false })).toMatchObject({ enabled: false, intervalMinutes: 15 });
