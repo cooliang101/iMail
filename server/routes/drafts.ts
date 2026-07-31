@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { deleteDraft, listDrafts, saveDraft } from '../domain/drafts.js';
+import { z } from 'zod';
+import { createDraft, deleteDraft, listDrafts, saveDraft } from '../domain/drafts.js';
 import { asyncRoute } from '../http/async-route.js';
 import { draftSchema } from '../http/schemas.js';
 
@@ -10,7 +11,8 @@ draftsRouter.get('/drafts', asyncRoute(async (_req, res) => {
 }));
 
 draftsRouter.post('/drafts', asyncRoute(async (req, res) => {
-  const draft = await saveDraft(draftSchema.parse(req.body));
+  const requestedId = z.string().uuid().optional().parse(req.get('X-Draft-Id'));
+  const draft = await createDraft(draftSchema.parse(req.body), requestedId);
   res.status(201).json({ draft });
 }));
 

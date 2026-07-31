@@ -17,19 +17,31 @@ export async function getDraft(id: string) {
   return draft;
 }
 
-export async function saveDraft(input: DraftInput, id?: string) {
+export async function createDraft(input: DraftInput, id: string = crypto.randomUUID()) {
   const now = new Date().toISOString();
   let saved: Draft | undefined;
   await updateStore((data) => {
     assertAccount(data, input.accountId);
-    if (id) {
-      saved = (data.drafts ?? []).find((item) => item.id === id);
-      if (!saved) throw notFound('DRAFT_NOT_FOUND', '草稿不存在');
-      Object.assign(saved, input, { updatedAt: now });
-    } else {
-      saved = { id: crypto.randomUUID(), ...input, createdAt: now, updatedAt: now };
-      (data.drafts ??= []).push(saved);
+    const drafts = data.drafts ??= [];
+    saved = drafts.find((item) => item.id === id);
+    if (saved) Object.assign(saved, input, { updatedAt: now });
+    else {
+      saved = { id, ...input, createdAt: now, updatedAt: now };
+      drafts.push(saved);
     }
+  });
+  return saved!;
+}
+
+export async function saveDraft(input: DraftInput, id?: string) {
+  if (!id) return createDraft(input);
+  const now = new Date().toISOString();
+  let saved: Draft | undefined;
+  await updateStore((data) => {
+    assertAccount(data, input.accountId);
+    saved = (data.drafts ?? []).find((item) => item.id === id);
+    if (!saved) throw notFound('DRAFT_NOT_FOUND', '草稿不存在');
+    Object.assign(saved, input, { updatedAt: now });
   });
   return saved!;
 }

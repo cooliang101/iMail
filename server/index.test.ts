@@ -454,6 +454,19 @@ describe('iMail HTTP API', () => {
     expect((await request('/api/drafts')).body.drafts).toEqual([]);
   });
 
+  it('creates a draft idempotently when the client repeats its stable draft id', async () => {
+    const draftId = '22222222-2222-4222-8222-222222222222';
+    const headers = { 'Content-Type': 'application/json', 'X-Draft-Id': draftId };
+    const first = await request('/api/drafts', { method: 'POST', headers, body: JSON.stringify({ accountId: account.id, to: [], cc: [], subject: 'First', text: '' }) });
+    const repeated = await request('/api/drafts', { method: 'POST', headers, body: JSON.stringify({ accountId: account.id, to: [], cc: [], subject: 'Latest', text: '' }) });
+
+    expect(first.response.status).toBe(201);
+    expect(repeated.response.status).toBe(201);
+    expect(first.body.draft.id).toBe(draftId);
+    expect(repeated.body.draft).toMatchObject({ id: draftId, subject: 'Latest', createdAt: first.body.draft.createdAt });
+    expect((await request('/api/drafts')).body.drafts).toHaveLength(1);
+  });
+
   it('streams attachment downloads with safe response headers', async () => {
     const response = await fetch(`${baseUrl}/api/messages/message-file/attachments/0`, { headers: { Cookie: authCookie } });
     expect(response.status).toBe(200);
