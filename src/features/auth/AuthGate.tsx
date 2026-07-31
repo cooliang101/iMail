@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@fluentui/react-components';
-import { ArrowLeft, LockKey, UserCircle, UserPlus } from '@phosphor-icons/react';
+import { ArrowLeft, HardDrives, LockKey, UserCircle, UserPlus } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { AppInput } from '../../components/form-controls';
 import { BrandLogo } from '../../components/brand-logo';
 import { AuthContext, type AppUser } from './auth-context';
 import { loadRememberedUsers, rememberUser } from './remembered-users';
+import { ServiceAddressEditor } from '../service';
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -16,6 +17,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [remembered, setRemembered] = useState(loadRememberedUsers);
+  const [remoteServiceOpen, setRemoteServiceOpen] = useState(false);
 
   async function checkSession() {
     try {
@@ -26,6 +28,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     finally { setChecking(false); }
   }
   useEffect(() => { void checkSession(); }, []);
+  useEffect(() => {
+    const serviceChanged = () => { setChecking(true); setUser(null); void checkSession(); };
+    window.addEventListener('imail:service-changed', serviceChanged);
+    return () => window.removeEventListener('imail:service-changed', serviceChanged);
+  }, []);
   useEffect(() => {
     const unauthorized = () => { setUser(null); setMode('login'); setError('登录已过期，请重新登录'); };
     window.addEventListener('imail:unauthorized', unauthorized);
@@ -67,7 +74,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <h2>{setupRequired ? '先创建你的账号' : mode === 'register' ? '创建另一个账号' : '欢迎回来'}</h2>
           <p>{setupRequired ? '这是首次使用 iMail。创建后，现有本地邮件将安全归属于你。' : mode === 'register' ? '新账号拥有独立的邮箱与邮件空间。' : '选择一个账号，或使用登录名继续。'}</p>
         </header>
-
         {switcherVisible && <div className="account-switcher" aria-label="选择账号">
           {remembered.map((item) => <button key={item.login} type="button" onClick={() => setSelectedLogin(item.login)}>
             <UserCircle size={30} weight="duotone" /><span><strong>{item.displayName}</strong><small>{item.login}</small></span><span>继续</span>
@@ -84,7 +90,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <Button appearance="primary" type="submit" disabled={busy} icon={<LockKey size={18} />}>{busy ? '请稍候…' : mode === 'register' ? '创建并进入 iMail' : '登录 iMail'}</Button>
         </form>}
 
-        {!setupRequired && <footer>{mode === 'login' ? '需要独立空间？' : '已经有账号？'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setSelectedLogin(''); setError(''); }}>{mode === 'login' ? '创建新账号' : '返回登录'}</button></footer>}
+        {remoteServiceOpen && <ServiceAddressEditor compact onCancel={() => setRemoteServiceOpen(false)} onSaved={() => setRemoteServiceOpen(false)} />}
+        <footer className="auth-card-footer">
+          {!setupRequired && <span>{mode === 'login' ? '需要独立空间？' : '已经有账号？'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setSelectedLogin(''); setError(''); }}>{mode === 'login' ? '创建新账号' : '返回登录'}</button></span>}
+          <button className="auth-remote-trigger" type="button" aria-expanded={remoteServiceOpen} onClick={() => { setRemoteServiceOpen((open) => !open); setError(''); }}><HardDrives size={14} />远程服务</button>
+        </footer>
       </div>
     </section>
   </main>;

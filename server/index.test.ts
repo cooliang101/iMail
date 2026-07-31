@@ -75,6 +75,19 @@ async function request(route: string, init?: RequestInit) {
 }
 
 describe('iMail HTTP API', () => {
+  it('allows the configured web client origin and issues a cross-origin secure session cookie', async () => {
+    const response = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({ login: 'test-owner', password: 'test-password-123' }),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    expect(response.headers.get('access-control-allow-credentials')).toBe('true');
+    expect(response.headers.get('set-cookie')).toContain('SameSite=None');
+    expect(response.headers.get('set-cookie')).toContain('Secure');
+  });
+
   it('persists validated application preferences on the server', async () => {
     const initial = await request('/api/preferences');
     expect(initial.body.preferences).toMatchObject({ theme: 'mint-fresh', startupView: 'inbox', defaultMessageView: 'source' });

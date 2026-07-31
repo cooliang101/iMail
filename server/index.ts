@@ -51,6 +51,3 @@ export function installServerSignalHandlers(server: Server) {
   process.once('SIGTERM', shutdown);
   process.once('disconnect', shutdown);
 }
-
-const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
-if (path.basename(entry) === 'index.ts' && path.basename(path.dirname(entry)) === 'server') installServerSignalHandlers(startServer());

@@ -1,11 +1,8 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { DesktopNotification, DownloadRequest, PlatformRuntime } from './types';
-
-type TauriWindow = Window & { __TAURI_INTERNALS__?: unknown };
-
-export function isTauriRuntime(candidate: Pick<TauriWindow, '__TAURI_INTERNALS__'> = window as TauriWindow) {
-  return candidate.__TAURI_INTERNALS__ !== undefined;
-}
+import { desktopDownload } from '../desktop-http';
+import { isTauriRuntime } from './tauri-runtime';
+export { isTauriRuntime } from './tauri-runtime';
 export function externalHttpUrl(value: string) {
   const url = new URL(value);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('只允许打开 HTTP 或 HTTPS 地址');
@@ -43,15 +40,10 @@ function createTauriRuntime(): PlatformRuntime {
       await openUrl(externalHttpUrl(value));
     },
     async saveDownload({ url, filename }) {
-      const [{ save }, { writeFile }] = await Promise.all([
-        import('@tauri-apps/plugin-dialog'),
-        import('@tauri-apps/plugin-fs'),
-      ]);
+      const { save } = await import('@tauri-apps/plugin-dialog');
       const target = await save({ defaultPath: filename });
       if (!target) return;
-      const response = await fetch(url, { credentials: 'include' });
-      if (!response.ok) throw new Error(`附件下载失败：${response.status}`);
-      await writeFile(target, new Uint8Array(await response.arrayBuffer()));
+      await desktopDownload(url, target);
     },
     async notify(input) {
       const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');

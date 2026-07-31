@@ -14,11 +14,13 @@ describe('desktop packaging configuration', () => {
     expect(manifest.scripts['build:desktop']).toContain('tauri build');
   });
 
-  it('bundles the Node sidecar and both desktop runtime resource trees', () => {
-    const config = json<{ identifier: string; bundle: { externalBin: string[]; resources: Record<string, string> } }>('src-tauri/tauri.conf.json');
+  it('packages only the client and does not embed the Node service', () => {
+    const config = json<{ identifier: string; build: { beforeBuildCommand: string }; app: { windows: unknown[] }; bundle: { externalBin?: string[]; resources?: Record<string, string> } }>('src-tauri/tauri.conf.json');
     expect(config.identifier).toBe('com.cooliang.imail');
-    expect(config.bundle.externalBin).toEqual(['binaries/imail-node']);
-    expect(config.bundle.resources).toMatchObject({ '../desktop-runtime/': 'desktop-runtime/', '../dist/': 'web/' });
+    expect(config.build.beforeBuildCommand).toBe('npm run build:web');
+    expect(config.app.windows).toHaveLength(1);
+    expect(config.bundle.externalBin).toBeUndefined();
+    expect(config.bundle.resources).toBeUndefined();
   });
 
   it('defines a Windows NSIS package and a hardened macOS DMG', () => {

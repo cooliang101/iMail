@@ -7,12 +7,21 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "npm run prepare:desktop:dev",
-    "beforeBuildCommand": "npm run prepare:desktop"
+    "beforeBuildCommand": "npm run build:web"
   },
   "app": {
-    "windows": [],
+    "windows": [
+      {
+        "label": "main",
+        "title": "iMail",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 880,
+        "minHeight": 600
+      }
+    ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: http: https:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
   },
   "bundle": {
@@ -20,13 +29,6 @@
     "category": "Productivity",
     "shortDescription": "多邮箱统一收件箱与本地开发邮件网关",
     "longDescription": "iMail 是一个本地优先的多邮箱客户端，并提供受控的 MCP 与 REST 邮件网关。",
-    "externalBin": [
-      "binaries/imail-node"
-    ],
-    "resources": {
-      "../desktop-runtime/": "desktop-runtime/",
-      "../dist/": "web/"
-    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

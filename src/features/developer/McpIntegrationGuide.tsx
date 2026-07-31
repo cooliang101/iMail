@@ -2,19 +2,7 @@ import { useState } from 'react';
 import { BookOpen, Code, Copy, Terminal, WarningCircle } from '@phosphor-icons/react';
 import type { Notice } from '../../app-model';
 import mcpGuideMarkdown from '../../../docs/mcp-integration.md?raw';
-
-const httpConfig = [
-  '{',
-  '  "mcpServers": {',
-  '    "imail": {',
-  '      "url": "http://127.0.0.1:8787/mcp",',
-  '      "headers": {',
-  '        "Authorization": "Bearer imail_mcp_xxx"',
-  '      }',
-  '    }',
-  '  }',
-  '}',
-].join('\n');
+import { absoluteServiceUrl } from '../../service-config';
 
 const toolGroups = [
   { name: '状态与账户', tools: 'imail_status · accounts_list · account_add_with_code · account_start_oauth · account_reconnect_oauth · account_update · account_update_authorization_code · account_test_connection · account_remove' },
@@ -25,6 +13,7 @@ const toolGroups = [
 
 export function McpIntegrationGuide({ setNotice }: { setNotice: (notice: Notice) => void }) {
   const [rawVisible, setRawVisible] = useState(false);
+  const httpConfig = JSON.stringify({ mcpServers: { imail: { url: absoluteServiceUrl('/mcp'), headers: { Authorization: 'Bearer imail_mcp_xxx' } } } }, null, 2);
 
   async function copy(value: string, label: string) {
     try { await navigator.clipboard.writeText(value); setNotice({ kind: 'success', text: `${label}已复制` }); }

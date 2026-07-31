@@ -1,12 +1,20 @@
 # 架构说明
 
+## 服务与客户端边界
+
+iMail 服务独立运行并拥有邮箱凭据、SQLite、同步 Worker、HTTP API、Gateway 与 MCP。Web 与 Tauri 桌面版都是 iMail 客户端，只保存服务地址和界面偏好；桌面安装包不包含 Node Runtime、服务端 bundle、Worker 或数据库。客户端的 API、SSE、附件与开发者端点统一从运行时服务地址派生。
+
+Web 与桌面客户端默认连接 `http://127.0.0.1:8787`，也可通过构建变量 `VITE_API_BASE_URL`、登录页的“远程服务”展开项或设置页指定其他地址。Web 客户端直接请求服务并受 `CORS_ORIGIN` 约束；桌面客户端经受控 Rust 网络桥请求，WebView 不直接接触服务端会话。
+
+Web 生产构建注册独立 Service Worker：带内容哈希的 JS、CSS、字体和图片采用缓存优先，页面导航采用网络优先并回退到已缓存应用外壳。`/api`、`/gateway`、`/mcp` 与 `text/event-stream` 请求始终绕过缓存；Tauri 运行时不注册 Service Worker。
+
 ## 后端同步控制面
 
 邮箱同步是后端持久化任务，不以任何前端页面、用户会话、SSE/WebSocket 或 MCP 连接作为生命周期条件。默认启动器同时运行 API 与独立 Worker；外部进程管理模式也可以分别运行二者。
 
 ## 应用身份与数据边界
 
-`app_users` 保存应用用户与 scrypt 密码派生值，`app_sessions` 只保存随机会话令牌的 SHA-256 哈希。浏览器使用 HttpOnly、SameSite=Lax Cookie；前端 `AuthGate` 在渲染邮件工作区前检查会话，并在任意数据 API 返回 401 时立即退回登录页。
+`app_users` 保存应用用户与 scrypt 密码派生值，`app_sessions` 只保存随机会话令牌的 SHA-256 哈希。同源访问使用 HttpOnly、SameSite=Lax Cookie；跨源客户端使用 HttpOnly、SameSite=None、Secure Cookie。前端 `AuthGate` 在渲染邮件工作区前检查会话，并在任意数据 API 返回 401 时立即退回登录页。
 
 HTTP 会话、API 网关 Token 与 MCP 授权码都会恢复同一个服务端用户上下文。存储层按该上下文过滤 `accounts.user_id`、`developer_tokens.user_id`、`contacts.user_id` 与 `logo_fetch_attempts.user_id`，邮件和草稿通过所属邮箱账户间接隔离。后台同步不依赖浏览器会话，而是按全局唯一邮箱账户 ID 工作；提交联系人快照时重新取得该账户的用户归属。
 

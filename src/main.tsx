@@ -6,6 +6,9 @@ import './styles.css';
 import { AuthGate } from './features/auth';
 import { AppThemeProvider } from './features/appearance';
 import { PlatformProvider } from './platform/runtime';
+import { registerWebServiceWorker } from './service-worker-registration';
+
+registerWebServiceWorker();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

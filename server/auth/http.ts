@@ -43,14 +43,21 @@ function cookies(req: Request) {
 function session(req: Request) { return cookies(req)[SESSION_COOKIE]; }
 function publicUser(user: AppUser) { return { id: user.id, login: user.login, displayName: user.displayName }; }
 function setSessionCookie(req: Request, res: Response, value: string) {
-  const desktop = process.env.IMAIL_DESKTOP_MODE === 'true';
-  const secure = req.secure || (!desktop && process.env.NODE_ENV === 'production');
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=${desktop ? 'Strict' : 'Lax'}; Max-Age=2592000${secure ? '; Secure' : ''}`);
+  const crossOrigin = requestIsCrossOrigin(req);
+  const secure = crossOrigin || req.secure;
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=${crossOrigin ? 'None' : 'Lax'}; Max-Age=2592000${secure ? '; Secure' : ''}`);
 }
 function clearSessionCookie(req: Request, res: Response) {
-  const desktop = process.env.IMAIL_DESKTOP_MODE === 'true';
-  const secure = req.secure || (!desktop && process.env.NODE_ENV === 'production');
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=${desktop ? 'Strict' : 'Lax'}; Max-Age=0${secure ? '; Secure' : ''}`);
+  const crossOrigin = requestIsCrossOrigin(req);
+  const secure = crossOrigin || req.secure;
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=${crossOrigin ? 'None' : 'Lax'}; Max-Age=0${secure ? '; Secure' : ''}`);
+}
+
+function requestIsCrossOrigin(req: Request) {
+  const origin = req.header('origin');
+  if (!origin) return false;
+  try { return new URL(origin).host !== req.header('host'); }
+  catch { return false; }
 }
 
 const credentials = z.object({

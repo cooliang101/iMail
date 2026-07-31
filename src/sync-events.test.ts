@@ -6,7 +6,7 @@ class FakeEventSource {
   readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
   closed = false;
 
-  constructor(readonly url: string | URL) { FakeEventSource.instances.push(this); }
+  constructor(readonly url: string | URL, readonly options?: EventSourceInit) { FakeEventSource.instances.push(this); }
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
     const listeners = this.listeners.get(type) ?? new Set();
@@ -42,7 +42,8 @@ describe('shared sync events', () => {
     const unsubscribeCreated = subscribeSyncEvents(['message.created'], created);
 
     expect(FakeEventSource.instances).toHaveLength(1);
-    expect(FakeEventSource.instances[0].url).toBe('/api/events');
+    expect(FakeEventSource.instances[0].url).toBe('http://127.0.0.1:8787/api/events');
+    expect(FakeEventSource.instances[0].options).toEqual({ withCredentials: true });
     FakeEventSource.instances[0].emit('sync.completed');
     expect(completed).toHaveBeenCalledOnce();
     expect(created).not.toHaveBeenCalled();

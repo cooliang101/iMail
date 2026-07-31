@@ -54,16 +54,18 @@ npm run dev
 
 API 启动器默认同时拉起独立同步 Worker。Worker 的任务、租约、邮箱 UID 游标、下次执行时间和失败状态均保存在 SQLite；浏览器、SSE 或开发者 WebSocket 断开不会停止同步。
 
-生产构建：
+独立服务使用 `npm start` 启动。Web 客户端可由同一域名反向代理 `/api`，也可在构建时或设置页指定服务地址：
 
 ```bash
 npm run build
 npm start
+# 可选：构建时默认服务地址
+VITE_API_BASE_URL=https://mail.example.com npm run build:web
 ```
 
 ## 桌面应用
 
-桌面版使用 Tauri v2 承载同一套 React 前端，并将 Node/Express 服务和同步 Worker 作为仅监听回环地址的 sidecar 启动。Web 版仍可独立开发、构建和部署，不依赖 Rust 或 Tauri：
+桌面版使用 Tauri v2 承载同一套 React 前端，是纯客户端，不携带 Node/Express、SQLite、同步 Worker 或邮箱凭据。客户端默认连接 `http://127.0.0.1:8787`；登录卡片底部的“远程服务”可原地展开地址输入，登录后也可在“设置 → 服务连接”中更换。Web 版使用同一配置方式：
 
 ```bash
 npm run dev:web
@@ -77,16 +79,15 @@ npm run dev:desktop
 npm run build:desktop:windows
 ```
 
-安装包输出到 `src-tauri/target/release/bundle/nsis/`。发布前可分别验证内置服务和真实发布宿主：
+安装包输出到 `src-tauri/target/release/bundle/nsis/`。发布前验证真实桌面宿主：
 
 ```bash
-npm run test:desktop-runtime
 npm run test:desktop-release
 ```
 
-macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools，再执行 `npm run build:desktop:macos`。DMG、hardened runtime 和网络/JIT entitlement 已配置；正式分发仍需在 macOS 构建机配置 Apple Developer 签名与 notarization。Windows 无法生成或签名 macOS 产物，因此仓库通过跨平台配置单元测试覆盖 macOS sidecar 命名、DMG、最低系统版本、hardened runtime 与 entitlement。
+macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools，再执行 `npm run build:desktop:macos`。DMG、hardened runtime 和网络/JIT entitlement 已配置；正式分发仍需在 macOS 构建机配置 Apple Developer 签名与 notarization。
 
-桌面宿主只通过 Platform Adapter 接管系统浏览器、保存对话框和通知等 OS 能力；邮件、账户、同步、REST 与 MCP 仍走共享 HTTP 服务，避免形成第三套业务协议。完整架构与迭代路线见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
+桌面宿主通过 Rust 网络桥连接配置的独立 HTTP 服务，并在 Rust 侧维护登录 Cookie、实时事件流与附件下载；Web 客户端仍直接连接服务。生产跨源部署应使用 HTTPS，并只需在服务端 `CORS_ORIGIN` 中列出实际 Web 来源。完整边界见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
 
 ## 添加邮箱
 
@@ -348,6 +349,7 @@ server/providers.ts  服务商预设
 - `public/apple-touch-icon.png`：180×180 Apple Touch Icon
 - `public/pwa-192.png`、`public/pwa-512.png`：PWA 安装图标
 - `public/manifest.webmanifest`：iMail Web App Manifest
+- `public/sw.js`：仅 Web 生产环境注册的 Service Worker；缓存版本化静态资源与离线页面外壳，明确绕过 API、SSE、MCP 和 Gateway
 
 ## 验证
 
