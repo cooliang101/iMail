@@ -14,19 +14,8 @@
   display: grid;
   grid-template-columns: var(--layout-account-rail) var(--layout-sidebar) minmax(0, 1fr) auto;
   background: var(--color-canvas);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
   color: var(--color-text-secondary);
   user-select: none;
-}
-
-.desktop-titlebar::after {
-  content: '';
-  position: absolute;
-  inset: auto 0 -1px;
-  height: 1px;
-  background: linear-gradient(90deg, var(--color-accent), transparent 18%);
-  opacity: .34;
-  pointer-events: none;
 }
 
 .desktop-titlebar-brand,
@@ -101,15 +90,9 @@
   background: var(--color-canvas);
 }
 [data-theme='business-blue'] .desktop-titlebar-drag { background-image: repeating-linear-gradient(90deg, transparent 0 63px, rgb(29 127 198 / 3%) 63px 64px); }
-[data-theme='business-blue'] .desktop-titlebar::after { opacity: .58; background: linear-gradient(90deg, var(--color-accent), transparent 36%); }
-
-[data-theme='soft-neubrutalism'] .desktop-titlebar {
-  border-bottom: 2px solid var(--color-border-strong);
-}
 [data-theme='soft-neubrutalism'] .desktop-titlebar-brand,
 [data-theme='soft-neubrutalism'] .desktop-titlebar-name { border-right: 2px solid var(--color-border-strong); }
 [data-theme='soft-neubrutalism'] .desktop-titlebar-drag { background-image: radial-gradient(rgb(52 48 58 / 9%) .8px, transparent .8px); background-size: 14px 14px; }
-[data-theme='soft-neubrutalism'] .desktop-titlebar::after { display: none; }
 [data-theme='soft-neubrutalism'] .desktop-window-controls { border-left: 2px solid var(--color-border-strong); }
 [data-theme='soft-neubrutalism'] .desktop-window-controls button { border-left: 1px solid var(--color-border-strong); }
 [data-theme='soft-neubrutalism'] .desktop-window-controls button:first-child { border-left: 0; }
@@ -129,7 +112,6 @@
 .desktop-frame:has(.auth-page) .desktop-titlebar {
   grid-template-columns: 72px auto minmax(0, 1fr) auto;
   background: linear-gradient(90deg, #10231f 0 45%, #f5f8f7 45%);
-  border-bottom-color: rgb(117 212 191 / 18%);
 }
 .desktop-frame:has(.auth-page) .desktop-titlebar-brand,
 .desktop-frame:has(.auth-page) .desktop-titlebar-name,
