@@ -7,6 +7,7 @@ import { AuthGate } from './features/auth';
 import { AppThemeProvider } from './features/appearance';
 import { PlatformProvider } from './platform/runtime';
 import { registerWebServiceWorker } from './service-worker-registration';
+import { DesktopFrame } from './components/DesktopFrame';
 
 registerWebServiceWorker();
 
@@ -14,7 +15,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PlatformProvider>
       <AppThemeProvider>
-        <AuthGate><App /></AuthGate>
+        <DesktopFrame><AuthGate><App /></AuthGate></DesktopFrame>
       </AppThemeProvider>
     </PlatformProvider>
   </StrictMode>,

@@ -2,6 +2,8 @@
 
 iMail 桌面版是纯客户端。它复用 React 前端和 Platform Adapter，提供系统浏览器、保存对话框与通知等桌面能力，但不携带 Node.js、Express、SQLite、同步 Worker、MCP 或邮件凭据。
 
+Windows 主窗口关闭系统原生装饰，使用 38px 的主题化自定义标题栏。拖拽、双击最大化以及最小化、还原、关闭均调用 Tauri 窗口 API；标题栏直接消费当前主题令牌，并与账户栏颜色及各主题纹理连续衔接。Web 运行时不渲染该窗口框架。
+
 ## 部署拓扑
 
 ```text

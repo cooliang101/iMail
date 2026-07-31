@@ -1,0 +1,106 @@
+.desktop-frame {
+  height: 100dvh;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 38px minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--color-canvas);
+}
+
+.desktop-titlebar {
+  position: relative;
+  z-index: var(--z-sticky);
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  background: color-mix(in srgb, var(--color-surface-raised) 92%, var(--color-canvas));
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.desktop-titlebar::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-accent), transparent 18%);
+  opacity: .34;
+  pointer-events: none;
+}
+
+.desktop-titlebar-drag {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-inline: 13px;
+  background: linear-gradient(90deg, var(--color-rail) 0 var(--layout-account-rail), transparent var(--layout-account-rail));
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  cursor: default;
+}
+
+.desktop-titlebar-logo { width: 18px; height: 18px; color: var(--color-accent); }
+.desktop-titlebar-drag > span { color: var(--color-rail-text); }
+.desktop-window-controls { display: grid; grid-auto-flow: column; }
+.desktop-window-controls button {
+  width: 46px;
+  height: 37px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: default;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.desktop-window-controls button:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-text); }
+.desktop-window-controls button:active { background: color-mix(in srgb, var(--color-text) 13%, transparent); }
+.desktop-window-controls button:focus-visible { position: relative; z-index: 1; outline-offset: -3px; }
+.desktop-window-controls .desktop-window-close:hover { background: #c42b1c; color: #fff; }
+.desktop-window-controls .desktop-window-close:active { background: #a92518; color: #fff; }
+
+[data-theme='mint-fresh'] .desktop-titlebar,
+[data-theme='imail-light'] .desktop-titlebar {
+  background-image: radial-gradient(circle at 8% 0, rgb(73 213 183 / 10%), transparent 26%);
+}
+[data-theme='mint-fresh'] .desktop-titlebar-logo,
+[data-theme='imail-light'] .desktop-titlebar-logo { color: var(--color-rail-accent); }
+
+[data-theme='tech'] .desktop-titlebar {
+  background-color: var(--color-surface-subtle);
+  background-image: linear-gradient(rgb(189 87 27 / 7%) 1px, transparent 1px), linear-gradient(90deg, rgb(17 26 32 / 5%) 1px, transparent 1px);
+  background-size: 18px 18px;
+  border-bottom-style: dashed;
+}
+[data-theme='tech'] .desktop-titlebar-logo { color: var(--color-rail-accent); filter: drop-shadow(0 0 6px rgb(223 129 67 / 48%)); }
+[data-theme='tech'] .desktop-window-controls button { border-left: 1px solid rgb(89 104 115 / 12%); }
+
+[data-theme='business-blue'] .desktop-titlebar {
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 70%), transparent), repeating-linear-gradient(90deg, transparent 0 47px, rgb(29 127 198 / 4%) 47px 48px);
+}
+[data-theme='business-blue'] .desktop-titlebar::after { opacity: .58; background: linear-gradient(90deg, var(--color-accent), transparent 36%); }
+
+[data-theme='soft-neubrutalism'] .desktop-titlebar {
+  background-color: var(--color-surface-subtle);
+  background-image: radial-gradient(rgb(52 48 58 / 13%) .8px, transparent .8px);
+  background-size: 12px 12px;
+  border-bottom: 2px solid var(--color-border-strong);
+}
+[data-theme='soft-neubrutalism'] .desktop-titlebar::after { display: none; }
+[data-theme='soft-neubrutalism'] .desktop-window-controls { border-left: 2px solid var(--color-border-strong); }
+[data-theme='soft-neubrutalism'] .desktop-window-controls button { border-left: 1px solid var(--color-border-strong); }
+[data-theme='soft-neubrutalism'] .desktop-window-controls button:first-child { border-left: 0; }
+[data-theme='soft-neubrutalism'] .desktop-window-controls button:hover { background: #efddef; }
+[data-theme='soft-neubrutalism'] .desktop-window-controls .desktop-window-close:hover { background: #d56154; color: #fff; }
+
+.desktop-content { min-width: 0; min-height: 0; overflow: hidden; }
+.desktop-content .app-shell { height: 100%; }
+.desktop-content .auth-loading,
+.desktop-content .auth-page,
+.desktop-content .auth-brand-panel,
+.desktop-content .auth-card-wrap { height: 100%; min-height: 0; }
