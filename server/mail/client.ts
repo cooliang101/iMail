@@ -13,7 +13,13 @@ function authFor(account: MailAccount, secret: AccountSecret) {
     : { user: account.email, pass: secret.password ?? '' };
 }
 
-export async function imapClientFor(account: MailAccount) {
+export type ImapClientOptions = {
+  disableAutoIdle?: boolean;
+  maxIdleTime?: number;
+  missingIdleCommand?: 'NOOP' | 'SELECT' | 'STATUS';
+};
+
+export async function imapClientFor(account: MailAccount, options: ImapClientOptions = {}) {
   const secret = await resolveAccountSecret(account);
   return new ImapFlow({
     host: account.settings.imapHost,
@@ -22,8 +28,9 @@ export async function imapClientFor(account: MailAccount) {
     auth: authFor(account, secret),
     logger: false,
     qresync: true,
-    maxIdleTime: 4 * 60_000,
-    missingIdleCommand: 'NOOP',
+    disableAutoIdle: options.disableAutoIdle,
+    maxIdleTime: options.maxIdleTime ?? 4 * 60_000,
+    missingIdleCommand: options.missingIdleCommand ?? 'NOOP',
     connectionTimeout: 30_000,
     greetingTimeout: 30_000,
     socketTimeout: 120_000,

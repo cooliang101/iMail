@@ -29,7 +29,8 @@ describe('versioned SQLite migrations', () => {
     `);
 
     ensureSchema(db);
-    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('3');
+    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('4');
+    expect((db.prepare("SELECT rerun_requested FROM sync_jobs WHERE id = 'job-1'").get() as { rerun_requested: number }).rerun_requested).toBe(0);
     expect((db.prepare('SELECT count(*) AS count FROM sync_events').get() as { count: number }).count).toBe(1);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     db.prepare("DELETE FROM accounts WHERE id = 'account-1'").run();

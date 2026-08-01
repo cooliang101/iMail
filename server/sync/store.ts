@@ -185,16 +185,32 @@ export class SyncStore {
     const mailboxRole = input.mailboxRole ?? 'inbox';
     const priority = input.priority ?? 0;
     const notBefore = input.notBefore ?? now;
-    this.db.prepare(`INSERT OR IGNORE INTO sync_jobs
-      (id, account_id, mailbox, mailbox_role, reason, status, priority, not_before, attempts, created_at)
-      VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 0, ?)`).run(id, input.accountId, input.mailbox ?? null, mailboxRole, input.reason, priority, notBefore, now);
-    this.db.prepare(`UPDATE sync_jobs SET priority = max(priority, ?), not_before = min(not_before, ?)
-      WHERE account_id = ? AND coalesce(mailbox, '') = coalesce(?, '') AND mailbox_role = ? AND status = 'queued'`)
-      .run(priority, notBefore, input.accountId, input.mailbox ?? null, mailboxRole);
-    const row = this.db.prepare(`SELECT * FROM sync_jobs WHERE account_id = ? AND coalesce(mailbox, '') = coalesce(?, '') AND mailbox_role = ?
-      AND status IN ('queued', 'running') ORDER BY created_at LIMIT 1`).get(input.accountId, input.mailbox ?? null, mailboxRole) as Row | undefined;
-    if (!row) throw new Error('无法创建同步任务');
-    return jobFromRow(row);
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const existing = this.db.prepare(`SELECT * FROM sync_jobs WHERE account_id = ? AND coalesce(mailbox, '') = coalesce(?, '')
+        AND mailbox_role = ? AND status IN ('queued', 'running') ORDER BY created_at LIMIT 1`)
+        .get(input.accountId, input.mailbox ?? null, mailboxRole) as Row | undefined;
+      if (existing) {
+        if (String(existing.status) === 'running') {
+          this.db.prepare('UPDATE sync_jobs SET rerun_requested = 1, priority = max(priority, ?) WHERE id = ?').run(priority, String(existing.id));
+        } else {
+          this.db.prepare('UPDATE sync_jobs SET priority = max(priority, ?), not_before = min(not_before, ?) WHERE id = ?')
+            .run(priority, notBefore, String(existing.id));
+        }
+        const updated = this.db.prepare('SELECT * FROM sync_jobs WHERE id = ?').get(String(existing.id)) as Row;
+        this.db.exec('COMMIT');
+        return jobFromRow(updated);
+      }
+      this.db.prepare(`INSERT INTO sync_jobs
+        (id, account_id, mailbox, mailbox_role, reason, status, priority, not_before, attempts, created_at)
+        VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 0, ?)`).run(id, input.accountId, input.mailbox ?? null, mailboxRole, input.reason, priority, notBefore, now);
+      const created = this.db.prepare('SELECT * FROM sync_jobs WHERE id = ?').get(id) as Row;
+      this.db.exec('COMMIT');
+      return jobFromRow(created);
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   claimNextJob(workerId: string, leaseMs: number, now = new Date()): SyncJob | undefined {
@@ -244,8 +260,11 @@ export class SyncStore {
     const now = new Date(); const nowIso = now.toISOString(); const next = new Date(now.getTime() + intervalMinutes * 60_000).toISOString();
     this.db.exec('BEGIN IMMEDIATE');
     try {
+      const active = this.db.prepare("SELECT rerun_requested FROM sync_jobs WHERE id = ? AND status = 'running' AND locked_by = ?")
+        .get(job.id, job.lockedBy ?? null) as Row | undefined;
+      if (!active) throw new Error('同步任务租约已失效');
       const completed = this.db.prepare(`UPDATE sync_jobs SET status = 'succeeded', finished_at = ?, locked_by = NULL, locked_until = NULL,
-        synced_count = ?, new_count = ?, updated_count = ?, deleted_count = ?, error_code = NULL, error_message = NULL
+        synced_count = ?, new_count = ?, updated_count = ?, deleted_count = ?, error_code = NULL, error_message = NULL, rerun_requested = 0
         WHERE id = ? AND status = 'running' AND locked_by = ?`)
         .run(nowIso, result.synced, result.created, result.updated, result.deleted, job.id, job.lockedBy ?? null);
       if (Number(completed.changes) !== 1) throw new Error('同步任务租约已失效');
@@ -265,6 +284,13 @@ export class SyncStore {
           ...(change.after ? { after: clientMessageSummary(change.after) } : {}),
         })),
       }, nowIso);
+      if (Boolean(active.rerun_requested)) {
+        this.db.prepare(`INSERT INTO sync_jobs
+          (id, account_id, mailbox, mailbox_role, reason, status, priority, not_before, attempts, created_at)
+          VALUES (?, ?, ?, ?, 'recovery', 'queued', ?, ?, 0, ?)`).run(
+          crypto.randomUUID(), job.accountId, job.mailbox ?? null, job.mailboxRole, Math.max(50, job.priority), nowIso, nowIso,
+        );
+      }
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }

@@ -101,7 +101,8 @@ export function ensureSchema(db: DatabaseSync) {
       updated_count INTEGER,
       deleted_count INTEGER,
       error_code TEXT,
-      error_message TEXT
+      error_message TEXT,
+      rerun_requested INTEGER NOT NULL DEFAULT 0 CHECK (rerun_requested IN (0, 1))
     ) STRICT;
     CREATE INDEX IF NOT EXISTS sync_jobs_claim ON sync_jobs(status, not_before, priority DESC, created_at);
     CREATE UNIQUE INDEX IF NOT EXISTS sync_jobs_active_target ON sync_jobs(account_id, coalesce(mailbox, ''), mailbox_role)

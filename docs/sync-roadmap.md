@@ -8,7 +8,7 @@ iMail 的邮箱同步由后端持久化调度，不依赖前端页面、用户�
 
 ## 实施状态
 
-截至 2026-07-30，M0–M6 已落地：同步提交使用细粒度 SQL 事务；策略、任务、租约、邮箱游标、事件和 Worker 心跳均已持久化；API 默认拉起并监管独立 Worker；HTTP、MCP 和前端设置已接入；UIDVALIDITY、CONDSTORE/QRESYNC、远端 UID 删除检查和收件箱 IDLE 已启用。周期调度始终作为 IDLE 断线时的可靠兜底。
+截至 2026-08-01，M0–M6 已落地：同步提交使用细粒度 SQL 事务；策略、任务、租约、邮箱游标、事件和 Worker 心跳均已持久化；API 默认拉起并监管独立 Worker；HTTP、MCP 和前端设置已接入；UIDVALIDITY、CONDSTORE/QRESYNC、远端 UID 删除检查和显式收件箱 IDLE 已启用。IDLE 断线会自动重连，任务运行期间的后续通知会持久化为一次补跑；周期调度始终作为可靠兜底。
 
 保留的快照兼容接口在 `BEGIN IMMEDIATE` 内读取和提交，以确保与 Worker 跨进程串行；邮件同步热路径不再通过整库替换提交。
 
@@ -132,6 +132,7 @@ SQLite ◄──────────── Sync Worker ───────
   - `attempts`
   - `created_at` / `started_at` / `finished_at`
   - 同步数量与安全裁剪后的错误信息
+  - `rerun_requested`：任务运行期间收到新唤醒时，完成后保证再执行一次
 
 交付物：
 

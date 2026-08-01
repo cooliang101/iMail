@@ -37,6 +37,7 @@ function account(): MailAccount {
 function data(): StoreData { return { accounts: [account()], messages: [], tokens: [], drafts: [], contacts: [], logoFetchAttempts: [] }; }
 
 afterEach(async () => {
+  vi.useRealTimers();
   while (stores.length) stores.pop()!.close();
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -64,6 +65,21 @@ describe('persistent synchronization control plane', () => {
     const reclaimed = store.claimNextJob('worker-b', 10_000, new Date(base.getTime() + 11_000));
     expect(reclaimed).toMatchObject({ id: first.id, lockedBy: 'worker-b', attempts: 2 });
     expect(() => store.completeJob(claimed, { mailbox: 'INBOX', lastSeenUid: 1, synced: 0, created: 0, updated: 0, deleted: 0 }, 5)).toThrow('同步任务租约已失效');
+  });
+
+  it('queues a follow-up sync when a mailbox wake-up arrives during an active fetch', async () => {
+    const store = await temporarySyncStore();
+    store.enqueueJob({ accountId: account().id, reason: 'scheduled' });
+    const running = store.claimNextJob('worker-a', 60_000)!;
+    store.markJobStarted(running, 'INBOX');
+
+    expect(store.enqueueJob({ accountId: account().id, reason: 'recovery', priority: 50 }).id).toBe(running.id);
+    store.completeJob(running, { mailbox: 'INBOX', lastSeenUid: 7, synced: 1, created: 1, updated: 0, deleted: 0 }, 1);
+
+    expect(store.listJobs({ accountId: account().id })).toEqual([
+      expect.objectContaining({ status: 'queued', reason: 'recovery', priority: 50 }),
+      expect.objectContaining({ id: running.id, status: 'succeeded' }),
+    ]);
   });
 
   it('records successful cursor advancement and observable events', async () => {
@@ -151,17 +167,40 @@ describe('persistent synchronization control plane', () => {
 
   it('uses an IMAP IDLE watcher only as a persistent-task wake-up signal', async () => {
     const store = await temporarySyncStore(); store.ensurePolicy(account().id);
-    const client = new EventEmitter() as EventEmitter & { connect: ReturnType<typeof vi.fn>; mailboxOpen: ReturnType<typeof vi.fn>; logout: ReturnType<typeof vi.fn> };
-    client.connect = vi.fn(async () => undefined); client.mailboxOpen = vi.fn(async () => undefined); client.logout = vi.fn(async () => undefined);
+    const client = new EventEmitter() as EventEmitter & { connect: ReturnType<typeof vi.fn>; mailboxOpen: ReturnType<typeof vi.fn>; idle: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; logout: ReturnType<typeof vi.fn> };
+    client.connect = vi.fn(async () => undefined); client.mailboxOpen = vi.fn(async () => undefined);
+    client.idle = vi.fn(() => new Promise(() => undefined)); client.close = vi.fn(); client.logout = vi.fn(async () => undefined);
+    const createClient = vi.fn(async () => client as never);
     const watchers = startIdleWatchers({
       syncStore: store, autoStart: false, reconcileIntervalMs: 60_000, loadStore: async () => data(),
-      createClient: vi.fn(async () => client as never),
+      createClient,
     });
     await watchers.reconcile();
+    expect(createClient).toHaveBeenCalledWith(account(), { disableAutoIdle: true, maxIdleTime: 60_000, missingIdleCommand: 'STATUS' });
     expect(client.mailboxOpen).toHaveBeenCalledWith('INBOX', { readOnly: true });
+    expect(client.idle).toHaveBeenCalledOnce();
     client.emit('exists', { count: 2, prevCount: 1 });
     expect(store.listJobs({ accountId: account().id })).toEqual([expect.objectContaining({ reason: 'recovery', status: 'queued', mailboxRole: 'inbox' })]);
     await watchers.close();
     expect(client.logout).toHaveBeenCalledOnce();
+  });
+
+  it('reconnects an IDLE watcher promptly after the connection closes', async () => {
+    vi.useFakeTimers();
+    const store = await temporarySyncStore(); store.ensurePolicy(account().id);
+    const clients = [0, 1].map(() => {
+      const client = new EventEmitter() as EventEmitter & { connect: ReturnType<typeof vi.fn>; mailboxOpen: ReturnType<typeof vi.fn>; idle: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; logout: ReturnType<typeof vi.fn> };
+      client.connect = vi.fn(async () => undefined); client.mailboxOpen = vi.fn(async () => undefined);
+      client.idle = vi.fn(() => new Promise(() => undefined)); client.close = vi.fn(); client.logout = vi.fn(async () => undefined);
+      return client;
+    });
+    const createClient = vi.fn(async () => clients[Math.min(createClient.mock.calls.length - 1, clients.length - 1)] as never);
+    const watchers = startIdleWatchers({ syncStore: store, autoStart: false, reconcileIntervalMs: 60_000, loadStore: async () => data(), createClient });
+    await watchers.reconcile();
+    clients[0].emit('close');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(createClient).toHaveBeenCalledTimes(2);
+    expect(clients[1].idle).toHaveBeenCalledOnce();
+    await watchers.close();
   });
 });

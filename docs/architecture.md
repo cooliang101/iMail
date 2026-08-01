@@ -41,11 +41,13 @@ IMAP providers ◄────────────────────�
 - `server/sync/store.ts`：同步策略、邮箱状态、任务租约、事件、Worker 心跳和积压指标。
 - `server/sync/scheduler.ts`：扫描到期策略，合并重复任务并处理启动补同步和退避恢复。
 - `server/sync/worker-runtime.ts`：领取任务、续租、执行 IMAP 同步、推进游标并记录安全错误。
-- `server/sync/idle.ts`：为可用账户保持收件箱 IDLE 连接，只负责提前唤醒持久化任务；断线不影响周期轮询。
+- `server/sync/idle.ts`：为可用账户显式进入收件箱 IDLE；连接错误或 IDLE 意外结束后按 0.5–30 秒退避重连。不支持 IDLE 的服务商通过同一连接定期执行 `STATUS`；所有通知只负责唤醒持久化任务。
 - `server/sync/worker.ts`：独立进程入口和信号关闭。
 - `server/routes/sync.ts`：策略、状态、任务查询和前端 SSE 通知。客户端复用单个 SSE 连接；`sync.completed` 携带经过裁剪的邮件摘要增量，前端直接合并新增、标记变化与删除；`sync.status` 在连接、任务状态变化和 Worker 心跳时推送完整运行状态，设置页不再查询 `api/messages` 或 `api/sync-status`。默认策略仍按需单独读取，不参与轮询。浏览器场景是单向服务端推送，因此无需额外引入 MQTT broker。
 
 同步执行只把安全裁剪后的领域事件写入 SQLite。SSE 和开发者 WebSocket 从同一持久化事件日志读取，避免独立 Worker 无法触达进程内事件总线，也避免同一封新邮件被内存总线和数据库重复投递。
+
+`sync_jobs.rerun_requested` 保存任务运行期间到达的后续唤醒。若 IDLE 通知发生在当前 IMAP 快照已读取之后，入队事务会标记当前任务；完成事务随即创建一个互斥的 recovery 任务，避免唯一索引去重造成永久漏信。多个运行中通知仍合并为一次补跑，不产生并发同步。
 
 同步游标按账户和真实邮箱文件夹保存，包括 `UIDVALIDITY`、最后 UID 与 `HIGHESTMODSEQ`。UIDVALIDITY 改变时只重建对应文件夹；支持 CONDSTORE 时按 modseq 获取标记变化，同时显式检查已缓存 UID 是否仍存在。API 的“立即同步”和 MCP `mailbox_sync` 都只创建持久化任务。
 

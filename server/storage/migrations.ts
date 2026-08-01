@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 type Row = Record<string, unknown>;
 
 function columns(db: DatabaseSync, table: string) {
@@ -137,12 +137,19 @@ function migrateSyncForeignKeys(db: DatabaseSync) {
   });
 }
 
+function migrateSyncJobWakeups(db: DatabaseSync) {
+  if (!columns(db, 'sync_jobs').has('rerun_requested')) {
+    db.exec('ALTER TABLE sync_jobs ADD COLUMN rerun_requested INTEGER NOT NULL DEFAULT 0 CHECK (rerun_requested IN (0, 1))');
+  }
+}
+
 export function runMigrations(db: DatabaseSync) {
   const row = db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value?: string } | undefined;
   const version = Number(row?.value ?? 0);
   if (version < 1) migrateLegacyColumns(db);
   if (version < 2) migrateAccountEmailConstraint(db);
   if (version < 3) migrateSyncForeignKeys(db);
+  if (version < 4) migrateSyncJobWakeups(db);
   if (version < CURRENT_SCHEMA_VERSION) {
     db.prepare("INSERT INTO metadata (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .run(String(CURRENT_SCHEMA_VERSION));
