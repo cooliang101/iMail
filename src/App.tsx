@@ -16,6 +16,7 @@ import { AppContextMenu } from './features/context-menu';
 import { gatewayPreferencesPayload, loadAppPreferences, mergeGatewayPreferences, preferencesStorageKeyFor, SettingsModal, type GatewayPreferences, type SettingsTab } from './features/settings';
 import { useAuth } from './features/auth';
 import { useAppTheme } from './features/appearance';
+import { subscribeDesktopCompose } from './platform/desktop-events';
 
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
 function App() {
@@ -96,6 +97,7 @@ function App() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => subscribeDesktopCompose(() => openCompose()), []);
   useEffect(() => { setTheme(preferences.theme, preferences.customTheme); }, [preferences.customTheme, preferences.theme]);
   useEffect(() => {
     void api<{ preferences: GatewayPreferences }>('/api/preferences').then((result) => {

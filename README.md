@@ -79,6 +79,8 @@ npm run dev:desktop
 npm run build:desktop:windows
 ```
 
+桌面版默认保持后台运行：点击主窗口关闭按钮会隐藏到系统托盘，左键托盘图标或选择“打开 iMail”可恢复窗口；托盘右键菜单的“写邮件”会恢复窗口并直接打开新邮件编辑器，选择“退出 iMail”才会结束进程。应用采用单实例模式；再次启动 iMail 会恢复并聚焦已有窗口，不会创建第二个进程实例。
+
 安装包输出到 `src-tauri/target/release/bundle/nsis/`。发布前验证真实桌面宿主：
 
 ```bash

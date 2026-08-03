@@ -34,4 +34,18 @@ describe('desktop packaging configuration', () => {
     expect(entitlements).toContain('com.apple.security.network.client');
     expect(entitlements).toContain('com.apple.security.network.server');
   });
+
+  it('keeps one desktop instance and hides the main window to the system tray on close', () => {
+    const manifest = readFileSync('src-tauri/Cargo.toml', 'utf8');
+    const runtime = readFileSync('src-tauri/src/lib.rs', 'utf8');
+    expect(manifest).toContain('tauri-plugin-single-instance');
+    expect(manifest).toContain('features = ["tray-icon"]');
+    expect(runtime).toContain('tauri_plugin_single_instance::init');
+    expect(runtime).toContain('api.prevent_close()');
+    expect(runtime).toContain('window.hide()');
+    expect(runtime).toContain('TrayIconBuilder::with_id("main")');
+    expect(runtime).toContain('MenuItem::with_id(app, "compose", "写邮件"');
+    expect(runtime).toContain('app.emit("desktop-compose", ())');
+    expect(runtime).toContain('"quit" => app.exit(0)');
+  });
 });
