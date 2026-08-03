@@ -51,6 +51,7 @@ Authorization: Bearer imail_mcp_xxx
 | 账户 | `account_update` | 更新名称、工作空间、图标和颜色 |
 | 账户 | `account_update_authorization_code` | 验证并替换非 OAuth 账户凭据 |
 | 账户 | `account_test_connection` | 验证已保存的 IMAP/SMTP 凭据 |
+| 账户 | `account_proxy_update` | 启用、修改或关闭账户级 HTTP/HTTPS/SOCKS5 代理 |
 | 账户 | `account_remove` | 移除账户及其本地缓存和草稿 |
 | 同步 | `mailbox_sync` | 为单个/全部账户的特殊或自定义文件夹创建持久化同步任务 |
 | 同步 | `sync_policy_get` | 读取默认/账户级策略、邮箱状态和最近任务 |
@@ -78,10 +79,11 @@ Authorization: Bearer imail_mcp_xxx
 - 发送邮件前确认 `accountEmail`、收件人、主题和正文；发送不是幂等操作。
 - `account_remove`、`message_move` 和 `draft_delete` 带 destructive annotation，执行前应获得用户确认。
 - 使用 Gmail、Outlook、Hotmail、QQ、Yahoo 或 iCloud 的应用专用密码/授权码时，把服务商生成的凭据传给 `account_add_with_code.authorizationCode`；Microsoft 账户还必须允许 IMAP/SMTP 密码验证。不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。
+- `account_add_with_code.proxy` 可在添加时设置代理；已有账户使用 `account_proxy_update`。`protocol` 仅接受 `http`、`https`、`socks5`，关闭时只需传 `enabled: false`。修改代理且省略 `password` 会保留已加密的现有代理密码。
 
 ## 5. 安全约束
 
-- MCP 响应不返回邮箱授权码、密码、OAuth Token、主密钥或 `encryptedSecret`。
+- MCP 响应不返回邮箱授权码、邮箱/代理密码、OAuth Token、主密钥或 `encryptedSecret`。
 - HTTP 默认限制 Host/Origin 为回环地址；远程部署必须配置 HTTPS 和 `MCP_ALLOWED_HOSTS`。
 - 附件上传总大小限制 15 MB，工具参数和邮件正文继续受现有 Zod 限制。
 - 授权码撤销或过期后，后续 HTTP 请求会立即拒绝认证。

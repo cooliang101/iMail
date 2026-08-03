@@ -10,6 +10,7 @@ import type { AppSelectOption } from '../../components/form-controls';
 import { AccountConnectionFields } from './AccountConnectionFields';
 import { ProviderPicker } from './ProviderPicker';
 import { usePlatform } from '../../platform/runtime';
+import { proxyInputFromForm } from './ProxyFields';
 
 const defaultWorkspaceNames = ['工作', '个人', '对外支持', '开发测试', '同学联系'];
 
@@ -100,6 +101,8 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError('');
     const form = new FormData(event.currentTarget);
+    const proxyUpdate = proxyInputFromForm(form);
+    const proxy = proxyUpdate.enabled ? (({ enabled: _enabled, ...value }) => value)(proxyUpdate) : undefined;
     if (usesOAuth) {
       oauthCancelledRef.current = false;
       oauthStartedAtRef.current = Date.now();
@@ -108,7 +111,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
         try {
           const snapshot = await api<{ accounts: Account[] }>('/api/accounts');
           oauthAccountIdsRef.current = new Set(snapshot.accounts.map((account) => account.id));
-          const result = await api<{ authorizationUrl: string }>('/api/oauth/start', { method: 'POST', body: JSON.stringify({ provider, displayName: form.get('displayName') || undefined, group: form.get('group'), color: '#168f78' }) });
+          const result = await api<{ authorizationUrl: string }>('/api/oauth/start', { method: 'POST', body: JSON.stringify({ provider, displayName: form.get('displayName') || undefined, group: form.get('group'), color: '#168f78', proxy }) });
           await platform.openExternal(result.authorizationUrl);
           while (!oauthCancelledRef.current && Date.now() - oauthStartedAtRef.current <= 10 * 60_000) {
             await new Promise((resolve) => window.setTimeout(resolve, 1_000));
@@ -134,7 +137,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
       try {
         const snapshot = await api<{ accounts: Account[] }>('/api/accounts');
         oauthAccountIdsRef.current = new Set(snapshot.accounts.map((account) => account.id));
-        const result = await api<{ authorizationUrl: string }>('/api/oauth/start', { method: 'POST', body: JSON.stringify({ provider, displayName: form.get('displayName') || undefined, group: form.get('group'), color: '#168f78' }) });
+        const result = await api<{ authorizationUrl: string }>('/api/oauth/start', { method: 'POST', body: JSON.stringify({ provider, displayName: form.get('displayName') || undefined, group: form.get('group'), color: '#168f78', proxy }) });
         popup.location.replace(result.authorizationUrl);
       } catch (value) {
         popup.close(); popupRef.current = null; setBusy(false);
@@ -142,7 +145,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
       }
       return;
     }
-    const body: Record<string, unknown> = { provider, email: form.get('email'), displayName: form.get('displayName'), group: form.get('group'), password: form.get('password'), color: '#168f78' };
+    const body: Record<string, unknown> = { provider, email: form.get('email'), displayName: form.get('displayName'), group: form.get('group'), password: form.get('password'), color: '#168f78', proxy };
     if (provider === 'custom') body.settings = { imapHost: form.get('imapHost'), imapPort: Number(form.get('imapPort')), imapSecure: true, smtpHost: form.get('smtpHost'), smtpPort: Number(form.get('smtpPort')), smtpSecure: Number(form.get('smtpPort')) === 465 };
     try { await api('/api/accounts', { method: 'POST', body: JSON.stringify(body) }); await onAdded(); }
     catch (value) { setError(value instanceof Error ? value.message : '连接失败'); }

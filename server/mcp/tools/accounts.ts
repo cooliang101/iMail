@@ -1,11 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import {
-  accountByEmail, createAccount, removeAccount, replaceAccountPassword, updateAccountMetadata,
+  accountByEmail, createAccount, removeAccount, replaceAccountPassword, updateAccountMetadata, updateAccountProxy,
 } from '../../domain/accounts.js';
 import {
   accountColorSchema, accountMetadataFieldsSchema, appPasswordSchema, DEFAULT_ACCOUNT_COLOR,
-  mailSettingsSchema, oauthProviderSchema, providerSchema, workspaceIconSchema,
+  accountProxyUpdateSchema, mailProxySchema, mailSettingsSchema, oauthProviderSchema, providerSchema, workspaceIconSchema,
 } from '../../domain/schemas.js';
 import { publicAccount } from '../../http/presenters.js';
 import { beginOAuth, beginOAuthReconnect, validateStoredAccountConnection } from '../../oauth.js';
@@ -25,6 +25,7 @@ export function registerAccountTools(server: McpServer) {
       authorizationCode: appPasswordSchema, group: z.string().min(1).max(40).default('个人'),
       groupIcon: workspaceIconSchema.default('folder'), color: accountColorSchema.default(DEFAULT_ACCOUNT_COLOR),
       settings: mailSettingsSchema.optional().describe('provider=custom 时必须提供完整 IMAP/SMTP 设置'),
+      proxy: mailProxySchema.optional().describe('可选的 HTTP、HTTPS 或 SOCKS5 代理；密码只会加密保存'),
     }), annotations: { idempotentHint: false },
   }, async (input) => output({ account: publicAccount(await createAccount({ ...input, password: input.authorizationCode })) }));
 
@@ -33,6 +34,7 @@ export function registerAccountTools(server: McpServer) {
     inputSchema: z.object({
       provider: oauthProviderSchema, displayName: z.string().max(80).optional(),
       group: z.string().min(1).max(40).default('个人'), color: accountColorSchema.default(DEFAULT_ACCOUNT_COLOR),
+      proxy: mailProxySchema.optional().describe('可选的 HTTP、HTTPS 或 SOCKS5 邮件代理'),
     }), annotations: { readOnlyHint: false, idempotentHint: false },
   }, async (input) => output(await beginOAuth(input) as unknown as Record<string, unknown>));
 
@@ -63,6 +65,15 @@ export function registerAccountTools(server: McpServer) {
     title: '测试邮箱连接', description: '使用已保存凭据测试邮箱的 IMAP 与 SMTP 连接。',
     inputSchema: z.object({ email: z.string().email() }), annotations: { readOnlyHint: false, idempotentHint: true },
   }, async ({ email }) => output({ account: publicAccount(await validateStoredAccountConnection(await accountByEmail(email))) }));
+
+  server.registerTool('account_proxy_update', {
+    title: '更新邮箱代理', description: '启用、修改或关闭账户级 HTTP、HTTPS、SOCKS5 代理。代理密码加密保存且不会返回。',
+    inputSchema: accountProxyUpdateSchema.and(z.object({ email: z.string().email() })),
+    annotations: { idempotentHint: false },
+  }, async ({ email, ...input }) => {
+    const account = await accountByEmail(email);
+    return output({ account: publicAccount(await updateAccountProxy(account.id, input)) });
+  });
 
   server.registerTool('account_remove', {
     title: '移除邮箱账户', description: '从 iMail 移除账户，并删除该账户的本地邮件缓存。不会删除服务商服务器上的账户。',

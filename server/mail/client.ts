@@ -1,5 +1,7 @@
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js';
+import { SocksClient } from 'socks';
 import { resolveAccountSecret } from '../oauth.js';
 import type { AccountSecret, MailAccount } from '../types.js';
 
@@ -11,6 +13,15 @@ function authFor(account: MailAccount, secret: AccountSecret) {
   return secret.accessToken
     ? { user: account.email, accessToken: secret.accessToken }
     : { user: account.email, pass: secret.password ?? '' };
+}
+
+export function proxyUrlFor(account: MailAccount, secret: AccountSecret) {
+  if (!account.proxy) return undefined;
+  const host = account.proxy.host.includes(':') ? `[${account.proxy.host}]` : account.proxy.host;
+  const auth = account.proxy.username
+    ? `${encodeURIComponent(account.proxy.username)}:${encodeURIComponent(secret.proxyPassword ?? '')}@`
+    : '';
+  return `${account.proxy.protocol}://${auth}${host}:${account.proxy.port}`;
 }
 
 export type ImapClientOptions = {
@@ -26,6 +37,7 @@ export async function imapClientFor(account: MailAccount, options: ImapClientOpt
     port: account.settings.imapPort,
     secure: account.settings.imapSecure,
     auth: authFor(account, secret),
+    proxy: proxyUrlFor(account, secret),
     logger: false,
     qresync: true,
     disableAutoIdle: options.disableAutoIdle,
@@ -42,7 +54,7 @@ export function smtpTransport(account: MailAccount, secret: AccountSecret) {
     ? { type: 'OAuth2' as const, user: account.email, accessToken: secret.accessToken }
     : { user: account.email, pass: secret.password ?? '' };
   const yahooOAuthBearer = secret.oauthProvider === 'yahoo' && secret.accessToken;
-  return nodemailer.createTransport({
+  const transportOptions: SMTPTransport.Options & { proxy?: string } = {
     host: account.settings.smtpHost,
     port: account.settings.smtpPort,
     secure: account.settings.smtpSecure,
@@ -64,7 +76,11 @@ export function smtpTransport(account: MailAccount, secret: AccountSecret) {
     } : undefined,
     disableFileAccess: true,
     disableUrlAccess: true,
-  });
+    proxy: proxyUrlFor(account, secret),
+  };
+  const transport = nodemailer.createTransport(transportOptions);
+  if (account.proxy?.protocol === 'socks5') transport.set('proxy_socks_module', { SocksClient });
+  return transport;
 }
 
 type ProtocolError = Error & {
@@ -91,6 +107,7 @@ export async function testAccount(account: MailAccount): Promise<void> {
   const client = new ImapFlow({
     host: account.settings.imapHost, port: account.settings.imapPort, secure: account.settings.imapSecure,
     auth: authFor(account, secret), logger: false,
+    proxy: proxyUrlFor(account, secret),
     qresync: true, maxIdleTime: 4 * 60_000, missingIdleCommand: 'NOOP', connectionTimeout: 30_000, greetingTimeout: 30_000, socketTimeout: 120_000,
   });
   try {

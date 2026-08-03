@@ -38,6 +38,8 @@
 .retry-account { color: var(--color-accent-pressed); background: var(--color-accent-subtle) !important; }.reconnect-account { color: var(--neutral-90); }.remove-account { color: var(--color-danger); }
 .edit-account { color: var(--color-info); background: var(--color-info-subtle) !important; }
 .account-inline-editor { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px 20px; }
+.account-inline-editor .account-proxy-fields { grid-column: 1 / -1; }
+.account-inline-editor .account-proxy-fields .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .account-edit-fields { min-width: 0; }
 .account-edit-name { min-width: 0; display: flex; align-items: center; gap: 5px; }
 .account-edit-name > strong { flex: 0 0 auto; white-space: nowrap; }

@@ -243,7 +243,7 @@ body { line-height: var(--leading-copy); text-rendering: optimizeLegibility; -we
   .sync-worker-health { align-items: flex-start; flex-direction: column; }.sync-worker-health small { margin-left: 0; }
   .sync-default-policy { padding: 14px; }.sync-default-policy > header { align-items: flex-start; }.sync-default-policy > header button { min-height: 34px; padding-inline: 11px; }.sync-default-fields { grid-template-columns: 1fr; }.sync-default-toggle { grid-column: 1; }.sync-default-options { display: grid; grid-template-columns: 1fr; gap: 9px; }.sync-default-options label { min-width: 0; white-space: normal; }
   .sync-policy-grid { grid-template-columns: 1fr; }.sync-policy-grid .sync-toggle { grid-column: 1; }.sync-policy-actions { flex-wrap: wrap; }.sync-policy-actions button:nth-child(2) { margin-right: 0; }
-  .account-inline-editor { grid-template-columns: minmax(0, 1fr); }.account-inline-editor .card-editor-actions { justify-content: flex-start; border-top: 1px solid var(--color-border); padding-top: 10px; }.account-edit-name .app-input { width: 100%; }.account-edit-workspace { width: min(150px, 42%); }
+  .account-inline-editor { grid-template-columns: minmax(0, 1fr); }.account-inline-editor .account-proxy-fields .form-grid { grid-template-columns: 1fr; }.account-inline-editor .card-editor-actions { justify-content: flex-start; border-top: 1px solid var(--color-border); padding-top: 10px; }.account-edit-name .app-input { width: 100%; }.account-edit-workspace { width: min(150px, 42%); }
 }
 @media (min-width: 821px) {
   .app-shell.sidebar-collapsed { grid-template-columns: 72px 0 minmax(0, 1fr); }

@@ -7,6 +7,7 @@ import type { Account, AccountSyncStatus, SyncPolicy, SyncWorkerHealth } from '.
 import type { Notice } from '../../app-model';
 import { AccountSettingsCard } from './AccountSettingsCard';
 import { DefaultSyncPolicyForm } from './DefaultSyncPolicyForm';
+import { proxyInputFromForm } from './ProxyFields';
 
 export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload, setNotice }: { accounts: Account[]; section: 'accounts' | 'sync'; onAddAccount: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -116,7 +117,17 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
     const form = new FormData(event.currentTarget);
     const group = String(form.get('group'));
     const groupIcon = accounts.find((item) => item.group === group)?.groupIcon ?? 'folder';
+    const proxyUpdate = proxyInputFromForm(form);
+    const proxyChanged = proxyUpdate.enabled !== Boolean(account.proxy)
+      || (proxyUpdate.enabled && (
+        proxyUpdate.protocol !== account.proxy?.protocol
+        || proxyUpdate.host !== account.proxy?.host
+        || proxyUpdate.port !== account.proxy?.port
+        || proxyUpdate.username !== account.proxy?.username
+        || proxyUpdate.password !== undefined
+      ));
     try {
+      if (proxyChanged) await api(`/api/accounts/${account.id}/proxy`, { method: 'PUT', body: JSON.stringify(proxyUpdate) });
       await api(`/api/accounts/${account.id}`, { method: 'PATCH', body: JSON.stringify({ displayName: form.get('displayName'), group, groupIcon }) });
       setEditingId(null);
       await onReload();

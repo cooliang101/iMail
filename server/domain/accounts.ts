@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
-import { encryptSecret } from '../crypto.js';
+import { decryptSecret, encryptSecret } from '../crypto.js';
 import { testAccount } from '../mail.js';
 import { settingsFor } from '../providers.js';
 import { readStore, updateStore } from '../store.js';
 import { getSyncStore } from '../sync/store.js';
-import type { MailAccount, MailSettings, ProviderId, WorkspaceIconId } from '../types.js';
+import type { MailAccount, MailProxySettings, MailSettings, ProviderId, WorkspaceIconId } from '../types.js';
 import { conflict, invalid, notFound } from './errors.js';
 
 export type CreateAccountInput = {
@@ -17,6 +17,7 @@ export type CreateAccountInput = {
   password?: string;
   accessToken?: string;
   settings?: MailSettings;
+  proxy?: MailProxySettings & { password?: string };
 };
 
 export async function accountById(id: string) {
@@ -37,11 +38,12 @@ export async function createAccount(input: CreateAccountInput) {
   if ((await readStore()).accounts.some((item) => item.email === email)) throw conflict('ACCOUNT_EXISTS', '这个邮箱已经添加');
   if (!input.password && !input.accessToken) throw invalid('ACCOUNT_CREDENTIAL_REQUIRED', '请填写应用专用密码或 OAuth Access Token');
   const secret = input.password
-    ? { authType: 'app-password' as const, password: input.password }
-    : { authType: 'oauth2' as const, accessToken: input.accessToken };
+    ? { authType: 'app-password' as const, password: input.password, proxyPassword: input.proxy?.password }
+    : { authType: 'oauth2' as const, accessToken: input.accessToken, proxyPassword: input.proxy?.password };
   const account: MailAccount = {
     id: crypto.randomUUID(), provider: input.provider, email, displayName: input.displayName.trim(), group: input.group.trim(),
     groupIcon: input.groupIcon, color: input.color, settings: settingsFor(input.provider, input.settings),
+    proxy: input.proxy ? { protocol: input.proxy.protocol, host: input.proxy.host, port: input.proxy.port, username: input.proxy.username } : undefined,
     encryptedSecret: await encryptSecret(secret),
     authMethod: input.password ? 'app-password' : 'oauth2', createdAt: new Date().toISOString(), status: 'connected',
   };
@@ -67,9 +69,34 @@ export async function updateAccountMetadata(id: string, changes: Partial<Pick<Ma
 export async function replaceAccountPassword(id: string, password: string) {
   const account = await accountById(id);
   if (account.authMethod === 'oauth2') throw conflict('OAUTH_RECONNECT_REQUIRED', 'OAuth 邮箱请使用重新授权');
+  const currentSecret = await decryptSecret(account.encryptedSecret);
   const candidate: MailAccount = {
-    ...account, encryptedSecret: await encryptSecret({ authType: 'app-password', password }),
+    ...account, encryptedSecret: await encryptSecret({ authType: 'app-password', password, proxyPassword: currentSecret.proxyPassword }),
     authMethod: 'app-password', status: 'syncing', lastError: undefined,
+  };
+  await testAccount(candidate);
+  const connected: MailAccount = { ...candidate, status: 'connected' };
+  await updateStore((data) => {
+    const index = data.accounts.findIndex((item) => item.id === id);
+    if (index < 0) throw notFound('ACCOUNT_NOT_FOUND', '邮箱账户已被移除');
+    data.accounts[index] = connected;
+  });
+  return connected;
+}
+
+export async function updateAccountProxy(id: string, input: { enabled: false } | ({ enabled: true } & MailProxySettings & { password?: string })) {
+  const account = await accountById(id);
+  const secret = await decryptSecret(account.encryptedSecret);
+  const proxy = input.enabled
+    ? { protocol: input.protocol, host: input.host, port: input.port, username: input.username }
+    : undefined;
+  const proxyPassword = input.enabled ? (input.password === undefined ? secret.proxyPassword : input.password || undefined) : undefined;
+  const candidate: MailAccount = {
+    ...account,
+    proxy,
+    encryptedSecret: await encryptSecret({ ...secret, proxyPassword }),
+    status: 'syncing',
+    lastError: undefined,
   };
   await testAccount(candidate);
   const connected: MailAccount = { ...candidate, status: 'connected' };

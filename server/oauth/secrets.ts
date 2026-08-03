@@ -26,7 +26,7 @@ async function refreshAccountSecret(account: MailAccount, secret: AccountSecret)
   const config = providerConfig(secret.oauthProvider, account.provider);
   if (!config.configured) throw new Error(`OAuth Token 已过期。${config.configurationHint}`);
   const token = await tokenRequest(config, new URLSearchParams({ grant_type: 'refresh_token', refresh_token: secret.refreshToken }));
-  const refreshed = tokenToSecret(config, token, secret.refreshToken);
+  const refreshed = { ...tokenToSecret(config, token, secret.refreshToken), proxyPassword: secret.proxyPassword };
   await setAccountEncryptedSecret(account.id, await encryptSecret(refreshed));
   return refreshed;
 }

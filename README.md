@@ -103,6 +103,12 @@ macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools，再执行 `
 - iCloud：Apple 已为“受支持应用”提供账户授权，但公开开发文档尚未提供普通跨平台邮件客户端可申请的 iCloud Mail scope；iMail 当前使用 Apple 官方应用专用密码流程，并内置三步引导。
 - 自定义邮箱：准备 IMAP/SMTP 主机、端口、TLS 设置和授权凭据。
 
+### 邮件代理
+
+添加邮箱时展开“网络代理”，或在“设置 → 邮箱管理 → 编辑信息”中为单个账户配置代理。当前支持 `http`、`https` 和 `socks5`，配置会同时用于 IMAP、SMTP、连接测试、后台同步和发信；关闭代理后该账户恢复直连。HTTP/HTTPS 代理使用 CONNECT 隧道，SOCKS5 的目标域名由代理端解析。
+
+代理主机、端口、协议和可选用户名保存在账户配置中；代理密码与邮箱凭据一起使用 AES-256-GCM 加密，HTTP API 与 MCP 响应均不返回代理密码。更新已有代理时密码留空会保留原密码；关闭代理会删除已保存的代理密码。OAuth 服务商的网页授权仍由浏览器完成，代理仅作用于 iMail 服务端发起的 IMAP/SMTP 连接。
+
 ### OAuth 应用配置
 
 复制 `.env.example` 为 `.env`，然后按需要配置服务商。OAuth Client Secret 只能保存在本地 `.env`，不得提交到 Git。
@@ -284,7 +290,7 @@ MCP_ALLOWED_HOSTS=mail.example.com
 | --- | --- |
 | 状态 | `imail_status` |
 | 设置 | `settings_get`、`settings_update`、`theme_custom_get`、`theme_custom_update` |
-| 账户 | `accounts_list`、`account_add_with_code`、`account_start_oauth`、`account_reconnect_oauth`、`account_update`、`account_update_authorization_code`、`account_test_connection`、`account_remove` |
+| 账户 | `accounts_list`、`account_add_with_code`、`account_start_oauth`、`account_reconnect_oauth`、`account_update`、`account_update_authorization_code`、`account_test_connection`、`account_proxy_update`、`account_remove` |
 | 同步 | `mailbox_sync`、`sync_policy_get`、`sync_policy_update` |
 | 邮件与附件 | `messages_list`、`message_get`、`message_update`、`message_move`、`message_send`、`attachment_download` |
 | 草稿 | `drafts_list`、`draft_get`、`draft_save`、`draft_delete` |

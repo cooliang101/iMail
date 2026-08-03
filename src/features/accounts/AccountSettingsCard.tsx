@@ -7,6 +7,7 @@ import { AppInput, AppSelect } from '../../components/form-controls';
 import { ProviderIcon, providerLabel } from '../../components/shared';
 import { SyncPolicyEditor } from './SyncPolicyEditor';
 import { AccountSyncSummary } from './SyncStatusSummary';
+import { ProxyFields } from './ProxyFields';
 
 export function AccountSettingsCard({ account, section, syncStatus, workspaceOptions, busy, editing, credentialOpen, removeConfirmOpen, syncEditing, onEdit, onCancelEdit, onUpdateProfile, onRetry, onReconnect, onOpenCredential, onCloseCredential, onUpdateCredential, onOpenRemove, onCloseRemove, onRemove, onOpenSync, onCloseSync, onSaveSync, onQueueSync }: {
   account: Account; section: 'accounts' | 'sync'; syncStatus?: AccountSyncStatus; workspaceOptions: Array<{ value: string; label: string }>; busy: boolean;
@@ -23,6 +24,7 @@ export function AccountSettingsCard({ account, section, syncStatus, workspaceOpt
         <span className="account-edit-meta"><small title={account.email}>{account.email}</small><span aria-hidden="true">·</span><label className="account-edit-workspace"><span className="sr-only">所属工作空间</span><AppSelect name="group" defaultValue={account.group} options={workspaceOptions} /></label></span>
         <em className={`connection-${account.status}`}>{connectionText}</em>
       </span></header>
+      <ProxyFields proxy={account.proxy} compact />
       <footer className="settings-account-actions card-editor-actions"><button type="button" onClick={onCancelEdit}>取消</button><Button appearance="primary" type="submit" disabled={busy}>{busy ? '保存中…' : '保存'}</Button></footer>
     </form> : <>
       <div className="settings-account-main"><header className="settings-account-summary"><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · {account.group}</small><em className={`connection-${account.status}`}>{connectionText}</em></span></header>{section === 'sync' && syncStatus && <AccountSyncSummary status={syncStatus} />}</div>

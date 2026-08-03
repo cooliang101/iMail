@@ -22,6 +22,15 @@ export type MailSettings = {
   smtpSecure: boolean;
 };
 
+export type ProxyProtocol = 'http' | 'https' | 'socks5';
+
+export type MailProxySettings = {
+  protocol: ProxyProtocol;
+  host: string;
+  port: number;
+  username?: string;
+};
+
 export type AccountSecret = {
   authType?: 'app-password' | 'oauth2';
   password?: string;
@@ -31,6 +40,7 @@ export type AccountSecret = {
   oauthProvider?: 'google' | 'microsoft' | 'yahoo';
   scopes?: string[];
   tokenType?: string;
+  proxyPassword?: string;
 };
 
 export type MailAccount = {
@@ -43,6 +53,7 @@ export type MailAccount = {
   groupIcon?: WorkspaceIconId;
   color: string;
   settings: MailSettings;
+  proxy?: MailProxySettings;
   encryptedSecret: string;
   authMethod?: 'app-password' | 'oauth2';
   createdAt: string;

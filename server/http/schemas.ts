@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   accountColorSchema, appPasswordSchema, DEFAULT_ACCOUNT_COLOR, mailboxRoleSchema, mailSettingsSchema,
   oauthProviderSchema, providerSchema, workspaceIconSchema,
+  mailProxySchema,
 } from '../domain/schemas.js';
 
 export { mailboxRoleSchema, providerSchema, workspaceIconSchema };
@@ -17,6 +18,7 @@ export const accountSchema = z.object({
   password: appPasswordSchema.optional(),
   accessToken: z.string().min(1).max(8192).optional(),
   settings: settingsSchema.optional(),
+  proxy: mailProxySchema.optional(),
 }).refine((value) => Boolean(value.password || value.accessToken), '请填写应用专用密码或 OAuth Access Token');
 
 export const oauthStartSchema = z.object({
@@ -24,6 +26,7 @@ export const oauthStartSchema = z.object({
   displayName: z.string().max(80).optional(),
   group: z.string().min(1).max(40).default('个人'),
   color: accountColorSchema.default(DEFAULT_ACCOUNT_COLOR),
+  proxy: mailProxySchema.optional(),
 });
 
 const draftAttachmentSchema = z.object({

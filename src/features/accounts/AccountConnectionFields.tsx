@@ -3,6 +3,7 @@ import type { CredentialGuide } from '../../provider-guides';
 import type { ProviderId } from '../../types';
 import { providerLabel } from '../../components/shared';
 import { AppInput, AppSelect, type AppSelectOption } from '../../components/form-controls';
+import { ProxyFields } from './ProxyFields';
 
 export function AccountConnectionFields({ provider, usesOAuth, oauthConfigured, credentialGuide, workspaceOptions, busy, advanced, onAdvancedChange, onManualModeChange, onCancelOAuth }: {
   provider: ProviderId; usesOAuth: boolean; oauthConfigured?: boolean; credentialGuide?: CredentialGuide; workspaceOptions: AppSelectOption[]; busy: boolean; advanced: boolean;
@@ -21,5 +22,6 @@ export function AccountConnectionFields({ provider, usesOAuth, oauthConfigured, 
       {['outlook', 'gmail', 'yahoo', 'hotmail'].includes(provider) && oauthConfigured && <button type="button" className="manual-switch" onClick={() => onManualModeChange(false)}>返回 {providerLabel[provider]} 快捷登录</button>}
     </>}
     {provider === 'custom' && <div className="advanced-settings"><button type="button" onClick={() => onAdvancedChange(!advanced)}><Gear size={17} />IMAP / SMTP 设置<CaretDown size={15} /></button>{(advanced || provider === 'custom') && <div className="form-grid"><label><span>IMAP 主机</span><AppInput name="imapHost" placeholder="imap.example.com" required /></label><label><span>IMAP 端口</span><AppInput name="imapPort" type="number" defaultValue="993" required /></label><label><span>SMTP 主机</span><AppInput name="smtpHost" placeholder="smtp.example.com" required /></label><label><span>SMTP 端口</span><AppInput name="smtpPort" type="number" defaultValue="465" required /></label></div>}</div>}
+    <div className="advanced-settings"><button type="button" onClick={() => onAdvancedChange(!advanced)}><Gear size={17} />网络代理（可选）<CaretDown size={15} /></button>{advanced && <ProxyFields />}</div>
   </>;
 }

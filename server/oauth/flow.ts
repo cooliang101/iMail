@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
-import { decryptPayload, encryptPayload, encryptSecret } from '../crypto.js';
+import { decryptPayload, decryptSecret, encryptPayload, encryptSecret } from '../crypto.js';
 import { settingsFor } from '../providers.js';
 import { readStore, updateStore } from '../store.js';
-import type { MailAccount, ProviderId } from '../types.js';
+import type { MailAccount, MailProxySettings, ProviderId } from '../types.js';
 import { fetchIdentity, tokenRequest, tokenToSecret } from './client.js';
 import { describeOAuthCallbackError, oauthKeyFor, providerConfig, type OAuthProviderKey } from './config.js';
 import { validateStoredAccountConnection } from './secrets.js';
@@ -20,6 +20,7 @@ type PendingOAuth = {
   color: string;
   accountId?: string;
   expectedEmail?: string;
+  proxy?: MailProxySettings & { password?: string };
 };
 
 const completed = new Map<string, { accountId: string; ownerId: string; completedAt: number }>();
@@ -29,7 +30,7 @@ function cleanupCompleted() {
   for (const [state, value] of completed) if (value.completedAt < cutoff) completed.delete(state);
 }
 
-export async function beginOAuth(input: { provider: ProviderId; displayName?: string; group?: string; color?: string; accountId?: string; expectedEmail?: string }) {
+export async function beginOAuth(input: { provider: ProviderId; displayName?: string; group?: string; color?: string; accountId?: string; expectedEmail?: string; proxy?: MailProxySettings & { password?: string } }) {
   cleanupCompleted();
   const providerKey = oauthKeyFor(input.provider);
   if (!providerKey) throw new Error(`${input.provider} 没有公开可用的邮件 OAuth 接口，请使用应用专用密码或授权码`);
@@ -42,7 +43,7 @@ export async function beginOAuth(input: { provider: ProviderId; displayName?: st
   const session: PendingOAuth = {
     ownerId,
     providerKey, accountProvider: input.provider, codeVerifier, nonce, createdAt: Date.now(), displayName: input.displayName,
-    group: input.group?.trim() || '个人', color: input.color || '#168f78', accountId: input.accountId, expectedEmail: input.expectedEmail?.toLowerCase(),
+    group: input.group?.trim() || '个人', color: input.color || '#168f78', accountId: input.accountId, expectedEmail: input.expectedEmail?.toLowerCase(), proxy: input.proxy,
   };
   const state = await encryptPayload(session);
   const url = new URL(config.authorizationEndpoint);
@@ -93,7 +94,8 @@ export async function completeOAuth(input: { providerKey: OAuthProviderKey; stat
     if (!current) throw new Error('需要重新授权的邮箱已不存在');
     if (current.provider !== session.accountProvider) throw new Error('邮箱服务商与重新授权请求不匹配');
     if (identity.email !== session.expectedEmail || identity.email !== current.email.toLowerCase()) throw new Error(`请使用原邮箱 ${current.email} 登录，不能切换为 ${identity.email}`);
-    const reconnected: MailAccount = { ...current, encryptedSecret: await encryptSecret(secret), authMethod: 'oauth2', status: 'syncing', lastError: undefined };
+    const currentSecret = await decryptSecret(current.encryptedSecret);
+    const reconnected: MailAccount = { ...current, encryptedSecret: await encryptSecret({ ...secret, proxyPassword: currentSecret.proxyPassword }), authMethod: 'oauth2', status: 'syncing', lastError: undefined };
     await updateStore((data) => {
       const index = data.accounts.findIndex((account) => account.id === reconnected.id);
       if (index < 0) throw new Error('需要重新授权的邮箱已不存在');
@@ -107,7 +109,9 @@ export async function completeOAuth(input: { providerKey: OAuthProviderKey; stat
   const account: MailAccount = {
     id: crypto.randomUUID(), provider: session.accountProvider, email: identity.email,
     displayName: session.displayName?.trim() || identity.name || identity.email, group: session.group, color: session.color,
-    settings: settingsFor(session.accountProvider), encryptedSecret: await encryptSecret(secret), authMethod: 'oauth2',
+    settings: settingsFor(session.accountProvider),
+    proxy: session.proxy ? { protocol: session.proxy.protocol, host: session.proxy.host, port: session.proxy.port, username: session.proxy.username } : undefined,
+    encryptedSecret: await encryptSecret({ ...secret, proxyPassword: session.proxy?.password }), authMethod: 'oauth2',
     createdAt: new Date().toISOString(), status: 'syncing',
   };
   await updateStore((data) => {

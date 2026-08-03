@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   logout: vi.fn(async () => undefined),
   verify: vi.fn(async () => true),
   close: vi.fn(),
+  transportSet: vi.fn(),
   sendMail: vi.fn(async () => ({ messageId: '<sent@example.com>', accepted: ['recipient@example.com'] })),
   messageFlagsAdd: vi.fn(async () => true),
   messageFlagsRemove: vi.fn(async () => true),
@@ -75,7 +76,7 @@ vi.mock('mailparser', () => ({ simpleParser: state.simpleParser }));
 vi.mock('nodemailer', () => ({
   default: { createTransport: vi.fn((options: Record<string, any>) => {
     state.smtpOptions.push(options);
-    return { verify: state.verify, close: state.close, sendMail: state.sendMail };
+    return { verify: state.verify, close: state.close, sendMail: state.sendMail, set: state.transportSet };
   }) },
 }));
 
@@ -118,6 +119,19 @@ describe('mail account connection', () => {
     await testAccount(account({ authMethod: 'oauth2' }));
     expect(state.imapOptions[0].auth).toEqual({ user: 'owner@example.com', accessToken: 'google-access' });
     expect(state.smtpOptions[0].auth).toEqual({ type: 'OAuth2', user: 'owner@example.com', accessToken: 'google-access' });
+  });
+
+  it('uses one authenticated HTTP proxy for both IMAP and SMTP without exposing raw credentials in the URL', async () => {
+    state.secret = { authType: 'app-password', password: 'app-password', proxyPassword: 'p@ss word' };
+    await testAccount(account({ proxy: { protocol: 'http', host: 'proxy.local', port: 3128, username: 'mail user' } }));
+    expect(state.imapOptions[0].proxy).toBe('http://mail%20user:p%40ss%20word@proxy.local:3128');
+    expect(state.smtpOptions[0].proxy).toBe('http://mail%20user:p%40ss%20word@proxy.local:3128');
+  });
+
+  it('registers the SOCKS client for SOCKS5 SMTP connections', async () => {
+    await testAccount(account({ proxy: { protocol: 'socks5', host: '127.0.0.1', port: 1080 } }));
+    expect(state.imapOptions[0].proxy).toBe('socks5://127.0.0.1:1080');
+    expect(state.transportSet).toHaveBeenCalledWith('proxy_socks_module', expect.objectContaining({ SocksClient: expect.any(Function) }));
   });
 
   it('surfaces the provider response instead of a generic IMAP command error', async () => {

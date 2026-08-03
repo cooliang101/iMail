@@ -76,6 +76,8 @@ Agent
 - `server/mcp/server.ts`：装配设置、同步和邮件工具及各领域注册器。
 - `server/mcp/tools/`：按账户、草稿等领域注册工具；参数模型和业务行为复用 `server/domain/`。
 - `server/domain/`：HTTP 与 MCP 共享的账户、草稿、通知服务、领域错误和安全响应视图。
+
+账户可选的 `http`、`https`、`socks5` 代理由 `server/mail/client.ts` 统一注入 IMAP 与 SMTP 连接，因此连接测试、同步、远程邮件操作、附件下载和发信遵循同一账户级配置。可公开的代理协议、主机、端口和用户名保存在账户设置中，代理密码合并进 `encryptedSecret` 加密载荷；公开账户视图和 MCP 输出不返回密码。关闭代理时同时清除加密载荷中的代理密码。
 - `server/mcp/custom-theme.ts`：校验并按应用用户保存 MCP 自定义主题令牌；与 HTTP preferences schema 隔离。
 - `server/tokens.ts`：生成高熵授权码、SHA-256 哈希、常量时间比较、过期与撤销检查。
 

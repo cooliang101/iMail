@@ -3,7 +3,7 @@
 ## 当前可用能力
 
 - Streamable HTTP：`POST/GET/DELETE /mcp`，Bearer `mcp:full` 授权。
-- 28 个 MCP 工具覆盖账户接入/授权、同步策略与任务、邮件读写/移动、附件、草稿、标签、通知与自定义主题。
+- 29 个 MCP 工具覆盖账户接入/授权、账户级 HTTP/HTTPS/SOCKS5 代理、同步策略与任务、邮件读写/移动、附件、草稿、标签、通知与自定义主题。
 - MCP 授权码与普通网关 Token 共用哈希、过期和撤销基础设施，但 scope 严格隔离。
 - UI 可在没有邮箱时签发 MCP 授权码，Agent 可以接入第一个授权码型邮箱。
 - HTTP Host/Origin allowlist、参数大小限制、destructive annotations 和凭据裁剪已接入。

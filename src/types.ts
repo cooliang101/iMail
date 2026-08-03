@@ -13,6 +13,9 @@ export type MailboxFolder = {
   unread?: number;
 };
 
+export type ProxyProtocol = 'http' | 'https' | 'socks5';
+export type MailProxySettings = { protocol: ProxyProtocol; host: string; port: number; username?: string };
+
 export type Account = {
   id: string;
   provider: ProviderId;
@@ -26,6 +29,7 @@ export type Account = {
   lastSyncAt?: string;
   lastError?: string;
   mailboxes: MailboxFolder[];
+  proxy?: MailProxySettings;
 };
 
 export type Message = {

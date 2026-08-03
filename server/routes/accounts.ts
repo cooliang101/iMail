@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { accountById, createAccount, removeAccount, replaceAccountPassword, updateAccountMetadata } from '../domain/accounts.js';
-import { accountMetadataSchema, appPasswordSchema } from '../domain/schemas.js';
+import { accountById, createAccount, removeAccount, replaceAccountPassword, updateAccountMetadata, updateAccountProxy } from '../domain/accounts.js';
+import { accountMetadataSchema, accountProxyUpdateSchema, appPasswordSchema } from '../domain/schemas.js';
 import { asyncRoute } from '../http/async-route.js';
 import { publicAccount } from '../http/presenters.js';
 import { accountSchema, mailboxRoleSchema } from '../http/schemas.js';
@@ -30,6 +30,11 @@ accountsRouter.post('/accounts/:id/connection-test', asyncRoute(async (req, res)
 accountsRouter.put('/accounts/:id/credential', asyncRoute(async (req, res) => {
   const input = z.object({ password: appPasswordSchema }).parse(req.body);
   res.json({ account: publicAccount(await replaceAccountPassword(String(req.params.id), input.password)) });
+}));
+
+accountsRouter.put('/accounts/:id/proxy', asyncRoute(async (req, res) => {
+  const input = accountProxyUpdateSchema.parse(req.body);
+  res.json({ account: publicAccount(await updateAccountProxy(String(req.params.id), input)) });
 }));
 
 accountsRouter.post('/accounts', asyncRoute(async (req, res) => {

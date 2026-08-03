@@ -161,7 +161,7 @@ describe('iMail HTTP API', () => {
     const listed = await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     const toolNames = listed.body.result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toEqual(expect.arrayContaining([
-      'settings_get', 'settings_update', 'theme_custom_get', 'theme_custom_update', 'accounts_list', 'account_add_with_code', 'account_start_oauth', 'account_update_authorization_code', 'account_remove',
+      'settings_get', 'settings_update', 'theme_custom_get', 'theme_custom_update', 'accounts_list', 'account_add_with_code', 'account_start_oauth', 'account_update_authorization_code', 'account_proxy_update', 'account_remove',
       'mailbox_sync', 'sync_policy_get', 'sync_policy_update', 'messages_list', 'message_get', 'message_update', 'message_move', 'message_send', 'attachment_download',
       'drafts_list', 'draft_get', 'draft_save', 'draft_delete', 'labels_list', 'notifications_list',
     ]));
