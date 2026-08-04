@@ -30,7 +30,7 @@
     "test:deployment-release": "npm run typecheck && npm test && cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc && cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked && npm audit --omit=dev && npm run build:remote && npm run build:desktop:windows && npm run test:desktop-release && npm run test:local-daemon && npm run test:remote-release",
     "build:desktop": "tauri build",
     "build:desktop:windows": "tauri build --target x86_64-pc-windows-msvc --bundles nsis",
-    "build:desktop:macos": "tauri build --bundles dmg",
+    "build:desktop:macos": "tauri build --bundles app,dmg",
     "start": "tsx --env-file-if-exists=.env server/entry.ts",
     "start:remote": "node --env-file-if-exists=.env server-runtime/imail-server.cjs",
     "backup": "node --env-file-if-exists=.env scripts/backup-data.mjs",

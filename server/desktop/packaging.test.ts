@@ -15,6 +15,7 @@ describe('desktop packaging configuration', () => {
     expect(readFileSync('scripts/build-service-runtime.mjs', 'utf8')).toContain('pc-windows-msvc');
     expect(manifest.scripts['build:desktop']).toContain('tauri build');
     expect(manifest.scripts['build:desktop:windows']).toContain('x86_64-pc-windows-msvc');
+    expect(manifest.scripts['build:desktop:macos']).toContain('--bundles app,dmg');
   });
 
   it('packages the managed service executable without embedding mutable data', () => {
