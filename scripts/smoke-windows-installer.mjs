@@ -53,6 +53,15 @@ async function waitUntilRemoved(target, timeoutMs = 120_000) {
   throw new Error(`等待删除超时：${target}`);
 }
 
+async function waitUntilRegistryRemoved(timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!await registryExists()) return;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error('NSIS 卸载后当前用户卸载注册仍然存在');
+}
+
 async function waitForInstalledFiles(timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -123,9 +132,9 @@ try {
     timeout: 120_000,
   });
   await waitUntilRemoved(installDir);
+  await waitUntilRegistryRemoved();
   uninstalled = true;
 
-  if (await registryExists()) throw new Error('NSIS 卸载后当前用户卸载注册仍然存在');
   if (await startupRegistryValueExists()) throw new Error('NSIS 卸载 hook 未删除用户级守护自启动项');
   if (!await exists(dataMarker)) throw new Error('NSIS 卸载错误删除了本地邮件数据');
   if (await exists(runtimeMarker)) throw new Error('NSIS 卸载 hook 未删除本地服务运行文件');
