@@ -5,8 +5,15 @@ import { Router, type Request, type Response } from 'express';
 import { createMailMcpServer } from './server.js';
 import { authenticateToken } from '../tokens.js';
 import { enterUserContext } from '../auth/context.js';
+import { recordSecurityEvent } from '../auth/http.js';
 
 const handler = createMcpHandler(() => createMailMcpServer());
+const AUDITED_MCP_TOOLS = new Set([
+  'settings_update', 'theme_custom_update',
+  'account_add_with_code', 'account_start_oauth', 'account_reconnect_oauth', 'account_update',
+  'account_update_authorization_code', 'account_proxy_update', 'account_remove',
+  'sync_policy_update',
+]);
 
 function bearer(request: Request) {
   const match = request.headers.authorization?.match(/^Bearer\s+(.+)$/i);
@@ -65,6 +72,15 @@ mcpRouter.all('/mcp', async (req, res) => {
   }
   if (!token.ownerId || token.ownerId === '__legacy__') { res.status(401).json({ error: 'MCP 授权码缺少应用账号归属，请登录后重新创建' }); return; }
   enterUserContext(token.ownerId);
+  const toolName = req.body?.method === 'tools/call' && typeof req.body?.params?.name === 'string'
+    ? req.body.params.name
+    : undefined;
+  if (toolName && AUDITED_MCP_TOOLS.has(toolName)) {
+    recordSecurityEvent('mcp.management-tool-called', req.ip || 'unknown', token.ownerId, {
+      tool: toolName,
+      authorizationCodeId: token.id,
+    });
+  }
   const auth: AuthInfo = {
     token: raw!, clientId: token.id, scopes: token.scopes,
     expiresAt: Math.floor(new Date(token.expiresAt).getTime() / 1000), extra: { authorizationCodeId: token.id },

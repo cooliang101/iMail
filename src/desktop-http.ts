@@ -23,10 +23,19 @@ export async function desktopHttpRequest(path: string, options: RequestInit = {}
 
 export async function desktopTestService(baseUrl: string, invoker: DesktopHttpInvoker = tauriInvoke) {
   return invoker<DesktopHttpResponse>('desktop_http_request', {
-    request: { baseUrl, path: '/api/auth/status', method: 'GET', timeoutMs: 8_000 },
+    request: { baseUrl, path: '/api/system/info', method: 'GET', timeoutMs: 8_000 },
   });
 }
 
 export async function desktopDownload(path: string, target: string, invoker: DesktopHttpInvoker = tauriInvoke) {
   await invoker('desktop_download', { baseUrl: configuredServiceUrl(), path, target });
+}
+
+export async function desktopReadBinary(path: string, invoker: DesktopHttpInvoker = tauriInvoke) {
+  const bytes = await invoker<ArrayBuffer | Uint8Array | number[]>('desktop_read_binary', {
+    baseUrl: configuredServiceUrl(), path,
+  });
+  if (bytes instanceof ArrayBuffer) return new Uint8Array(bytes);
+  if (bytes instanceof Uint8Array) return bytes;
+  return Uint8Array.from(bytes);
 }

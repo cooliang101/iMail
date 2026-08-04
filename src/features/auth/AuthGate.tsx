@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@fluentui/react-components';
 import { ArrowLeft, HardDrives, LockKey, UserCircle, UserPlus } from '@phosphor-icons/react';
 import { api } from '../../api';
@@ -6,26 +6,40 @@ import { AppInput } from '../../components/form-controls';
 import { BrandLogo } from '../../components/brand-logo';
 import { AuthContext, type AppUser } from './auth-context';
 import { loadRememberedUsers, rememberUser } from './remembered-users';
-import { ServiceAddressEditor } from '../service';
+import { createLatestServiceCheckRunner, runWithReadySelectedService, serviceErrorMessage, ServiceAddressEditor, testServiceConnection } from '../service';
+import { configuredLocalServiceSuspended, configuredServiceMode, configuredServiceUrl } from '../../service-config';
+import { desktopEnableLocalService } from '../../local-service';
+import { isTauriRuntime } from '../../platform/tauri-runtime';
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [checking, setChecking] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [registrationOpen, setRegistrationOpen] = useState(true);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [selectedLogin, setSelectedLogin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [remembered, setRemembered] = useState(loadRememberedUsers);
   const [remoteServiceOpen, setRemoteServiceOpen] = useState(false);
+  const serviceCheckRunner = useRef(createLatestServiceCheckRunner()).current;
 
   async function checkSession() {
-    try {
-      const status = await api<{ setupRequired: boolean; user: AppUser | null }>('/api/auth/status');
-      setSetupRequired(status.setupRequired); setMode(status.setupRequired ? 'register' : 'login'); setUser(status.user);
+    await serviceCheckRunner.run(() => runWithReadySelectedService({
+        desktop: isTauriRuntime(),
+        mode: configuredServiceMode(),
+        serviceUrl: configuredServiceUrl(),
+        localSuspended: configuredLocalServiceSuspended(),
+        enableLocal: desktopEnableLocalService,
+        testConnection: testServiceConnection,
+      }, () => api<{ setupRequired: boolean; registrationOpen: boolean; user: AppUser | null }>('/api/auth/status')), {
+      onSuccess(status) {
+      setSetupRequired(status.setupRequired); setRegistrationOpen(status.registrationOpen); setMode(status.setupRequired ? 'register' : 'login'); setUser(status.user);
       if (status.user) rememberUser(status.user);
-    } catch { setUser(null); setError('无法连接 iMail 服务'); }
-    finally { setChecking(false); }
+      },
+      onError(reason) { setUser(null); setError(serviceErrorMessage(reason, '无法连接 iMail 服务')); },
+      onSettled() { setChecking(false); },
+    });
   }
   useEffect(() => { void checkSession(); }, []);
   useEffect(() => {
@@ -34,12 +48,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('imail:service-changed', serviceChanged);
   }, []);
   useEffect(() => {
-    const unauthorized = () => { setUser(null); setMode('login'); setError('登录已过期，请重新登录'); };
+    const unauthorized = () => { serviceCheckRunner.cancel(); setChecking(false); setUser(null); setMode('login'); setError('登录已过期，请重新登录'); };
     window.addEventListener('imail:unauthorized', unauthorized);
     return () => window.removeEventListener('imail:unauthorized', unauthorized);
   }, []);
 
   async function logout() {
+    serviceCheckRunner.cancel();
     await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     setUser(null); setMode('login'); setSelectedLogin(user?.login ?? ''); setError('');
   }
@@ -65,7 +80,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <BrandLogo label="iMail" />
       <span>ONE APP · EVERY INBOX</span>
       <h1>一个应用，<br />所有邮箱，<br />通用规则。</h1>
-      <p>把多个邮箱放进一个工作区，统一查看、统一处理、统一设置。邮件凭据仍只在本机加密保存。</p>
+      <p>把多个邮箱放进一个工作区，统一查看、统一处理、统一设置。邮件凭据由你选择的 iMail 服务加密保存。</p>
     </section>
     <section className="auth-card-wrap">
       <div className="auth-card">
@@ -92,8 +107,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
         {remoteServiceOpen && <ServiceAddressEditor compact onCancel={() => setRemoteServiceOpen(false)} onSaved={() => setRemoteServiceOpen(false)} />}
         <footer className="auth-card-footer">
-          {!setupRequired && <span>{mode === 'login' ? '需要独立空间？' : '已经有账号？'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setSelectedLogin(''); setError(''); }}>{mode === 'login' ? '创建新账号' : '返回登录'}</button></span>}
-          <button className="auth-remote-trigger" type="button" aria-expanded={remoteServiceOpen} onClick={() => { setRemoteServiceOpen((open) => !open); setError(''); }}><HardDrives size={14} />远程服务</button>
+          {!setupRequired && (registrationOpen || mode === 'register') && <span>{mode === 'login' ? '需要独立空间？' : '已经有账号？'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setSelectedLogin(''); setError(''); }}>{mode === 'login' ? '创建新账号' : '返回登录'}</button></span>}
+          <button className="auth-remote-trigger" type="button" aria-expanded={remoteServiceOpen} onClick={() => { setRemoteServiceOpen((open) => !open); setError(''); }}><HardDrives size={14} />服务连接</button>
         </footer>
       </div>
     </section>

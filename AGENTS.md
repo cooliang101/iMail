@@ -1,5 +1,6 @@
 # iMail engineering guide
 
+- 项目统一使用 npm 与 `package-lock.json`；不要运行 pnpm、yarn 或生成其他包管理器的锁文件。
 - `src/App.tsx` 只负责顶层状态、数据编排和 feature 组合；不要把完整业务组件或弹窗写回该文件。
 - 客户端组件按领域放入 `src/features/<domain>/`，跨领域 UI 与纯展示工具放入 `src/components/`。
 - 表单统一使用 `src/components/form-controls.tsx` 的 `AppInput`、`AppSelect`、`AppTextarea` 和 `AppCheckbox`；不要在业务组件中直接新增原生表单控件。

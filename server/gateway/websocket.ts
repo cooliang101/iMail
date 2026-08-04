@@ -5,6 +5,7 @@ import { authenticateToken } from '../tokens.js';
 import type { DeveloperToken } from '../types.js';
 import { getSyncStore } from '../sync/store.js';
 import type { integrationMessageSummary } from '../domain/message-views.js';
+import { requestHostAllowed, requestOriginAllowed } from '../http/production-security.js';
 
 const EVENTS_PATH = '/gateway/v1/events';
 const AUTH_TIMEOUT_MS = 5_000;
@@ -85,6 +86,15 @@ export function attachGatewayWebSocket(server: Server, options: { eventPollInter
   });
 
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    if (!requestHostAllowed(request.headers.host)) {
+      socket.write('HTTP/1.1 421 Misdirected Request\r\nConnection: close\r\n\r\n');
+      socket.destroy(); return;
+    }
+    const origin = Array.isArray(request.headers.origin) ? request.headers.origin[0] : request.headers.origin;
+    if (!requestOriginAllowed(origin, request.headers.host)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      socket.destroy(); return;
+    }
     let pathname: string;
     try { pathname = new URL(request.url ?? '', 'http://localhost').pathname; }
     catch { socket.destroy(); return; }

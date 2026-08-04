@@ -1,0 +1,41 @@
+services:
+  imail:
+    build: .
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8787"
+    environment:
+      APP_MASTER_KEY: ${APP_MASTER_KEY:-}
+      FRONTEND_URL: https://${IMAIL_PUBLIC_HOST:?set IMAIL_PUBLIC_HOST}
+      OAUTH_CALLBACK_BASE_URL: https://${IMAIL_PUBLIC_HOST:?set IMAIL_PUBLIC_HOST}/api/oauth
+      MCP_ALLOWED_HOSTS: ${IMAIL_PUBLIC_HOST:?set IMAIL_PUBLIC_HOST}
+      IMAIL_ALLOWED_HOSTS: ${IMAIL_PUBLIC_HOST:?set IMAIL_PUBLIC_HOST}
+      IMAIL_TRUST_PROXY: "true"
+      IMAIL_REGISTRATION_MODE: ${IMAIL_REGISTRATION_MODE:-initial-only}
+    volumes:
+      - imail-data:/data
+      - imail-backups:/backups
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      imail:
+        condition: service_healthy
+    environment:
+      IMAIL_PUBLIC_HOST: ${IMAIL_PUBLIC_HOST:?set IMAIL_PUBLIC_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  imail-data:
+  imail-backups:
+  caddy-data:
+  caddy-config:

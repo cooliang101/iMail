@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { fork, type ChildProcess } from 'node:child_process';
+import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { app } from './app.js';
 import { attachGatewayWebSocket } from './gateway/websocket.js';
@@ -20,9 +20,12 @@ export function startServer() {
     const spawnWorker = () => {
       const configuredWorker = process.env.IMAIL_WORKER_ENTRY;
       const workerEntry = configuredWorker ? path.resolve(configuredWorker) : path.resolve('server/sync/worker.ts');
-      syncWorker = fork(workerEntry, [], {
-        execArgv: configuredWorker ? [] : ['--import', 'tsx'], stdio: ['inherit', 'inherit', 'inherit', 'ipc'], env: { ...process.env, IMAIL_SYNC_WORKER_MODE: 'child' },
-      });
+      const environment = { ...process.env, IMAIL_SYNC_WORKER_MODE: 'child', IMAIL_PARENT_PID: String(process.pid) };
+      syncWorker = process.env.IMAIL_PACKAGED_SERVICE === 'true'
+        ? spawn(process.execPath, ['--sync-worker'], { stdio: ['ignore', 'inherit', 'inherit'], env: environment })
+        : fork(workerEntry, [], {
+          execArgv: configuredWorker ? [] : ['--import', 'tsx'], stdio: ['inherit', 'inherit', 'inherit', 'ipc'], env: environment,
+        });
       syncWorker.once('exit', (code, signal) => {
         if (closing || !server.listening) return;
         console.error(`[sync-worker] exited unexpectedly (${signal ?? code ?? 'unknown'}); restarting`);
@@ -31,7 +34,13 @@ export function startServer() {
     };
     spawnWorker();
   }
-  server.once('close', () => { closing = true; if (workerRestartTimer) clearTimeout(workerRestartTimer); if (syncWorker?.connected) syncWorker.disconnect(); closeAuthStore(); });
+  server.once('close', () => {
+    closing = true;
+    if (workerRestartTimer) clearTimeout(workerRestartTimer);
+    if (syncWorker?.connected) syncWorker.disconnect();
+    else if (syncWorker && !syncWorker.killed) syncWorker.kill('SIGTERM');
+    closeAuthStore();
+  });
   return server.listen(port, host, () => console.log(`iMail API running at http://${host}:${port}`));
 }
 

@@ -1,0 +1,21 @@
+services:
+  imail:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      APP_MASTER_KEY: ${APP_MASTER_KEY}
+      FRONTEND_URL: ${IMAIL_PUBLIC_URL:-http://localhost:8787}
+      OAUTH_CALLBACK_BASE_URL: ${IMAIL_PUBLIC_URL:-http://localhost:8787}/api/oauth
+      MCP_ALLOWED_HOSTS: ${IMAIL_PUBLIC_HOST:-localhost},127.0.0.1
+      IMAIL_ALLOWED_HOSTS: ${IMAIL_PUBLIC_HOST:-localhost},127.0.0.1
+      IMAIL_TRUST_PROXY: ${IMAIL_TRUST_PROXY:-false}
+    volumes:
+      - imail-data:/data
+      - imail-backups:/backups
+
+volumes:
+  imail-data:
+  imail-backups:

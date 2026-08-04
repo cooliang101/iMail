@@ -336,8 +336,8 @@ export class SyncStore {
   listJobs(input: { accountId?: string; limit?: number } = {}): SyncJob[] {
     const limit = Math.min(100, Math.max(1, input.limit ?? 20));
     const rows = input.accountId
-      ? this.db.prepare('SELECT * FROM sync_jobs WHERE account_id = ? ORDER BY created_at DESC LIMIT ?').all(input.accountId, limit) as Row[]
-      : this.db.prepare('SELECT * FROM sync_jobs ORDER BY created_at DESC LIMIT ?').all(limit) as Row[];
+      ? this.db.prepare('SELECT * FROM sync_jobs WHERE account_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?').all(input.accountId, limit) as Row[]
+      : this.db.prepare('SELECT * FROM sync_jobs ORDER BY created_at DESC, rowid DESC LIMIT ?').all(limit) as Row[];
     return rows.map(jobFromRow);
   }
 

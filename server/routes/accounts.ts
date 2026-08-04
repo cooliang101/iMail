@@ -10,6 +10,7 @@ import type { MailboxRole } from '../types.js';
 import { getSyncStore } from '../sync/store.js';
 import { canonicalSyncTarget } from '../mail/mailbox-role.js';
 import { z } from 'zod';
+import { recordRequestSecurityEvent } from '../auth/http.js';
 
 export const accountsRouter = Router();
 
@@ -19,7 +20,10 @@ accountsRouter.get('/accounts', asyncRoute(async (_req, res) => {
 }));
 
 accountsRouter.post('/accounts/:id/oauth/reconnect', asyncRoute(async (req, res) => {
-  res.json(await beginOAuthReconnect(await accountById(String(req.params.id))));
+  const accountId = String(req.params.id);
+  const result = await beginOAuthReconnect(await accountById(accountId));
+  recordRequestSecurityEvent(req, res, 'account.oauth-reconnect-started', { accountId });
+  res.json(result);
 }));
 
 accountsRouter.post('/accounts/:id/connection-test', asyncRoute(async (req, res) => {
@@ -29,22 +33,31 @@ accountsRouter.post('/accounts/:id/connection-test', asyncRoute(async (req, res)
 
 accountsRouter.put('/accounts/:id/credential', asyncRoute(async (req, res) => {
   const input = z.object({ password: appPasswordSchema }).parse(req.body);
-  res.json({ account: publicAccount(await replaceAccountPassword(String(req.params.id), input.password)) });
+  const accountId = String(req.params.id);
+  const account = await replaceAccountPassword(accountId, input.password);
+  recordRequestSecurityEvent(req, res, 'account.credential-updated', { accountId });
+  res.json({ account: publicAccount(account) });
 }));
 
 accountsRouter.put('/accounts/:id/proxy', asyncRoute(async (req, res) => {
   const input = accountProxyUpdateSchema.parse(req.body);
-  res.json({ account: publicAccount(await updateAccountProxy(String(req.params.id), input)) });
+  const accountId = String(req.params.id);
+  const account = await updateAccountProxy(accountId, input);
+  recordRequestSecurityEvent(req, res, 'account.proxy-updated', { accountId, enabled: String(Boolean(input.enabled)) });
+  res.json({ account: publicAccount(account) });
 }));
 
 accountsRouter.post('/accounts', asyncRoute(async (req, res) => {
   const input = accountSchema.parse(req.body);
   const account = await createAccount(input);
+  recordRequestSecurityEvent(req, res, 'account.created', { accountId: account.id, provider: account.provider });
   res.status(201).json({ account: publicAccount(account) });
 }));
 
 accountsRouter.delete('/accounts/:id', asyncRoute(async (req, res) => {
-  await removeAccount(String(req.params.id));
+  const accountId = String(req.params.id);
+  await removeAccount(accountId);
+  recordRequestSecurityEvent(req, res, 'account.removed', { accountId });
   res.status(204).end();
 }));
 

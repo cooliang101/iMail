@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
+import packageMetadata from '../../package.json' with { type: 'json' };
 
-const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = packageMetadata.imail.schemaVersion;
 type Row = Record<string, unknown>;
 
 function columns(db: DatabaseSync, table: string) {
@@ -146,6 +147,10 @@ function migrateSyncJobWakeups(db: DatabaseSync) {
 export function runMigrations(db: DatabaseSync) {
   const row = db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value?: string } | undefined;
   const version = Number(row?.value ?? 0);
+  if (!Number.isSafeInteger(version) || version < 0) throw new Error('iMail 数据库 schema 版本无效');
+  if (version > CURRENT_SCHEMA_VERSION) {
+    throw new Error(`数据库 schema v${version} 高于当前服务支持的 v${CURRENT_SCHEMA_VERSION}，请升级服务或恢复兼容快照`);
+  }
   if (version < 1) migrateLegacyColumns(db);
   if (version < 2) migrateAccountEmailConstraint(db);
   if (version < 3) migrateSyncForeignKeys(db);

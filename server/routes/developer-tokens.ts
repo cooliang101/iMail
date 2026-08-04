@@ -6,6 +6,7 @@ import { readStore, updateStore } from '../store.js';
 import { issueToken } from '../tokens.js';
 import type { TokenScope } from '../types.js';
 import { invalid } from '../domain/errors.js';
+import { recordRequestSecurityEvent } from '../auth/http.js';
 
 export const developerTokensRouter = Router();
 
@@ -23,10 +24,17 @@ developerTokensRouter.post('/developer-tokens', asyncRoute(async (req, res) => {
   const scopes: TokenScope[] = input.scopes.includes('mcp:full') ? ['mcp:full'] : input.scopes as TokenScope[];
   const accountIds = scopes.includes('mcp:full') ? data.accounts.map((account) => account.id) : accounts.map((account) => account.id);
   const result = await issueToken({ name: input.name, scopes, accountIds, ttlSeconds: input.ttlSeconds });
+  recordRequestSecurityEvent(req, res, 'developer-token.created', {
+    tokenId: result.token.id,
+    scopes: scopes.join(','),
+    mailboxCount: String(accountIds.length),
+  });
   res.status(201).json({ token: result.raw, detail: publicDeveloperToken(result.token, data.accounts) });
 }));
 
 developerTokensRouter.delete('/developer-tokens/:id', asyncRoute(async (req, res) => {
+  const tokenId = String(req.params.id);
   await updateStore((data) => { data.tokens = data.tokens.filter((item) => item.id !== req.params.id); });
+  recordRequestSecurityEvent(req, res, 'developer-token.revoked', { tokenId });
   res.status(204).end();
 }));

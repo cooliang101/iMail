@@ -6,6 +6,12 @@ const databases: DatabaseSync[] = [];
 afterEach(() => { while (databases.length) databases.pop()!.close(); });
 
 describe('versioned SQLite migrations', () => {
+  it('refuses to open a database created by a newer service schema', () => {
+    const db = new DatabaseSync(':memory:'); databases.push(db);
+    db.exec("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT; INSERT INTO metadata VALUES ('schema_version', '999')");
+    expect(() => ensureSchema(db)).toThrow('schema v999 高于当前服务支持');
+  });
+
   it('adds sync foreign keys without losing valid rows and cascades account deletion', () => {
     const db = new DatabaseSync(':memory:'); databases.push(db);
     db.exec(`

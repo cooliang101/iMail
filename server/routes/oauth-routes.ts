@@ -2,11 +2,16 @@ import { Router } from 'express';
 import { asyncRoute } from '../http/async-route.js';
 import { oauthStartSchema } from '../http/schemas.js';
 import { beginOAuth, completeOAuth, oauthCallbackHtml, type OAuthProviderKey } from '../oauth.js';
+import { currentUserId } from '../auth/context.js';
+import { recordRequestSecurityEvent, recordSecurityEvent } from '../auth/http.js';
 
 export const oauthRouter = Router();
 
 oauthRouter.post('/oauth/start', asyncRoute(async (req, res) => {
-  res.json(await beginOAuth(oauthStartSchema.parse(req.body)));
+  const input = oauthStartSchema.parse(req.body);
+  const result = await beginOAuth(input);
+  recordRequestSecurityEvent(req, res, 'account.oauth-started', { provider: input.provider });
+  res.json(result);
 }));
 
 for (const providerKey of ['google', 'microsoft', 'yahoo'] as const) {
@@ -20,6 +25,11 @@ for (const providerKey of ['google', 'microsoft', 'yahoo'] as const) {
         errorDescription: typeof req.query.error_description === 'string' ? req.query.error_description : undefined,
       });
       const warning = account.status === 'error' ? account.lastError : undefined;
+      recordSecurityEvent('account.oauth-completed', req.ip || 'unknown', currentUserId(), {
+        accountId: account.id,
+        provider: account.provider,
+        connectionReady: String(!warning),
+      });
       res.type('html').send(oauthCallbackHtml({
         success: true,
         accountId: account.id,

@@ -2,19 +2,25 @@
 
 ## 服务与客户端边界
 
-iMail 服务独立运行并拥有邮箱凭据、SQLite、同步 Worker、HTTP API、Gateway 与 MCP。Web 与 Tauri 桌面版都是 iMail 客户端，只保存服务地址和界面偏好；桌面安装包不包含 Node Runtime、服务端 bundle、Worker 或数据库。客户端的 API、SSE、附件与开发者端点统一从运行时服务地址派生。
+iMail 服务独立拥有邮箱凭据、SQLite、同步 Worker、HTTP API、Gateway 与 MCP。Web 与 Tauri 桌面版都是 iMail 客户端，只保存服务选择、服务地址和界面偏好；客户端的 API、SSE、附件与开发者端点统一从当前服务实例派生。
 
-Web 与桌面客户端默认连接 `http://127.0.0.1:8787`，也可通过构建变量 `VITE_API_BASE_URL`、登录页的“远程服务”展开项或设置页指定其他地址。Web 客户端直接请求服务并受 `CORS_ORIGIN` 约束；桌面客户端经受控 Rust 网络桥请求，WebView 不直接接触服务端会话。
+桌面应用提供本地服务和远程服务两种模式。本地模式由桌面应用把随包发布的服务程序注册为用户级守护进程；守护进程在用户登录后持续运行，不依赖桌面 UI 是否打开。远程模式暂停本地守护进程，桌面客户端经受控 Rust 网络桥请求用户配置的远程地址，WebView 不直接接触服务端会话。模式切换只改变当前数据源，不复制、合并或迁移两个服务实例的数据，远程连接失败也不自动回退。
+
+服务模式与本地守护生命周期意图相互独立。用户在本地模式下显式暂停或移除守护程序后，客户端保存暂停标记，启动时不会因会话检查而重新启用；只有用户再次选择本地服务才清除标记。若暂停标记写入失败，客户端会恢复刚刚停止或移除的本地服务，避免界面状态与后台状态分叉。
+
+远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源，不从本地或远程服务下载应用页面。完整路线见 [本地守护服务与远程共享部署更新路线](./deployment-modes-roadmap.md)。
 
 Web 生产构建注册独立 Service Worker：带内容哈希的 JS、CSS、字体和图片采用缓存优先，页面导航采用网络优先并回退到已缓存应用外壳。`/api`、`/gateway`、`/mcp` 与 `text/event-stream` 请求始终绕过缓存；Tauri 运行时不注册 Service Worker。
 
 ## 后端同步控制面
 
-邮箱同步是后端持久化任务，不以任何前端页面、用户会话、SSE/WebSocket 或 MCP 连接作为生命周期条件。默认启动器同时运行 API 与独立 Worker；外部进程管理模式也可以分别运行二者。
+邮箱同步是服务进程内的持久化任务，不以任何前端页面、用户会话、SSE/WebSocket 或 MCP 连接作为生命周期条件。本地守护服务在桌面 UI 退出后继续同步，直到用户暂停、切换到远程模式或移除本地服务；远程服务的生命周期不依赖任何客户端。默认启动器同时运行 API 与独立 Worker，远程进程管理模式也可以分别运行二者。
 
 ## 应用身份与数据边界
 
-`app_users` 保存应用用户与 scrypt 密码派生值，`app_sessions` 只保存随机会话令牌的 SHA-256 哈希。同源访问使用 HttpOnly、SameSite=Lax Cookie；跨源客户端使用 HttpOnly、SameSite=None、Secure Cookie。前端 `AuthGate` 在渲染邮件工作区前检查会话，并在任意数据 API 返回 401 时立即退回登录页。
+`app_users` 保存应用用户与 scrypt 密码派生值，`app_sessions` 只保存随机会话令牌的 SHA-256 哈希。同源访问使用 HttpOnly、SameSite=Lax Cookie；跨源客户端使用 HttpOnly、SameSite=None、Secure Cookie。浏览器由浏览器 Cookie Store 管理会话；桌面宿主在 Rust 网络桥内按服务地址隔离 Cookie Jar，并将持久 Cookie 保存到当前用户的私有应用数据目录，以便桌面进程重启后恢复。Cookie 不进入 WebView 的 localStorage、前端状态或 IPC 响应。前端 `AuthGate` 在渲染邮件工作区前检查会话，并在任意数据 API 返回 401 时立即退回登录页。
+
+认证失败计数保存在 `auth_rate_limits`，因此 API 重启不会清空登录与注册限流；`security_audit_events` 记录注册、登录、授权码和敏感管理操作等安全事件。来源地址只保存使用实例随机盐生成的 HMAC，审计载荷不写入密码、会话、OAuth Token 或邮箱凭据。事件保留 90 天且全实例最多 10,000 条，登录用户只能读取自己的事件。生产服务完成首个用户初始化后默认关闭继续注册。
 
 HTTP 会话、API 网关 Token 与 MCP 授权码都会恢复同一个服务端用户上下文。存储层按该上下文过滤 `accounts.user_id`、`developer_tokens.user_id`、`contacts.user_id` 与 `logo_fetch_attempts.user_id`，邮件和草稿通过所属邮箱账户间接隔离。后台同步不依赖浏览器会话，而是按全局唯一邮箱账户 ID 工作；提交联系人快照时重新取得该账户的用户归属。
 

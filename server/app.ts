@@ -13,22 +13,20 @@ import { oauthRouter } from './routes/oauth-routes.js';
 import { systemRouter } from './routes/system.js';
 import { syncRouter } from './routes/sync.js';
 import { authRouter, requireAppSession } from './auth/http.js';
+import { createServiceInfoRouter } from './routes/service-info.js';
+import { installWebClient, resolveWebClientRoot } from './web-client.js';
+import { configuredCorsOrigins, productionSecurity } from './http/production-security.js';
+import { securityRouter } from './routes/security.js';
 
-const clientOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-];
-
-function corsOrigins() {
-  const configured = (process.env.CORS_ORIGIN ?? '').split(',').map((item) => item.trim()).filter(Boolean);
-  return [...new Set([...clientOrigins, ...configured])];
-}
-
-export function createApp() {
+export function createApp(options: { webRoot?: string | false } = {}) {
   const app = express();
+  const webRoot = options.webRoot === false ? undefined : options.webRoot ?? resolveWebClientRoot();
+  if (process.env.IMAIL_TRUST_PROXY === 'true') app.set('trust proxy', 1);
 
-  app.use(cors({ origin: corsOrigins(), credentials: true }));
+  app.use(productionSecurity);
+  app.use(cors({ origin: configuredCorsOrigins(), credentials: true }));
   app.use(express.json({ limit: '25mb' }));
+  app.use('/api', createServiceInfoRouter(Boolean(webRoot)));
   app.use('/api', authRouter);
   app.use('/api', requireAppSession);
   app.use('/api', systemRouter);
@@ -39,9 +37,11 @@ export function createApp() {
   app.use('/api', preferencesRouter);
   app.use('/api', draftsRouter);
   app.use('/api', developerTokensRouter);
+  app.use('/api', securityRouter);
   app.use('/gateway', gatewayDocsRouter);
   app.use('/gateway/v1', gatewayRouter);
   app.use(mcpRouter);
+  if (webRoot) installWebClient(app, webRoot);
   app.use(errorHandler);
 
   return app;
