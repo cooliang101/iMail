@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { ServiceInfo } from '../src/types.js';
 
 export const SERVICE_PROTOCOL_VERSION = 1;
-export const SERVICE_VERSION = process.env.IMAIL_VERSION?.trim() || process.env.npm_package_version?.trim() || '0.1.0';
+export const SERVICE_VERSION = process.env.IMAIL_VERSION?.trim() || process.env.npm_package_version?.trim() || '0.0.1';
 
 let cachedInstanceId: string | undefined;
 

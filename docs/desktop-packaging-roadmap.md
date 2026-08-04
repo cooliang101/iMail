@@ -27,7 +27,7 @@ Windows 与 macOS 安装包包含：
 
 - Windows 优先采用无需管理员权限、可在当前用户登录后自动运行的用户级后台机制。
 - macOS 使用 LaunchAgent，不使用系统级 LaunchDaemon。
-- macOS Node SEA sidecar 由 Tauri 在注入后重新签名。Node/V8 需要 `allow-jit` 才能在 hardened runtime 下保留完整网络运行时能力，但不申请范围更大的未签名可执行内存 entitlement。发布门禁必须从已签名 `.app` 内直接启动 sidecar，而不能只检查未装配的构建输入。
+- macOS Node SEA sidecar 由 Tauri 在注入后重新签名。Node/V8 需要 `allow-jit` 才能在 hardened runtime 下保留完整网络运行时能力，但不申请范围更大的未签名可执行内存 entitlement。内部测试门禁必须从 ad-hoc 签名 `.app` 内直接启动 sidecar，而不能只检查未装配的构建输入。
 - 两个平台都必须验证登录启动、异常恢复、暂停、升级、注销和卸载行为。
 - 平台机制的最终选择以最小原型为准，不能以弹出终端窗口或依赖桌面 UI 常驻替代守护能力。
 
@@ -48,7 +48,7 @@ Windows 与 macOS 安装包包含：
 2. 构建当前平台的 iMail 服务程序。
 3. 由 Tauri 将两者装配到 Windows NSIS 或 macOS DMG。
 
-现有 `build:web`、`build:server` 与桌面构建保持可单独执行。守护服务构建不得改变 HTTP、Gateway 或 MCP 协议，桌面发布前仍需运行 `npm run typecheck`、`npm test`、`npm run build` 以及平台安装包冒烟测试。
+现有 `build:web`、`build:server` 与桌面构建保持可单独执行。守护服务构建不得改变 HTTP、Gateway 或 MCP 协议，桌面内测前仍需运行 `npm run typecheck`、`npm test`、`npm run build` 以及平台安装包冒烟测试。
 
 ## 安装、升级与卸载约束
 

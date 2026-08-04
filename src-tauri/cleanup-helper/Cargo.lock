@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "imail-service-manager"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "fs2",
  "serde",

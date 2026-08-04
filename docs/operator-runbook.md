@@ -114,7 +114,7 @@ docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no
 
 ## 冒烟检查
 
-跨平台门禁位于 `.github/workflows/deployment-release.yml`。它在 Ubuntu 验证远程运行时和 Docker，在 Windows 验证 NSIS 与真实用户守护进程，在 macOS arm64/x64 原生 runner 验证 DMG，并从 ad-hoc 签名后的 `.app` 直接检查深度签名、hardened runtime、只开放 `allow-jit` 的 SEA sidecar、同步 Worker 与优雅退出。macOS 门禁还会在确认用户没有既有 iMail 数据或 LaunchAgent 后，使用真实 `launchctl bootstrap`/`bootout` 验证 supervisor 和崩溃恢复，结束时删除本次创建的守护文件。CI 的 ad-hoc 签名不能替代公开发布所需的 Developer ID Application 签名和 Apple notarization。
+跨平台内部测试门禁位于 `.github/workflows/deployment-release.yml`。它在 Ubuntu 验证远程运行时和 Docker，在 Windows 验证 NSIS 与真实用户守护进程，在 macOS arm64/x64 原生 runner 验证 DMG，并从 ad-hoc 签名后的 `.app` 直接检查深度签名、hardened runtime、只开放 `allow-jit` 的 SEA sidecar、同步 Worker 与优雅退出。macOS 门禁还会在确认用户没有既有 iMail 数据或 LaunchAgent 后，使用真实 `launchctl bootstrap`/`bootout` 验证 supervisor 和崩溃恢复，结束时删除本次创建的守护文件。桌面 Artifacts 保留 14 天；`main` 全部任务成功后，汇总任务使用最小 `contents: write` 权限创建带 SHA-256 校验文件的 Draft Release。Developer ID Application 签名和 Apple notarization 仍延后到正式分发阶段。
 
 1. 在“外部接入”的“MCP”标签页签发 `mcp:full` 授权码。
 2. 用 MCP Inspector 或任意标准客户端连接 `http://127.0.0.1:8787/mcp`。
@@ -136,17 +136,19 @@ npm run build
 npm audit --omit=dev
 ```
 
-部署模式发布验证：
+部署模式内部测试验证：
 
 ```bash
-npm run test:deployment-release
-# 安装并启动 Docker 的发布机额外执行
+npm run test:internal-release
+# 安装并启动 Docker 的测试机额外执行
 npm run test:container-release
-# 仅限 CI 或明确允许改写当前用户安装状态的 Windows 发布机
+# 仅限 CI 或明确允许改写当前用户安装状态的 Windows 测试机
 IMAIL_ALLOW_INSTALLER_SMOKE=true npm run test:windows-installer
 ```
 
 逐项证据和需要在真实平台执行的检查见 [`deployment-verification.md`](./deployment-verification.md)。
+
+发布内部测试标签前，先同步 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、两个 Rust manifest 与 lockfile 中的版本，再从 `main` 对应提交创建三段式标签。标签名必须与应用版本完全一致，例如 `0.0.1`；标签任务通过后会发布带三个桌面安装包和 `SHA256SUMS.txt` 的 GitHub Pre-release，不会标记为 Latest。
 
 `server/index.test.ts` 覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`server/tokens.test.ts` 覆盖 `imail_mcp_` 格式和 scope 隔离。
 

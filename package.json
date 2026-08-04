@@ -1,6 +1,6 @@
 {
   "name": "imail",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "imail": {
     "schemaVersion": 4
   },
@@ -27,8 +27,10 @@
     "test:local-daemon": "node scripts/smoke-local-daemon.mjs",
     "test:remote-release": "node scripts/smoke-remote-release.mjs",
     "test:container-release": "node scripts/smoke-container-release.mjs",
-    "test:deployment-release": "npm run typecheck && npm test && cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc && cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked && npm audit --omit=dev && npm run build:remote && npm run build:desktop:windows && npm run test:desktop-release && npm run test:local-daemon && npm run test:remote-release",
+    "test:internal-release": "npm run typecheck && npm test && cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc && cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked && npm audit --omit=dev && npm run build:remote && npm run build:desktop:internal && npm run test:desktop-release && npm run test:local-daemon && npm run test:remote-release",
+    "test:deployment-release": "npm run test:internal-release",
     "build:desktop": "tauri build",
+    "build:desktop:internal": "node scripts/build-internal-desktop.mjs",
     "build:desktop:windows": "tauri build --target x86_64-pc-windows-msvc --bundles nsis",
     "build:desktop:macos": "tauri build --bundles app,dmg",
     "start": "tsx --env-file-if-exists=.env server/entry.ts",

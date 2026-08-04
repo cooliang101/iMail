@@ -1,4 +1,4 @@
-name: Deployment release verification
+name: Internal test verification
 
 on:
   workflow_dispatch:
@@ -6,12 +6,14 @@ on:
   push:
     branches:
       - main
+    tags:
+      - '*.*.*'
 
 permissions:
   contents: read
 
 concurrency:
-  group: deployment-release-${{ github.ref }}
+  group: internal-test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -44,7 +46,7 @@ jobs:
       - run: npm run test:container-release
 
   windows:
-    name: Windows installer and user daemon
+    name: Windows internal installer and user daemon
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -60,18 +62,20 @@ jobs:
       - run: npm run build:service-runtime
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc
       - run: cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked
-      - run: npm run build:desktop:windows
+      - run: npm run build:desktop:internal
       - run: npm run test:windows-installer
       - run: npm run test:desktop-release
       - run: npm run test:local-daemon
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
-          name: imail-windows-nsis
+          name: imail-windows-x64-internal-test
           path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           if-no-files-found: error
+          retention-days: 14
 
   macos:
-    name: macOS ${{ matrix.arch }} bundle
+    name: macOS ${{ matrix.arch }} internal bundle
     strategy:
       fail-fast: false
       matrix:
@@ -96,10 +100,97 @@ jobs:
       - run: npm ci
       - run: npm run build:service-runtime
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
-      - run: npm run build:desktop:macos
+      - run: npm run build:desktop:internal
       - run: npm run test:macos-bundle
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
-          name: imail-macos-${{ matrix.arch }}-dmg
+          name: imail-macos-${{ matrix.arch }}-internal-test
           path: src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
+          retention-days: 14
+
+  draft-release:
+    name: Collect internal draft release
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs:
+      - quality-and-remote
+      - container
+      - windows
+      - macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: imail-*-internal-test
+          path: release-assets
+          merge-multiple: true
+      - name: Prepare release metadata
+        id: release
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=internal-v${version}-build.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Create SHA-256 checksums
+        shell: bash
+        working-directory: release-assets
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Create internal draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.release.outputs.tag }}" release-assets/* \
+            --draft \
+            --latest=false \
+            --target "$GITHUB_SHA" \
+            --title "iMail v${{ steps.release.outputs.version }} internal build #${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
+            --notes "仅供内部测试。Windows 安装包未配置商业代码签名，macOS DMG 使用 ad-hoc 签名且未经 Apple notarization。来源提交：${GITHUB_SHA}。CI：${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}。"
+
+  tagged-release:
+    name: Publish tagged test release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - quality-and-remote
+      - container
+      - windows
+      - macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify tag matches application version
+        id: release
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$GITHUB_REF_NAME" != "$version" ]]; then
+            echo "标签 ${GITHUB_REF_NAME} 与应用版本 ${version} 不一致" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: imail-*-internal-test
+          path: release-assets
+          merge-multiple: true
+      - name: Create SHA-256 checksums
+        shell: bash
+        working-directory: release-assets
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Publish GitHub pre-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --verify-tag \
+            --prerelease \
+            --latest=false \
+            --title "iMail ${{ steps.release.outputs.version }}" \
+            --notes "内部测试版本。Windows 安装包未配置商业代码签名，macOS DMG 使用 ad-hoc 签名且未经 Apple notarization。来源提交：${GITHUB_SHA}。CI：${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}。"
