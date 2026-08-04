@@ -82,24 +82,24 @@ npm run dev:web
 npm run build:web
 ```
 
-Windows 开发和 NSIS 安装包构建需要 Node.js 22.5+、Rust stable、Microsoft C++ Build Tools 与 WebView2：
+Windows 开发和 NSIS 安装包构建需要 Node.js 22.5+、Rust stable、Microsoft C++ Build Tools 与 WebView2。当前阶段只生成内部测试包，统一入口会按构建机平台选择 Windows NSIS 或 macOS ad-hoc DMG：
 
 ```bash
 npm run dev:desktop
-npm run build:desktop:windows
+npm run build:desktop:internal
 ```
 
 桌面版默认保持后台运行：点击主窗口关闭按钮会隐藏到系统托盘，左键托盘图标或选择“打开 iMail”可恢复窗口；托盘右键菜单的“写邮件”会恢复窗口并直接打开新邮件编辑器，选择“退出 iMail”才会结束进程。应用采用单实例模式；再次启动 iMail 会恢复并聚焦已有窗口，不会创建第二个进程实例。
 
 “移除运行文件”只注销用户级守护项并保留邮件数据。需要彻底清除本机数据库、邮件缓存、邮箱凭据、主密钥和联系人 Logo 时，使用独立的“永久删除本地数据”入口并输入确认文字；应用会先移除仍安装的守护程序，后端确认没有配置、运行目录或守护锁后才删除固定数据目录。
 
-安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 正式包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到用户机器。发布前验证真实桌面宿主：
+安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 桌面包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到测试机器。内测前验证真实桌面宿主：
 
 ```bash
 npm run test:desktop-release
 ```
 
-macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools，再执行 `npm run build:desktop:macos`。DMG、hardened runtime 和必要的网络/JIT entitlement 已配置；Node/V8 使用 `allow-jit`，但不开放范围更大的未签名可执行内存权限。构建后运行 `npm run test:macos-bundle`，会验证 `.app` 深度签名、hardened runtime、桌面启动、已签名 sidecar、独立同步 Worker 和优雅退出，并在干净测试用户中实际完成 LaunchAgent bootstrap、API 崩溃恢复与 bootout。正式分发仍需配置 Apple Developer 签名与 notarization。
+macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools。内部测试命令固定使用 ad-hoc 签名；DMG、hardened runtime 和必要的网络/JIT entitlement 已配置，Node/V8 使用 `allow-jit`，但不开放范围更大的未签名可执行内存权限。构建后运行 `npm run test:macos-bundle`，会验证 `.app` 深度签名、hardened runtime、桌面启动、已签名 sidecar、独立同步 Worker 和优雅退出，并在干净测试用户中实际完成 LaunchAgent bootstrap、API 崩溃恢复与 bootout。内部测试包的获取、安装限制和验收口径见[内部测试构建说明](docs/internal-testing.md)；Developer ID 与 notarization 延后到正式分发阶段。
 
 桌面宿主通过 Rust 网络桥连接选定的本地或远程服务 API，并在 Rust 侧维护登录 Cookie、实时事件流与附件下载；持久登录 Cookie 按规范化服务地址隔离并保存在当前用户的私有应用数据目录，退出桌面后可恢复，但不会进入 WebView 存储或 IPC 响应。Web 客户端直接同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。完整边界见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
 
@@ -377,11 +377,11 @@ server/providers.ts  服务商预设
 npm run typecheck
 npm test
 npm run build
-# Windows 部署模式完整冒烟
-npm run test:deployment-release
+# Windows 内部测试完整冒烟
+npm run test:internal-release
 ```
 
-Docker 发布机额外运行 `npm run test:container-release`。平台人工验收和证据要求见 [`docs/deployment-verification.md`](docs/deployment-verification.md)。
+Docker 测试机额外运行 `npm run test:container-release`。平台人工验收和证据要求见 [`docs/deployment-verification.md`](docs/deployment-verification.md)。
 
 ## 后续增强方向
 

@@ -1,4 +1,4 @@
-name: Deployment release verification
+name: Internal test verification
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deployment-release-${{ github.ref }}
+  group: internal-test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
       - run: npm run test:container-release
 
   windows:
-    name: Windows installer and user daemon
+    name: Windows internal installer and user daemon
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -60,18 +60,20 @@ jobs:
       - run: npm run build:service-runtime
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc
       - run: cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked
-      - run: npm run build:desktop:windows
+      - run: npm run build:desktop:internal
       - run: npm run test:windows-installer
       - run: npm run test:desktop-release
       - run: npm run test:local-daemon
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
-          name: imail-windows-nsis
+          name: imail-windows-x64-internal-test
           path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           if-no-files-found: error
+          retention-days: 14
 
   macos:
-    name: macOS ${{ matrix.arch }} bundle
+    name: macOS ${{ matrix.arch }} internal bundle
     strategy:
       fail-fast: false
       matrix:
@@ -96,10 +98,12 @@ jobs:
       - run: npm ci
       - run: npm run build:service-runtime
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
-      - run: npm run build:desktop:macos
+      - run: npm run build:desktop:internal
       - run: npm run test:macos-bundle
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
-          name: imail-macos-${{ matrix.arch }}-dmg
+          name: imail-macos-${{ matrix.arch }}-internal-test
           path: src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
+          retention-days: 14
