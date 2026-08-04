@@ -2,7 +2,7 @@
 
 本文件把[部署模式路线图](./deployment-modes-roadmap.md)中的验收场景映射到可重复证据。单元测试证明协议和状态转换，打包冒烟证明真实进程与构建产物；需要操作系统重启、平台身份签名或容器运行时的项目不能用代码检查代替。
 
-2026-08-04 Windows 本机复验已通过类型检查、46 个测试文件中的 288 项测试、生产依赖审计、Web/远程运行包构建、Rust 主程序与清理程序测试、NSIS 构建、已安装桌面启动、本地守护进程和远程同源服务冒烟。[GitHub Actions 运行 30878989584](https://github.com/cooliang101/iMail/actions/runs/30878989584) 与[内部测试 Pre-release](https://github.com/cooliang101/iMail/releases/tag/0.0.1) 只作为历史证据。当前支持矩阵收敛为 Windows 桌面端与服务端 Docker；不验证原生 Linux 或 macOS 桌面产物。Actions 额度紧张，后续验证与打包改为本机执行；普通分支推送与 pull request 不触发工作流，未经用户明确授权不得创建版本 tag 或手动运行工作流。当前不进入正式公开分发；公网反向代理和 Windows 正式代码签名属于延期验收，Windows 注销登录仍需内测实机验证。
+2026-08-04 Windows 本机复验已通过类型检查、46 个测试文件中的 288 项测试、生产依赖审计、Web/远程运行包构建、Rust 主程序与清理程序测试、NSIS 构建、已安装桌面启动、本地守护进程和远程同源服务冒烟。[GitHub Actions 运行 30878989584](https://github.com/cooliang101/iMail/actions/runs/30878989584) 与[内部测试 Pre-release](https://github.com/cooliang101/iMail/releases/tag/0.0.1) 只作为历史桌面证据。当前支持矩阵收敛为 Windows 桌面端与服务端 Docker；不验证原生 Linux 或 macOS 桌面产物。手动云工作流明确区分 `docker` 与 `windows`，普通分支推送与 pull request 不触发，三段式版本标签只发布 Docker；未经用户明确授权不得创建版本 tag 或手动运行。当前不进入正式公开分发；公网反向代理和 Windows 正式代码签名属于延期验收，Windows 注销登录仍需内测实机验证。
 
 同日使用开发实例中的 4 个真实邮箱账户执行了非破坏性验证，测试过程不读取或输出邮件正文、邮箱凭据和 Token：在没有 5173 前端进程时，Gmail、iCloud、Outlook 与 QQ 均由后台 Worker 完成新一轮同步，16 个邮箱状态全部回到 `connected/idle`。随后从在线数据创建带完整性清单的一致性备份并恢复到系统临时目录，用当前代码在隔离端口启动副本；四个账户均完成启动同步且 0 失败，SQLite `quick_check` 为 `ok`，服务优雅退出后没有遗留 Worker 心跳。测试结束后已删除临时备份与恢复副本，在线开发服务未停止。
 
@@ -22,7 +22,7 @@
 | `npm run backup -- <目标目录>` | 在线 SQLite 一致性快照、同目录暂存后原子提交、数据目录内主密钥/实例身份/Logo 的同批备份，以及含服务与 schema 版本的逐文件 SHA-256 v2 清单 |
 | `npm run restore:prepare -- <备份目录> <新目录>` | v1/v2 SHA-256 清单、清单与数据库 schema 交叉检查、当前发布 schema 上限、SQLite 完整性、iMail 核心表、主密钥与实例身份格式检查；复制到全新目录且拒绝覆盖当前数据，测试覆盖数据分叉、身份保留、快照往返、篡改、版本错配及未来 schema 拒绝；服务启动迁移另做同样上限检查 |
 | `npm run upgrade:preflight -- <新备份目录> <新预检目录>` | 在线一致备份、非覆盖恢复、当前版本迁移、SQLite `quick_check`、外键检查与 schema 版本确认；成功时在线数据不变，失败时清理半迁移副本但保留回滚备份；远程运行包与容器门禁直接执行打包后命令 |
-| GitHub Actions `Windows and Docker internal verification`（历史证据，日常不触发） | 2026-08-04 的[标签绿色运行 30878989584](https://github.com/cooliang101/iMail/actions/runs/30878989584) 和 [`0.0.1`](https://github.com/cooliang101/iMail/releases/tag/0.0.1) 只作为历史证据；当前工作流只保留手动与版本标签入口，并仅验证 Windows、远程运行时与 Docker |
+| GitHub Actions `Build Windows or publish Docker` | 手动运行必须选择 `docker` 或 `windows`，分别只发布 `linux/amd64` GHCR 镜像或上传 Windows NSIS Artifact；三段式版本标签只执行 Docker。旧[标签绿色运行 30878989584](https://github.com/cooliang101/iMail/actions/runs/30878989584) 和 [`0.0.1`](https://github.com/cooliang101/iMail/releases/tag/0.0.1) 仅作为历史桌面证据 |
 
 ## 路线图验收映射
 
@@ -53,7 +53,7 @@ Windows 测试构建机：
 
 远程服务测试机：
 
-1. 在安装 Docker 的本地或内部测试机运行 `npm run test:container-release`；当前不要为此触发 GitHub Actions。
+1. 在安装 Docker 的本地或内部测试机运行 `npm run test:container-release`；GHCR 发布只按用户明确授权运行一次，不因日常提交自动触发。
 2. 跨设备内测时使用客户端信任的内部 HTTPS，并确认长连接超时和 Host 配置；公网正式域名不阻塞当前阶段。
 3. 用持久卷完成“备份—升级—恢复—回退”演练。
 4. 使用 `compose.https.example.yml` 和受控测试域名验证证书、HTTP 到 HTTPS 跳转、SSE 即时事件、WebSocket 升级及后端 8787 未直接暴露。

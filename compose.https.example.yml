@@ -1,6 +1,6 @@
 services:
   imail:
-    build: .
+    image: ${IMAIL_IMAGE:-ghcr.io/cooliang101/imail:edge}
     restart: unless-stopped
     init: true
     expose:

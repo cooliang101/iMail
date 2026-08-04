@@ -66,6 +66,10 @@ describe('desktop packaging configuration', () => {
     const httpsCompose = readFileSync('compose.https.example.yml', 'utf8');
     const caddy = readFileSync('deploy/Caddyfile', 'utf8');
     expect(bareCompose).toContain('127.0.0.1:8787:8787');
+    expect(bareCompose).toContain('image: ${IMAIL_IMAGE:-ghcr.io/cooliang101/imail:edge}');
+    expect(httpsCompose).toContain('image: ${IMAIL_IMAGE:-ghcr.io/cooliang101/imail:edge}');
+    expect(bareCompose).not.toContain('build: .');
+    expect(httpsCompose).not.toContain('build: .');
     expect(httpsCompose).not.toMatch(/imail:[\s\S]*?ports:\s*\n\s*- ["']?8787:8787/);
     expect(httpsCompose).toContain('IMAIL_TRUST_PROXY: "true"');
     expect(httpsCompose).toContain('OAUTH_CALLBACK_BASE_URL: https://${IMAIL_PUBLIC_HOST');
@@ -92,20 +96,30 @@ describe('desktop packaging configuration', () => {
     expect(windowsInstallerSmoke).toContain('uninstallRemovedUserStartup: true');
   });
 
-  it('gates the Windows installer and remote Docker image on their real platforms', () => {
+  it('separates manual Windows builds from Docker publishing', () => {
     const workflow = readFileSync('.github/workflows/deployment-release.yml', 'utf8');
-    expect(workflow).toContain('runs-on: windows-latest');
+    expect(workflow).toContain('name: Build Windows or publish Docker');
+    expect(workflow).toContain('default: docker');
+    expect(workflow).toContain('- docker');
+    expect(workflow).toContain('- windows');
     expect(workflow).toContain('runs-on: ubuntu-latest');
-    expect(workflow).toContain('cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc');
-    expect(workflow).toContain('cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked');
-    expect(workflow).toContain('npm run test:local-daemon');
+    expect(workflow).toContain('runs-on: windows-latest');
+    expect(workflow).toContain('packages: write');
+    expect(workflow).toContain('docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302');
+    expect(workflow).toContain('docker/login-action@dbcb813823bdd20940b903addbd779551569679f');
+    expect(workflow).toContain('docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a');
+    expect(workflow).toContain('ghcr.io/${GITHUB_REPOSITORY,,}');
+    expect(workflow).toContain('platforms: linux/amd64');
+    expect(workflow).toContain('type=raw,value=edge');
+    expect(workflow).toContain('type=sha,format=long,prefix=sha-');
+    expect(workflow).toContain("inputs.target == 'docker'");
+    expect(workflow).toContain("inputs.target == 'windows'");
+    expect(workflow).toContain('npm run build:desktop:internal');
     expect(workflow).toContain('npm run test:windows-installer');
-    expect(workflow).toContain('npm run test:container-release');
     expect(workflow).toContain('src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe');
     expect(workflow).not.toContain('macos-latest');
-    expect(workflow).not.toContain('npm run test:macos-bundle');
-    const windowsJob = workflow.slice(workflow.indexOf('\n  windows:'), workflow.indexOf('\n  draft-release:'));
-    expect(windowsJob.indexOf('npm run build:service-runtime')).toBeLessThan(windowsJob.indexOf('cargo test --manifest-path src-tauri/Cargo.toml'));
+    expect(workflow).not.toContain('pull_request:');
+    expect(workflow).not.toContain('branches:');
   });
 
   it('keeps one desktop instance and hides the main window to the system tray on close', () => {

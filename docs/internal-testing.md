@@ -2,7 +2,7 @@
 
 当前交付只面向受控测试人员，不作为正式公开发行。桌面端只生成未配置商业代码签名的 Windows x64 NSIS；远程服务只交付 Docker 镜像。原生 Linux 与 macOS 桌面安装包不在支持范围内。
 
-当前构建与验证统一在本机完成；普通分支推送与 pull request 不触发 GitHub Actions。未经用户明确授权，不要创建版本 tag 或执行 `.github/workflows/deployment-release.yml` 的 `workflow_dispatch`。
+普通分支推送与 pull request 不触发 GitHub Actions。`.github/workflows/deployment-release.yml` 的手动入口必须二选一：`docker` 只构建并推送 `linux/amd64` 服务端镜像，`windows` 只构建 Windows x64 NSIS 并上传 14 天 Artifact；两者不会互相连带执行。三段式版本标签只发布 Docker。未经用户明确授权，不要创建版本 tag 或执行手动工作流。
 
 ## 本机构建
 
@@ -35,11 +35,13 @@ npm run test:internal-release
 npm run test:container-release
 ```
 
+授权执行手动工作流后，镜像发布到 `ghcr.io/cooliang101/imail`，标签为 `edge` 与完整 `sha-<提交>`。未来三段式版本标签只发布对应完整版本和提交 SHA，不移动已有 `0.0.1` 标签，也不生成 `latest`。Compose 默认读取 `IMAIL_IMAGE`；内测可用 `edge`，可复现部署应使用版本标签或工作流输出的 digest。GHCR 首次发布后的可见性由包设置决定，不在工作流中自动改为公开。
+
 ## 既有远端证据与当前限制
 
-[`0.0.1` Pre-release](https://github.com/cooliang101/iMail/releases/tag/0.0.1) 和对应 Actions 运行仅作为已经完成的历史验证证据。当前不要为了日常修改重新运行该工作流，也不要为生成安装包创建新标签；Actions 月度额度接近上限，本地可完成的类型检查、测试、Windows 打包和 Docker 验证都应使用上一节命令。
+[`0.0.1` Pre-release](https://github.com/cooliang101/iMail/releases/tag/0.0.1) 和对应旧版完整 Actions 运行只作为历史验证证据。当前工作流已经拆分 Docker 与 Windows 手动目标；Actions 月度额度接近上限，本地可完成的类型检查、测试和 Windows 打包仍应使用上一节命令。GHCR 或 Windows 云端构建只有在用户明确授权时才运行对应目标。
 
-需要把 Windows 产物交给测试人员时，直接从本机输出目录复制，并在交付记录中填写应用版本、构建提交、架构和 SHA-256。Docker 服务端应记录镜像标签或 digest。不要用额外的 GitHub Actions 运行替代本机验证；只有用户明确确认恢复云端打包后，才使用现有工作流的手动或版本标签入口及其 Artifact/Draft Release/Pre-release 行为。
+需要把 Windows 产物交给测试人员时，直接从本机输出目录复制，并在交付记录中填写应用版本、构建提交、架构和 SHA-256。Docker 服务端应记录 GHCR 镜像标签与 digest。不要用额外的 GitHub Actions 运行替代本机验证；版本标签只用于发布已确认版本的 Docker 镜像。
 
 ## 安装限制
 

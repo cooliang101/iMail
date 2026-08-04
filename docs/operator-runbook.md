@@ -42,12 +42,12 @@ npm run worker
 
 `npm run build:remote` 生成同版本 Web、API 与 Worker 运行包，`npm run start:remote` 默认监听 `0.0.0.0:8787` 并托管 `dist`。容器以非 root 用户运行并把所有可变数据写入 `/data`。`compose.example.yml` 只把端口绑定到宿主机回环地址，适合本机验证或接入宿主机已有的反向代理，不应改成直接监听所有网卡。
 
-仓库同时提供带 Caddy 自动 HTTPS 的 `compose.https.example.yml`。复制环境变量模板、填写已解析到部署主机的域名，然后启动：
+仓库同时提供带 Caddy 自动 HTTPS 的 `compose.https.example.yml`。服务镜像由受控 GitHub Actions 发布到 `ghcr.io/cooliang101/imail`；复制环境变量模板，填写已解析到部署主机的域名，并将 `IMAIL_IMAGE` 固定到所需版本标签或 digest 后启动。若 GHCR 包保持私有，先使用具有 `read:packages` 权限的 Token 执行 `docker login ghcr.io`：
 
 ```bash
 cp deploy/remote.env.example .env.remote
-# 编辑 .env.remote，至少设置 IMAIL_PUBLIC_HOST
-docker compose --env-file .env.remote -f compose.https.example.yml up -d --build
+# 编辑 .env.remote，至少设置 IMAIL_PUBLIC_HOST，并在固定部署中替换 edge
+docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull always
 ```
 
 该拓扑只向公网发布 Caddy 的 80/443（含 HTTP/3 UDP）端口，iMail 的 8787 只存在于 Compose 网络。Caddy 自动申请和续期证书，配置禁用上游响应缓冲以保证 SSE 实时送达；WebSocket 由 `reverse_proxy` 原生转发。部署前确认 DNS 已生效且防火墙允许 TCP 80/443 与 UDP 443。若已有反向代理，继续使用回环绑定的 `compose.example.yml`，并自行配置 SSE 禁用缓冲、WebSocket 升级和足够长的读取超时。
@@ -97,10 +97,10 @@ npm run upgrade:preflight -- \
   /safe/preflight/imail-new-version
 ```
 
-Compose 部署应先构建新镜像，但保持旧容器运行；然后用新镜像的一次性容器执行预检：
+Compose 部署应先拉取新镜像，但保持旧容器运行；然后用新镜像的一次性容器执行预检：
 
 ```bash
-docker compose --env-file .env.remote -f compose.https.example.yml build imail
+docker compose --env-file .env.remote -f compose.https.example.yml pull imail
 docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no-deps imail \
   node server-runtime/imail-upgrade-preflight.mjs \
   /backups/imail-before-upgrade /backups/imail-new-version-preflight
@@ -114,7 +114,7 @@ docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no
 
 ## 冒烟检查
 
-当前交付范围只有 Windows 桌面端与服务端 Docker；Linux 侧只运行 Docker，不维护原生部署单元。内部测试在本机执行，`.github/workflows/deployment-release.yml` 和 `0.0.1` 的运行记录只作为既有证据。Actions 月度额度接近上限，普通分支推送与 pull request 不触发工作流；未经用户明确授权，不要创建版本 tag 或手动运行云端打包。Windows 使用本机 `npm run test:internal-release`，Docker 测试机执行 `npm run test:container-release`。
+当前交付范围只有 Windows 桌面端与服务端 Docker；Linux 侧只运行 Docker，不维护原生部署单元。Actions 月度额度接近上限，普通分支推送与 pull request 不触发工作流；未经用户明确授权，不要创建版本 tag 或手动运行。手动工作流必须选择 `docker` 或 `windows`：前者只发布 `linux/amd64` GHCR 镜像，后者只生成 Windows Artifact。Windows 日常仍使用本机 `npm run test:internal-release`，有 Docker 的测试机可执行 `npm run test:container-release`。
 
 1. 在“外部接入”的“MCP”标签页签发 `mcp:full` 授权码。
 2. 用 MCP Inspector 或任意标准客户端连接 `http://127.0.0.1:8787/mcp`；桌面本地服务改过端口时使用设置页显示的当前地址。
@@ -148,7 +148,7 @@ IMAIL_ALLOW_INSTALLER_SMOKE=true npm run test:windows-installer
 
 逐项证据和需要在真实平台执行的检查见 [`deployment-verification.md`](./deployment-verification.md)。
 
-当前不要为了生成内部测试包创建标签或触发 GitHub Actions。需要交付时，直接使用本机 `build:desktop:internal` 产物并记录版本、构建提交、平台/架构与 SHA-256；只有用户明确恢复云端发布流程后，才使用现有三段式版本标签入口及 Artifact、Draft Release 或 Pre-release 行为。
+不要为了生成 Windows 内部测试包创建标签或触发 GitHub Actions。Windows 交付直接使用本机 `build:desktop:internal` 产物并记录版本、构建提交、平台/架构与 SHA-256；三段式版本标签只负责把已确认版本的服务端镜像发布到 GHCR。
 
 `server/index.test.ts` 覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`server/tokens.test.ts` 覆盖 `imail_mcp_` 格式和 scope 隔离。
 

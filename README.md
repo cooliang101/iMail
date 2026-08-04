@@ -93,7 +93,7 @@ npm run dev:desktop
 npm run build:desktop:internal
 ```
 
-当前交付范围只有 Windows 桌面端和服务端 Docker 镜像；不提供原生 Linux 或 macOS 桌面安装包。Linux 侧只需构建并运行 Docker 镜像，不维护额外的原生部署脚本。普通分支推送与 pull request 不触发 GitHub Actions；工作流只保留显式 `workflow_dispatch` 和版本标签入口，未经用户明确授权不要使用。
+当前交付范围只有 Windows 桌面端和服务端 Docker 镜像；不提供原生 Linux 或 macOS 桌面安装包。Linux 侧只需运行 Docker 镜像，不维护额外的原生部署脚本。普通分支推送与 pull request 不触发 GitHub Actions；手动运行时必须选择 `docker` 或 `windows`，两条任务不会互相连带执行。三段式版本标签只发布 Docker，Windows 日常仍优先本机构建。
 
 桌面版默认保持后台运行：点击主窗口关闭按钮会隐藏到系统托盘，左键托盘图标或选择“打开 iMail”可恢复窗口；托盘右键菜单的“写邮件”会恢复窗口并直接打开新邮件编辑器，选择“退出 iMail”才会结束进程。应用采用单实例模式；再次启动 iMail 会恢复并聚焦已有窗口，不会创建第二个进程实例。
 
@@ -107,7 +107,14 @@ npm run build:desktop:internal
 npm run test:desktop-release
 ```
 
-服务端交付使用仓库根目录的 `Dockerfile` 与 Compose 示例；执行 `npm run test:container-release` 验证镜像构建、非 root 运行、健康检查、Web/API 同源访问以及备份恢复。内部测试包和镜像的验收口径见[内部测试构建说明](docs/internal-testing.md)。
+服务端镜像由 GitHub Actions 推送到 `ghcr.io/cooliang101/imail`。一次手动发布生成 `edge` 与完整 `sha-<提交>` 标签；三段式版本标签生成完整版本号与提交 SHA，不生成含义模糊的 `latest`。Compose 默认使用 `edge`，固定部署应把 `IMAIL_IMAGE` 改为版本标签或 digest。首次发布后的 GHCR 可见性由包设置决定，工作流不会自动将其公开。
+
+```bash
+docker pull ghcr.io/cooliang101/imail:edge
+docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull always
+```
+
+仓库根目录的 `Dockerfile` 仍可本地构建；执行 `npm run test:container-release` 验证镜像构建、非 root 运行、健康检查、Web/API 同源访问以及备份恢复。内部测试包和镜像的验收口径见[内部测试构建说明](docs/internal-testing.md)。
 
 桌面宿主通过 Rust 网络桥连接选定的本地或远程服务 API，并在 Rust 侧维护登录 Cookie、实时事件流与附件下载；持久登录 Cookie 按规范化服务地址隔离并保存在当前用户的私有应用数据目录，退出桌面后可恢复，但不会进入 WebView 存储或 IPC 响应。Web 客户端直接同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。完整边界见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
 
