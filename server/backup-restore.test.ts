@@ -38,8 +38,8 @@ describe('backup and restore preparation', () => {
     const output = execFileSync(process.execPath, ['scripts/prepare-restore.mjs', backup, restored], {
       cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     });
-    expect(JSON.parse(output)).toMatchObject({ ok: true, databaseVerified: true, integrityManifestVerified: true, backupServiceVersion: '0.1.0', schemaVersion: 4, supportedSchemaVersion: 4, masterKeyIncluded: true, instanceIdIncluded: true, senderLogosIncluded: true });
-    expect(JSON.parse(readFileSync(path.join(backup, 'backup-manifest.json'), 'utf8'))).toMatchObject({ formatVersion: 2, service: 'imail', serviceVersion: '0.1.0', schemaVersion: 4 });
+    expect(JSON.parse(output)).toMatchObject({ ok: true, databaseVerified: true, integrityManifestVerified: true, backupServiceVersion: '0.0.1', schemaVersion: 4, supportedSchemaVersion: 4, masterKeyIncluded: true, instanceIdIncluded: true, senderLogosIncluded: true });
+    expect(JSON.parse(readFileSync(path.join(backup, 'backup-manifest.json'), 'utf8'))).toMatchObject({ formatVersion: 2, service: 'imail', serviceVersion: '0.0.1', schemaVersion: 4 });
     const snapshot = new DatabaseSync(path.join(restored, 'imail.sqlite'), { readOnly: true });
     expect(snapshot.prepare('SELECT id FROM accounts ORDER BY id').all()).toEqual([{ id: 'before-backup' }]);
     snapshot.close();

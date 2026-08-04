@@ -505,7 +505,7 @@ mod tests {
 
     fn config(root: &Path) -> DaemonConfig {
         DaemonConfig {
-            service_executable: root.join("runtime/imail-service-0.1.0.exe"),
+            service_executable: root.join("runtime/imail-service-0.0.1.exe"),
             data_dir: root.join("data"),
             control_file: root.join("control-token"),
             enabled_file: root.join("enabled"),

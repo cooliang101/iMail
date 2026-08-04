@@ -57,6 +57,10 @@ Pull Request 只执行构建与验证，不上传可分发产物。功能分支�
 
 Draft Release 资产不像 Actions Artifact 那样按 14 天自动过期。确认某次构建不再使用后，应在 GitHub Release 页面删除对应草稿；CI 不自动删除旧草稿或已有资产。
 
+## 标签测试版本
+
+形如 `0.0.1` 的三段式版本标签会触发同一套完整跨平台门禁。标签必须与 `package.json`、Tauri 和 Rust 包版本完全一致；全部任务成功后，CI 将三个平台安装包和 `SHA256SUMS.txt` 发布为 GitHub Pre-release，并明确标注未配置 Windows 商业签名、Developer ID 或 Apple notarization。该版本不会被标记为 Latest。
+
 ## 安装限制
 
 Windows 可能显示 SmartScreen 提示；只在确认文件来自本项目的受控测试人员中继续安装。macOS 会因为没有 Developer ID 与 notarization 而显示“无法验证开发者”；测试人员可在 Finder 中右键应用选择“打开”，或在“系统设置 → 隐私与安全性”中允许本次打开。不要为了内测全局关闭 Gatekeeper。

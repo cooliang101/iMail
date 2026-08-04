@@ -148,6 +148,8 @@ IMAIL_ALLOW_INSTALLER_SMOKE=true npm run test:windows-installer
 
 逐项证据和需要在真实平台执行的检查见 [`deployment-verification.md`](./deployment-verification.md)。
 
+发布内部测试标签前，先同步 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、两个 Rust manifest 与 lockfile 中的版本，再从 `main` 对应提交创建三段式标签。标签名必须与应用版本完全一致，例如 `0.0.1`；标签任务通过后会发布带三个桌面安装包和 `SHA256SUMS.txt` 的 GitHub Pre-release，不会标记为 Latest。
+
 `server/index.test.ts` 覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`server/tokens.test.ts` 覆盖 `imail_mcp_` 格式和 scope 隔离。
 
 ## 故障排查

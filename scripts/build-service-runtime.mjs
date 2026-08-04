@@ -32,7 +32,7 @@ await build({
   sourcemap: false,
   minify: false,
   logLevel: 'info',
-  define: { 'process.env.npm_package_version': JSON.stringify(process.env.npm_package_version ?? '0.1.0') },
+  define: { 'process.env.npm_package_version': JSON.stringify(process.env.npm_package_version ?? '0.0.1') },
 });
 
 const seaBlob = path.join(runtimeDir, 'imail-service.blob');

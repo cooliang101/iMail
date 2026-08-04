@@ -83,7 +83,7 @@ describe('iMail HTTP API', () => {
     const firstBody = await first.json();
     const secondBody = await second.json();
     expect(firstBody).toMatchObject({
-      service: 'imail', version: '0.1.0', protocolVersion: 1,
+      service: 'imail', version: '0.0.1', protocolVersion: 1,
       capabilities: { gateway: true, mcp: true, syncWorker: true, webClient: false },
     });
     expect(firstBody.instanceId).toMatch(/^[0-9a-f-]{36}$/);
