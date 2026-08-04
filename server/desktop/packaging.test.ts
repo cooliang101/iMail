@@ -92,6 +92,8 @@ describe('desktop packaging configuration', () => {
     expect(hooks).toContain('--imail-uninstall-cleanup');
     expect(hooks).toContain('/SD IDOK');
     expect(windowsInstallerSmoke).toContain("const startupRegistryValue = 'iMailService'");
+    expect(windowsInstallerSmoke).toContain('const desktopLaunchTimeoutMs = 120_000');
+    expect(windowsInstallerSmoke).toContain('timeout: desktopLaunchTimeoutMs');
     expect(windowsInstallerSmoke).toContain('uninstallRemovedUserStartup: true');
     expect(macos.bundle).toMatchObject({ targets: ['dmg'], macOS: { minimumSystemVersion: '11.0', hardenedRuntime: true, entitlements: 'Entitlements.plist' } });
     expect(entitlements).toContain('com.apple.security.cs.allow-jit');

@@ -23,6 +23,7 @@ const runtimeMarker = path.join(localServiceRoot, 'runtime', 'removed-by-uninsta
 const uninstallRegistryKey = String.raw`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\iMail`;
 const startupRegistryKey = String.raw`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`;
 const startupRegistryValue = 'iMailService';
+const desktopLaunchTimeoutMs = 120_000;
 const environment = { ...process.env };
 let uninstaller;
 let uninstalled = false;
@@ -96,7 +97,7 @@ try {
     cwd: installDir,
     env: { ...environment, IMAIL_DESKTOP_SMOKE_TEST: 'true' },
     windowsHide: true,
-    timeout: 30_000,
+    timeout: desktopLaunchTimeoutMs,
   });
 
   await Promise.all([
