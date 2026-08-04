@@ -57,6 +57,7 @@ jobs:
         with:
           workspaces: src-tauri -> target
       - run: npm ci
+      - run: npm run build:service-runtime
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc
       - run: cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked
       - run: npm run build:desktop:windows
@@ -93,6 +94,7 @@ jobs:
         with:
           workspaces: src-tauri -> target
       - run: npm ci
+      - run: npm run build:service-runtime
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
       - run: npm run build:desktop:macos
       - run: npm run test:macos-bundle

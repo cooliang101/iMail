@@ -122,6 +122,10 @@ describe('desktop packaging configuration', () => {
     expect(workflow).toContain('npm run test:container-release');
     expect(workflow).toContain('src-tauri/target/release/bundle/dmg/*.dmg');
     expect(workflow).toContain('src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe');
+    const windowsJob = workflow.slice(workflow.indexOf('\n  windows:'), workflow.indexOf('\n  macos:'));
+    const macosJob = workflow.slice(workflow.indexOf('\n  macos:'));
+    expect(windowsJob.indexOf('npm run build:service-runtime')).toBeLessThan(windowsJob.indexOf('cargo test --manifest-path src-tauri/Cargo.toml'));
+    expect(macosJob.indexOf('npm run build:service-runtime')).toBeLessThan(macosJob.indexOf('cargo test --manifest-path src-tauri/Cargo.toml'));
   });
 
   it('keeps one desktop instance and hides the main window to the system tray on close', () => {
