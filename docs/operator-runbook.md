@@ -114,7 +114,7 @@ docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no
 
 ## 冒烟检查
 
-跨平台内部测试门禁位于 `.github/workflows/deployment-release.yml`。它在 Ubuntu 验证远程运行时和 Docker，在 Windows 验证 NSIS 与真实用户守护进程，在 macOS arm64/x64 原生 runner 验证 DMG，并从 ad-hoc 签名后的 `.app` 直接检查深度签名、hardened runtime、只开放 `allow-jit` 的 SEA sidecar、同步 Worker 与优雅退出。macOS 门禁还会在确认用户没有既有 iMail 数据或 LaunchAgent 后，使用真实 `launchctl bootstrap`/`bootout` 验证 supervisor 和崩溃恢复，结束时删除本次创建的守护文件。主分支和手动任务只保存 14 天的内部测试产物，不创建公开 Release；Developer ID Application 签名和 Apple notarization 延后到正式分发阶段。
+跨平台内部测试门禁位于 `.github/workflows/deployment-release.yml`。它在 Ubuntu 验证远程运行时和 Docker，在 Windows 验证 NSIS 与真实用户守护进程，在 macOS arm64/x64 原生 runner 验证 DMG，并从 ad-hoc 签名后的 `.app` 直接检查深度签名、hardened runtime、只开放 `allow-jit` 的 SEA sidecar、同步 Worker 与优雅退出。macOS 门禁还会在确认用户没有既有 iMail 数据或 LaunchAgent 后，使用真实 `launchctl bootstrap`/`bootout` 验证 supervisor 和崩溃恢复，结束时删除本次创建的守护文件。桌面 Artifacts 保留 14 天；`main` 全部任务成功后，汇总任务使用最小 `contents: write` 权限创建带 SHA-256 校验文件的 Draft Release。Developer ID Application 签名和 Apple notarization 仍延后到正式分发阶段。
 
 1. 在“外部接入”的“MCP”标签页签发 `mcp:full` 授权码。
 2. 用 MCP Inspector 或任意标准客户端连接 `http://127.0.0.1:8787/mcp`。

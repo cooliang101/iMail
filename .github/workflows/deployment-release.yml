@@ -107,3 +107,44 @@ jobs:
           path: src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
           retention-days: 14
+
+  draft-release:
+    name: Collect internal draft release
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs:
+      - quality-and-remote
+      - container
+      - windows
+      - macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: imail-*-internal-test
+          path: release-assets
+          merge-multiple: true
+      - name: Prepare release metadata
+        id: release
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=internal-v${version}-build.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Create SHA-256 checksums
+        shell: bash
+        working-directory: release-assets
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Create internal draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.release.outputs.tag }}" release-assets/* \
+            --draft \
+            --latest=false \
+            --target "$GITHUB_SHA" \
+            --title "iMail v${{ steps.release.outputs.version }} internal build #${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
+            --notes "仅供内部测试。Windows 安装包未配置商业代码签名，macOS DMG 使用 ad-hoc 签名且未经 Apple notarization。来源提交：${GITHUB_SHA}。CI：${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}。"

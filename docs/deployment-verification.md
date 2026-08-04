@@ -18,7 +18,7 @@
 | `npm run backup -- <目标目录>` | 在线 SQLite 一致性快照、同目录暂存后原子提交、数据目录内主密钥/实例身份/Logo 的同批备份，以及含服务与 schema 版本的逐文件 SHA-256 v2 清单 |
 | `npm run restore:prepare -- <备份目录> <新目录>` | v1/v2 SHA-256 清单、清单与数据库 schema 交叉检查、当前发布 schema 上限、SQLite 完整性、iMail 核心表、主密钥与实例身份格式检查；复制到全新目录且拒绝覆盖当前数据，测试覆盖数据分叉、身份保留、快照往返、篡改、版本错配及未来 schema 拒绝；服务启动迁移另做同样上限检查 |
 | `npm run upgrade:preflight -- <新备份目录> <新预检目录>` | 在线一致备份、非覆盖恢复、当前版本迁移、SQLite `quick_check`、外键检查与 schema 版本确认；成功时在线数据不变，失败时清理半迁移副本但保留回滚备份；远程运行包与容器门禁直接执行打包后命令 |
-| GitHub Actions `Internal test verification` | 2026-08-04 的[绿色运行 30872253518](https://github.com/cooliang101/iMail/actions/runs/30872253518) 已通过 Ubuntu 远程运行时与真实容器、Windows NSIS 与真实用户守护进程、macOS arm64/x64 原生 `.app`/DMG 构建和冒烟；主分支与手动任务的桌面产物保留 14 天，不创建公开 Release |
+| GitHub Actions `Internal test verification` | 2026-08-04 的[绿色运行 30872253518](https://github.com/cooliang101/iMail/actions/runs/30872253518) 已通过 Ubuntu 远程运行时与真实容器、Windows NSIS 与真实用户守护进程、macOS arm64/x64 原生 `.app`/DMG 构建和冒烟；当前工作流把桌面 Artifacts 保留 14 天，并在 `main` 全门禁通过后创建带 SHA-256 校验文件的 Draft Release，首个草稿仍待合并后由 CI 验证 |
 
 ## 路线图验收映射
 

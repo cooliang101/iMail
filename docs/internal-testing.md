@@ -2,7 +2,7 @@
 
 当前桌面交付只面向受控测试人员，不作为正式公开发行。Windows 产物是未配置商业代码签名的 NSIS 安装包；macOS 产物使用 ad-hoc 签名，以便验证应用、sidecar、同步 Worker 和 LaunchAgent 的完整运行链。
 
-内部测试阶段不申请 Apple Developer 会员，不配置 Developer ID Application、Apple notarization、公开下载页或自动更新通道。CI 不创建 GitHub Release，只在 `main` 推送或手动运行时保存 14 天的 Actions 测试产物。
+内部测试阶段不申请 Apple Developer 会员，不配置 Developer ID Application、Apple notarization、公开下载页或自动更新通道。CI 在 `main` 推送或对 `main` 手动运行成功后创建一条 Draft Release，并同时保存 14 天的 Actions 测试产物；草稿不会作为正式版本发布。
 
 ## 本机构建
 
@@ -47,7 +47,15 @@ GitHub Actions 的 [`Internal test verification`](https://github.com/cooliang101
 - `imail-macos-arm64-internal-test`
 - `imail-macos-x64-internal-test`
 
-Pull Request 只执行构建与验证，不上传可分发产物。内测产物保留 14 天，也不会自动变成 Release。
+Pull Request 只执行构建与验证，不上传可分发产物。功能分支手动任务的 Artifacts 保留 14 天，不创建 Release；只有 `main` 的成功任务会额外汇总为 Draft Release。
+
+## Draft Release
+
+`main` 的远程运行时、容器、Windows 和两个 macOS 架构任务全部通过后，汇总任务会从本次 CI 下载三个平台 Artifacts，生成 `SHA256SUMS.txt`，然后创建唯一的内部测试 Draft Release。版本标签格式为 `internal-v<版本>-build.<任务号>.<重试号>`。
+
+从仓库的 [Releases 页面](https://github.com/cooliang101/iMail/releases)进入对应草稿，可以直接下载 `.exe`、arm64/x64 `.dmg` 和校验文件。只有具备仓库写权限的协作者负责查看、测试、删除或人工发布草稿；不要把内部测试草稿发布成正式 Release。
+
+Draft Release 资产不像 Actions Artifact 那样按 14 天自动过期。确认某次构建不再使用后，应在 GitHub Release 页面删除对应草稿；CI 不自动删除旧草稿或已有资产。
 
 ## 安装限制
 
