@@ -1,39 +1,69 @@
 use futures_util::StreamExt;
 use reqwest::{Client, Method, Url};
+use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf, sync::Mutex, time::Duration};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::HashMap,
+    fs,
+    io::{BufReader, Write},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tauri::{AppHandle, Emitter, State};
 
+#[derive(Clone)]
+struct ServiceClient {
+    client: Client,
+    cookies: Arc<CookieStoreMutex>,
+    cookie_path: Arc<PathBuf>,
+    persist_lock: Arc<Mutex<()>>,
+}
+
 pub struct HttpBridgeState {
-    clients: Mutex<HashMap<String, Client>>,
+    clients: Mutex<HashMap<String, ServiceClient>>,
+    cookie_root: PathBuf,
     event_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 impl HttpBridgeState {
-    pub fn new() -> Self {
+    pub fn new(cookie_root: PathBuf) -> Self {
         Self {
             clients: Mutex::new(HashMap::new()),
+            cookie_root,
             event_task: Mutex::new(None),
         }
     }
 
-    fn client(&self, base_url: &str) -> Result<(String, Client), String> {
+    fn client(&self, base_url: &str) -> Result<(String, ServiceClient), String> {
         let normalized = normalize_base_url(base_url)?;
         let mut clients = self
             .clients
             .lock()
             .map_err(|_| "桌面网络状态不可用".to_string())?;
-        let client = clients
-            .entry(normalized.clone())
-            .or_insert_with(|| {
-                Client::builder()
-                    .cookie_store(true)
+        let client = match clients.get(&normalized) {
+            Some(client) => client.clone(),
+            None => {
+                let cookie_path = self.cookie_root.join(cookie_file_name(&normalized));
+                let cookies = Arc::new(CookieStoreMutex::new(load_cookie_store(&cookie_path)));
+                let client = Client::builder()
+                    .cookie_provider(cookies.clone())
+                    .redirect(reqwest::redirect::Policy::none())
                     .connect_timeout(Duration::from_secs(8))
                     .timeout(Duration::from_secs(120))
                     .build()
-                    .expect("reqwest client configuration must be valid")
-            })
-            .clone();
+                    .map_err(|error| format!("桌面网络客户端初始化失败：{error}"))?;
+                let client = ServiceClient {
+                    client,
+                    cookies,
+                    cookie_path: Arc::new(cookie_path),
+                    persist_lock: Arc::new(Mutex::new(())),
+                };
+                clients.insert(normalized.clone(), client.clone());
+                client
+            }
+        };
         Ok((normalized, client))
     }
 
@@ -50,6 +80,68 @@ impl HttpBridgeState {
         }
         *current = task;
         Ok(())
+    }
+}
+
+fn cookie_file_name(base_url: &str) -> String {
+    let digest = Sha256::digest(base_url.as_bytes());
+    format!("{digest:x}.json")
+}
+
+fn load_cookie_store(path: &Path) -> CookieStore {
+    let Ok(file) = fs::File::open(path) else {
+        return CookieStore::default();
+    };
+    cookie_store::serde::json::load(BufReader::new(file)).unwrap_or_default()
+}
+
+fn write_private_file(path: &Path, contents: &[u8]) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "会话存储目录无效".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| format!("创建会话目录失败：{error}"))?;
+    let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
+    let mut options = fs::OpenOptions::new();
+    options.create(true).truncate(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(&temporary)
+        .map_err(|error| format!("写入会话文件失败：{error}"))?;
+    file.write_all(contents)
+        .and_then(|_| file.sync_all())
+        .map_err(|error| format!("写入会话文件失败：{error}"))?;
+    #[cfg(windows)]
+    if path.exists() {
+        fs::remove_file(path).map_err(|error| format!("更新会话文件失败：{error}"))?;
+    }
+    fs::rename(&temporary, path).map_err(|error| format!("更新会话文件失败：{error}"))
+}
+
+impl ServiceClient {
+    fn persist_cookies(&self) -> Result<(), String> {
+        let _persist_guard = self
+            .persist_lock
+            .lock()
+            .map_err(|_| "会话存储状态不可用".to_string())?;
+        let mut contents = Vec::new();
+        let store = self
+            .cookies
+            .lock()
+            .map_err(|_| "会话 Cookie 状态不可用".to_string())?;
+        cookie_store::serde::json::save(&store, &mut contents)
+            .map_err(|error| format!("序列化会话失败：{error}"))?;
+        drop(store);
+        write_private_file(&self.cookie_path, &contents)
+    }
+
+    fn persist_cookies_best_effort(&self) {
+        if let Err(error) = self.persist_cookies() {
+            log::warn!("{error}");
+        }
     }
 }
 
@@ -88,6 +180,19 @@ fn normalize_base_url(value: &str) -> Result<String, String> {
     {
         return Err("服务地址不能包含凭据、查询参数或片段".into());
     }
+    if url.scheme() == "http" {
+        let host = url
+            .host_str()
+            .ok_or_else(|| "服务地址缺少主机名".to_string())?;
+        let normalized_host = host.trim_start_matches('[').trim_end_matches(']');
+        let loopback = normalized_host.eq_ignore_ascii_case("localhost")
+            || normalized_host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback());
+        if !loopback {
+            return Err("远程服务必须使用 HTTPS；HTTP 仅允许本机回环地址".into());
+        }
+    }
     let path = url.path().trim_end_matches('/').to_string();
     url.set_path(&path);
     Ok(url.to_string().trim_end_matches('/').to_string())
@@ -123,6 +228,7 @@ pub async fn desktop_http_request(
     let url = request_url(&base_url, &request.path)?;
     let timeout = Duration::from_millis(request.timeout_ms.unwrap_or(30_000).clamp(1_000, 120_000));
     let mut builder = client
+        .client
         .request(method, url)
         .header("Accept", "application/json")
         .timeout(timeout);
@@ -135,6 +241,7 @@ pub async fn desktop_http_request(
         .send()
         .await
         .map_err(|error| format!("无法连接服务：{error}"))?;
+    client.persist_cookies_best_effort();
     let status = response.status().as_u16();
     let body = response
         .text()
@@ -152,10 +259,12 @@ pub async fn desktop_download(
 ) -> Result<(), String> {
     let (base_url, client) = state.client(&base_url)?;
     let response = client
+        .client
         .get(request_url(&base_url, &path)?)
         .send()
         .await
         .map_err(|error| format!("附件下载失败：{error}"))?;
+    client.persist_cookies_best_effort();
     if !response.status().is_success() {
         return Err(format!("附件下载失败：{}", response.status().as_u16()));
     }
@@ -164,6 +273,30 @@ pub async fn desktop_download(
         .await
         .map_err(|error| format!("读取附件失败：{error}"))?;
     std::fs::write(target, bytes).map_err(|error| format!("保存附件失败：{error}"))
+}
+
+#[tauri::command]
+pub async fn desktop_read_binary(
+    state: State<'_, HttpBridgeState>,
+    base_url: String,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    let (base_url, client) = state.client(&base_url)?;
+    let response = client
+        .client
+        .get(request_url(&base_url, &path)?)
+        .send()
+        .await
+        .map_err(|error| format!("图片加载失败：{error}"))?;
+    client.persist_cookies_best_effort();
+    if !response.status().is_success() {
+        return Err(format!("图片加载失败：{}", response.status().as_u16()));
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("读取图片失败：{error}"))?;
+    Ok(tauri::ipc::Response::new(bytes.to_vec()))
 }
 
 fn take_sse_block(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
@@ -228,11 +361,13 @@ pub async fn desktop_start_events(
                 Err(_) => return,
             };
             if let Ok(response) = client
+                .client
                 .get(url)
                 .header("Accept", "text/event-stream")
                 .send()
                 .await
             {
+                client.persist_cookies_best_effort();
                 if response.status().is_success() {
                     let mut stream = response.bytes_stream();
                     let mut buffer = Vec::new();
@@ -277,8 +412,58 @@ mod tests {
         );
         assert!(normalize_base_url("file:///tmp/imail").is_err());
         assert!(normalize_base_url("https://user:secret@mail.example.com").is_err());
+        assert!(normalize_base_url("http://192.168.1.20:8787").is_err());
+        assert!(normalize_base_url("http://mail.example.com").is_err());
+        assert_eq!(
+            normalize_base_url("http://[::1]:8787").unwrap(),
+            "http://[::1]:8787"
+        );
+        assert_eq!(
+            normalize_base_url("https://192.168.1.20:8787").unwrap(),
+            "https://192.168.1.20:8787"
+        );
         assert!(request_url("https://mail.example.com", "//evil.example.com").is_err());
         assert!(request_method(Some("CONNECT")).is_err());
+    }
+
+    #[test]
+    fn does_not_follow_service_redirects() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+                let address = listener.local_addr().unwrap();
+                let server = std::thread::spawn(move || {
+                    let (mut stream, _) = listener.accept().unwrap();
+                    let mut request = [0_u8; 2048];
+                    let _ = stream.read(&mut request).unwrap();
+                    stream
+                        .write_all(
+                            b"HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:9/plaintext\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        )
+                        .unwrap();
+                });
+                let root = std::env::temp_dir().join(format!(
+                    "imail-http-redirect-test-{}",
+                    uuid::Uuid::new_v4()
+                ));
+                let state = HttpBridgeState::new(root.clone());
+                let (base_url, client) = state.client(&format!("http://{address}")).unwrap();
+                let response = client
+                    .client
+                    .post(request_url(&base_url, "/api/auth/login").unwrap())
+                    .body("must-not-be-forwarded")
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(response.status().as_u16(), 307);
+                server.join().unwrap();
+                let _ = fs::remove_dir_all(root);
+            });
     }
 
     #[test]
@@ -290,5 +475,75 @@ mod tests {
         assert_eq!(event.data, "{\"ok\":true}");
         assert_eq!(cursor.as_deref(), Some("42"));
         assert_eq!(buffer, b"partial");
+    }
+
+    #[test]
+    fn isolates_cookie_clients_by_normalized_service_base() {
+        let root =
+            std::env::temp_dir().join(format!("imail-http-bridge-test-{}", uuid::Uuid::new_v4()));
+        let state = HttpBridgeState::new(root.clone());
+        state.client("https://mail-a.example.test/").unwrap();
+        state.client("https://mail-a.example.test").unwrap();
+        assert_eq!(state.clients.lock().unwrap().len(), 1);
+        state.client("https://mail-b.example.test").unwrap();
+        assert_eq!(state.clients.lock().unwrap().len(), 2);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persists_sessions_across_bridge_restarts_and_keeps_services_isolated() {
+        let root =
+            std::env::temp_dir().join(format!("imail-http-session-test-{}", uuid::Uuid::new_v4()));
+        let service_a = "https://mail-a.example.test";
+        let service_b = "https://mail-b.example.test";
+        let url_a = Url::parse(service_a).unwrap();
+
+        let first_state = HttpBridgeState::new(root.clone());
+        let (_, first_client) = first_state.client(service_a).unwrap();
+        first_client
+            .cookies
+            .lock()
+            .unwrap()
+            .parse(
+                "imail_session=secret-a; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax",
+                &url_a,
+            )
+            .unwrap();
+        first_client.persist_cookies().unwrap();
+        drop(first_state);
+
+        let restarted_state = HttpBridgeState::new(root.clone());
+        let (_, restored_client) = restarted_state.client(service_a).unwrap();
+        let restored =
+            reqwest::cookie::CookieStore::cookies(restored_client.cookies.as_ref(), &url_a)
+                .unwrap();
+        assert_eq!(restored.to_str().unwrap(), "imail_session=secret-a");
+
+        let (_, isolated_client) = restarted_state.client(service_b).unwrap();
+        assert!(
+            reqwest::cookie::CookieStore::cookies(isolated_client.cookies.as_ref(), &url_a)
+                .is_none()
+        );
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+
+        restored_client
+            .cookies
+            .lock()
+            .unwrap()
+            .parse(
+                "imail_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
+                &url_a,
+            )
+            .unwrap();
+        restored_client.persist_cookies().unwrap();
+        drop(restarted_state);
+
+        let logged_out_state = HttpBridgeState::new(root.clone());
+        let (_, logged_out_client) = logged_out_state.client(service_a).unwrap();
+        assert!(
+            reqwest::cookie::CookieStore::cookies(logged_out_client.cookies.as_ref(), &url_a)
+                .is_none()
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 }

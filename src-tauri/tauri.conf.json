@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "npm run prepare:desktop:dev",
-    "beforeBuildCommand": "npm run build:web"
+    "beforeBuildCommand": "npm run build:web && npm run build:service-runtime"
   },
   "app": {
     "windows": [
@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "externalBin": ["binaries/imail-service"],
     "category": "Productivity",
     "shortDescription": "多邮箱统一收件箱与本地开发邮件网关",
     "longDescription": "iMail 是一个本地优先的多邮箱客户端，并提供受控的 MCP 与 REST 邮件网关。",

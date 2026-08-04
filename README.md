@@ -54,18 +54,28 @@ npm run dev
 
 API 启动器默认同时拉起独立同步 Worker。Worker 的任务、租约、邮箱 UID 游标、下次执行时间和失败状态均保存在 SQLite；浏览器、SSE 或开发者 WebSocket 断开不会停止同步。
 
-独立服务使用 `npm start` 启动。Web 客户端可由同一域名反向代理 `/api`，也可在构建时或设置页指定服务地址：
+开发服务使用 `npm start` 启动。远程生产构建会把 Web、API 和同步 Worker 作为同一发布单元，浏览器默认同源连接：
 
 ```bash
-npm run build
-npm start
-# 可选：构建时默认服务地址
-VITE_API_BASE_URL=https://mail.example.com npm run build:web
+npm run build:remote
+npm run start:remote
 ```
+
+也可使用 Docker Compose：`compose.example.yml` 只向宿主机回环地址开放 8787，适合本机验证或接入已有代理；`compose.https.example.yml` 配合 `deploy/remote.env.example` 提供后端不暴露端口的 Caddy 自动 HTTPS 拓扑。远程部署必须持久化 `APP_MASTER_KEY` 或 `/data/master.key`，并把 `/data` 放在持久卷。完整步骤见[运维手册](docs/operator-runbook.md)。
+
+生产服务的注册与登录限流写入 SQLite，服务重启不会清零。登录、注册、授权码签发/撤销、邮箱凭据/代理/删除，以及 MCP 管理工具调用会写入不含密码、Token、OAuth Code 或原始 IP 的安全审计事件；当前登录用户可通过 `GET /api/security/audit-events` 查询自己的最近事件。
+
+生产环境不会隐式允许 Vite 的 `localhost:5173` CORS 来源。同源 Web 无需设置 `CORS_ORIGIN`；只有拆分 Web/API 域名时才显式列出 HTTPS Origin，并且不得带路径、查询、片段或凭据。
+
+生产数据可用 `npm run backup -- <备份目录>` 在线取得一致快照；恢复前用 `npm run restore:prepare -- <备份目录> <新目录>` 校验数据库、密钥并生成不覆盖当前数据卷的恢复目录。远程镜像也内置 `imail-backup.mjs` 和 `imail-restore.mjs`，Compose 使用独立 `/backups` 卷。完整切换步骤见[运维手册](docs/operator-runbook.md)。
+
+远程升级前运行 `npm run upgrade:preflight -- <新备份目录> <新预检目录>`。它使用将要发布的版本对一致性副本执行数据库迁移和完整性检查，不修改在线数据；远程镜像同时内置 `imail-upgrade-preflight.mjs`。
 
 ## 桌面应用
 
-桌面版使用 Tauri v2 承载同一套 React 前端，是纯客户端，不携带 Node/Express、SQLite、同步 Worker 或邮箱凭据。客户端默认连接 `http://127.0.0.1:8787`；登录卡片底部的“远程服务”可原地展开地址输入，登录后也可在“设置 → 服务连接”中更换。Web 版使用同一配置方式：
+桌面版使用 Tauri v2 承载同一套 React 前端，并随安装包携带独立服务程序。选择本地服务时，应用会将其安装为当前用户的守护进程；选择远程服务时，应用先验证远程实例，再暂停本机服务并连接用于多设备共享的实例。两种模式和迁移路线见 [部署模式更新路线](docs/deployment-modes-roadmap.md)。桌面 WebView 始终使用包内页面，浏览器访问远程服务时则使用服务端托管的同版本 Web 页面。
+
+远程服务地址必须使用 HTTPS；仅 `localhost`、`127.0.0.0/8` 和 `::1` 这类本机回环开发地址可使用 HTTP。前端在身份握手之前拒绝不安全地址，Rust 网络桥会再次校验并禁止自动跟随 HTTP 重定向，避免登录请求被降级传输。
 
 ```bash
 npm run dev:web
@@ -81,15 +91,17 @@ npm run build:desktop:windows
 
 桌面版默认保持后台运行：点击主窗口关闭按钮会隐藏到系统托盘，左键托盘图标或选择“打开 iMail”可恢复窗口；托盘右键菜单的“写邮件”会恢复窗口并直接打开新邮件编辑器，选择“退出 iMail”才会结束进程。应用采用单实例模式；再次启动 iMail 会恢复并聚焦已有窗口，不会创建第二个进程实例。
 
-安装包输出到 `src-tauri/target/release/bundle/nsis/`。发布前验证真实桌面宿主：
+“移除运行文件”只注销用户级守护项并保留邮件数据。需要彻底清除本机数据库、邮件缓存、邮箱凭据、主密钥和联系人 Logo 时，使用独立的“永久删除本地数据”入口并输入确认文字；应用会先移除仍安装的守护程序，后端确认没有配置、运行目录或守护锁后才删除固定数据目录。
+
+安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 正式包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到用户机器。发布前验证真实桌面宿主：
 
 ```bash
 npm run test:desktop-release
 ```
 
-macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools，再执行 `npm run build:desktop:macos`。DMG、hardened runtime 和网络/JIT entitlement 已配置；正式分发仍需在 macOS 构建机配置 Apple Developer 签名与 notarization。
+macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools，再执行 `npm run build:desktop:macos`。DMG、hardened runtime 和必要的网络/JIT entitlement 已配置；Node/V8 使用 `allow-jit`，但不开放范围更大的未签名可执行内存权限。构建后运行 `npm run test:macos-bundle`，会验证 `.app` 深度签名、hardened runtime、桌面启动、已签名 sidecar、独立同步 Worker 和优雅退出，并在干净测试用户中实际完成 LaunchAgent bootstrap、API 崩溃恢复与 bootout。正式分发仍需配置 Apple Developer 签名与 notarization。
 
-桌面宿主通过 Rust 网络桥连接配置的独立 HTTP 服务，并在 Rust 侧维护登录 Cookie、实时事件流与附件下载；Web 客户端仍直接连接服务。生产跨源部署应使用 HTTPS，并只需在服务端 `CORS_ORIGIN` 中列出实际 Web 来源。完整边界见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
+桌面宿主通过 Rust 网络桥连接选定的本地或远程服务 API，并在 Rust 侧维护登录 Cookie、实时事件流与附件下载；持久登录 Cookie 按规范化服务地址隔离并保存在当前用户的私有应用数据目录，退出桌面后可恢复，但不会进入 WebView 存储或 IPC 响应。Web 客户端直接同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。完整边界见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
 
 ## 添加邮箱
 
@@ -313,7 +325,7 @@ MCP_ALLOWED_HOSTS=mail.example.com
 - 邮件正文和元数据保存在 `.data/imail.sqlite`，因此磁盘权限和设备加密仍然重要。
 - SQLite 启用外键、WAL、繁忙等待和事务替换；账户删除会级联清理邮件及 Token 账户授权关系。
 - HTML 邮件在带 CSP 的 sandbox iframe 中渲染，禁用脚本、对象和表单提交；纯文本邮件保持文本展示。
-- 应用账号解决同一 iMail 实例内的数据访问隔离；若需要远程部署，仍必须配置 TLS、反向代理安全头、持久化速率限制、审计日志、备份与专业密钥托管。
+- 应用账号解决同一 iMail 实例内的数据访问隔离；远程发布包已提供 Host allowlist、持久认证限流、安全审计和一致性备份工具，公网部署仍必须配置 TLS、反向代理连接级限流和专业密钥托管。
 
 ## 工程结构
 
@@ -365,11 +377,15 @@ server/providers.ts  服务商预设
 npm run typecheck
 npm test
 npm run build
+# Windows 部署模式完整冒烟
+npm run test:deployment-release
 ```
+
+Docker 发布机额外运行 `npm run test:container-release`。平台人工验收和证据要求见 [`docs/deployment-verification.md`](docs/deployment-verification.md)。
 
 ## 后续增强方向
 
 1. 可配置的更深历史同步与邮箱会话视图
 2. 会话视图、联系人分组和模板化写信
 3. SQLite FTS 全文索引和可选 PostgreSQL 远程模式
-4. 设备会话管理、审计日志、密码重置与远程安全部署模式
+4. 设备会话管理、密码重置与安全审计查询界面

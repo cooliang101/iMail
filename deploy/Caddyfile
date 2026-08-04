@@ -1,0 +1,12 @@
+{$IMAIL_PUBLIC_HOST} {
+	encode zstd gzip
+
+	reverse_proxy imail:8787 {
+		# Disable response buffering so SSE events reach clients immediately.
+		flush_interval -1
+	}
+
+	header {
+		-Server
+	}
+}

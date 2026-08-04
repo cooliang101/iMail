@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { desktopDownload, desktopHttpRequest, desktopTestService, type DesktopHttpInvoker } from './desktop-http';
+import { desktopDownload, desktopHttpRequest, desktopReadBinary, desktopTestService, type DesktopHttpInvoker } from './desktop-http';
 
 describe('desktop HTTP bridge', () => {
   it('sends API requests to the Rust command instead of browser fetch', async () => {
@@ -17,5 +17,14 @@ describe('desktop HTTP bridge', () => {
     await desktopDownload('/api/attachment/1', 'C:\\Temp\\mail.pdf', invoke);
     expect(invokeMock.mock.calls[0][0]).toBe('desktop_http_request');
     expect(invokeMock.mock.calls[1][0]).toBe('desktop_download');
+  });
+
+  it('reads protected binary resources through the shared desktop session', async () => {
+    const invokeMock = vi.fn(async () => [1, 2, 255]);
+    const result = await desktopReadBinary('/api/contacts/logo?address=sender%40example.com', invokeMock as DesktopHttpInvoker);
+    expect(Array.from(result)).toEqual([1, 2, 255]);
+    expect(invokeMock).toHaveBeenCalledWith('desktop_read_binary', {
+      baseUrl: expect.any(String), path: '/api/contacts/logo?address=sender%40example.com',
+    });
   });
 });

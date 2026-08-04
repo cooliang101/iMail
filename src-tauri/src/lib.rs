@@ -5,6 +5,15 @@ use tauri::{
 };
 
 mod http_bridge;
+mod local_service;
+
+pub fn run_local_service_daemon_from_args() -> bool {
+    local_service::run_daemon_from_args()
+}
+
+pub fn run_local_service_uninstall_cleanup_from_args() -> Option<Result<(), String>> {
+    local_service::run_uninstall_cleanup_from_args()
+}
 
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -17,7 +26,6 @@ fn show_main_window(app: &AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
-        .manage(http_bridge::HttpBridgeState::new())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
@@ -54,10 +62,19 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             http_bridge::desktop_http_request,
             http_bridge::desktop_download,
+            http_bridge::desktop_read_binary,
             http_bridge::desktop_start_events,
             http_bridge::desktop_stop_events,
+            local_service::local_service_status,
+            local_service::local_service_enable,
+            local_service::local_service_pause,
+            local_service::local_service_remove,
+            local_service::local_service_delete_data,
+            local_service::local_service_open_logs,
         ])
         .setup(|app| {
+            let cookie_root = app.path().app_local_data_dir()?.join("http-sessions");
+            app.manage(http_bridge::HttpBridgeState::new(cookie_root));
             if std::env::var("IMAIL_DESKTOP_SMOKE_TEST").as_deref() == Ok("true") {
                 app.handle().exit(0);
                 return Ok(());

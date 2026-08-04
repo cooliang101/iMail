@@ -75,6 +75,21 @@ async function request(route: string, init?: RequestInit) {
 }
 
 describe('iMail HTTP API', () => {
+  it('exposes a stable public service identity and protocol contract', async () => {
+    const first = await fetch(`${baseUrl}/api/system/info`);
+    const second = await fetch(`${baseUrl}/api/system/info`);
+    expect(first.status).toBe(200);
+    expect(first.headers.get('cache-control')).toBe('no-store');
+    const firstBody = await first.json();
+    const secondBody = await second.json();
+    expect(firstBody).toMatchObject({
+      service: 'imail', version: '0.1.0', protocolVersion: 1,
+      capabilities: { gateway: true, mcp: true, syncWorker: true, webClient: false },
+    });
+    expect(firstBody.instanceId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(secondBody.instanceId).toBe(firstBody.instanceId);
+  });
+
   it('allows the configured web client origin and issues a cross-origin secure session cookie', async () => {
     const response = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
@@ -119,6 +134,25 @@ describe('iMail HTTP API', () => {
     expect(wrongPassword.status).toBe(401);
   });
 
+  it('closes registration after initial setup in production unless explicitly opened', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousMode = process.env.IMAIL_REGISTRATION_MODE;
+    process.env.NODE_ENV = 'production';
+    delete process.env.IMAIL_REGISTRATION_MODE;
+    try {
+      const status = await fetch(`${baseUrl}/api/auth/status`).then((response) => response.json());
+      expect(status).toMatchObject({ setupRequired: false, registrationOpen: false });
+      const response = await fetch(`${baseUrl}/api/auth/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: 'closed-registration', displayName: 'Closed', password: 'test-password-123' }),
+      });
+      expect(response.status).toBe(403);
+    } finally {
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousNodeEnv;
+      if (previousMode === undefined) delete process.env.IMAIL_REGISTRATION_MODE; else process.env.IMAIL_REGISTRATION_MODE = previousMode;
+    }
+  });
+
   it('rate limits repeated login attempts independently of attacker-selected IP/login pairs', async () => {
     const attempt = () => fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -128,6 +162,37 @@ describe('iMail HTTP API', () => {
     const limited = await attempt();
     expect(limited.status).toBe(429);
     expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+  });
+
+  it('audits sensitive management actions without exposing authorization codes', async () => {
+    const created = await request('/api/developer-tokens', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Audited MCP agent', scopes: ['mcp:full'], mailboxes: [], ttlSeconds: 3600 }),
+    });
+    expect(created.response.status).toBe(201);
+    const rawToken = String(created.body.token);
+    const tokenId = String(created.body.detail.id);
+
+    const afterCreate = await request('/api/security/audit-events?limit=20');
+    expect(afterCreate.response.status).toBe(200);
+    expect(afterCreate.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: 'developer-token.created', detail: { tokenId, scopes: 'mcp:full', mailboxCount: '1' } }),
+    ]));
+    expect(JSON.stringify(afterCreate.body)).not.toContain(rawToken);
+    expect(afterCreate.body.events.every((event: { actorHash: string }) => /^[0-9a-f]{64}$/.test(event.actorHash))).toBe(true);
+
+    expect((await request(`/api/developer-tokens/${tokenId}`, { method: 'DELETE' })).response.status).toBe(204);
+    const afterRevoke = await request('/api/security/audit-events?limit=20');
+    expect(afterRevoke.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: 'developer-token.revoked', detail: { tokenId } }),
+    ]));
+    expect((await request(`/api/accounts/${account.id}`, { method: 'DELETE' })).response.status).toBe(204);
+    const afterAccountRemoval = await request('/api/security/audit-events?limit=20');
+    expect(afterAccountRemoval.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: 'account.removed', detail: { accountId: account.id } }),
+    ]));
+    expect(JSON.stringify(afterAccountRemoval.body)).not.toContain(account.encryptedSecret);
+    expect((await fetch(`${baseUrl}/api/security/audit-events`)).status).toBe(401);
   });
 
   it('serves a full mail-management MCP endpoint only to mcp:full authorization codes', async () => {
@@ -165,6 +230,17 @@ describe('iMail HTTP API', () => {
       'mailbox_sync', 'sync_policy_get', 'sync_policy_update', 'messages_list', 'message_get', 'message_update', 'message_move', 'message_send', 'attachment_download',
       'drafts_list', 'draft_get', 'draft_save', 'draft_delete', 'labels_list', 'notifications_list',
     ]));
+
+    const auditedSettingsUpdate = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'settings_update', arguments: { startupView: 'inbox' } } });
+    expect(auditedSettingsUpdate.body.result.isError).not.toBe(true);
+    const audit = await request('/api/security/audit-events?limit=50');
+    expect(audit.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: 'mcp.management-tool-called',
+        detail: { tool: 'settings_update', authorizationCodeId: created.body.detail.id },
+      }),
+    ]));
+    expect(JSON.stringify(audit.body)).not.toContain(created.body.token);
     const called = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'accounts_list', arguments: {} } });
     expect(called.body.result.structuredContent.accounts[0]).toMatchObject({ email: account.email, displayName: account.displayName });
     expect(JSON.stringify(called.body)).not.toContain(account.encryptedSecret);

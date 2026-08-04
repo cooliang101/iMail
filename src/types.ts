@@ -2,6 +2,19 @@ export type ProviderId = 'outlook' | 'gmail' | 'qq' | 'yahoo' | 'hotmail' | 'icl
 export type MailboxRole = 'inbox' | 'sent' | 'archive' | 'drafts' | 'trash' | 'junk' | 'custom';
 export type WorkspaceIconId = 'folder' | 'briefcase' | 'building' | 'home' | 'users' | 'code' | 'heart' | 'star';
 
+export type ServiceInfo = {
+  service: 'imail';
+  instanceId: string;
+  version: string;
+  protocolVersion: number;
+  capabilities: {
+    gateway: boolean;
+    mcp: boolean;
+    syncWorker: boolean;
+    webClient: boolean;
+  };
+};
+
 export type MailboxFolder = {
   path: string;
   name: string;

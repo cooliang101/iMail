@@ -8,21 +8,8 @@ import { AuthStore, type AppUser } from './store.js';
 export const SESSION_COOKIE = 'imail_session';
 let authStore: AuthStore | undefined;
 function store() { return authStore ??= new AuthStore(); }
-const attempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_ATTEMPT_KEYS = 10_000;
-
 function consumeAttempt(key: string, maximum: number, windowMs: number) {
-  const now = Date.now();
-  if (attempts.size >= MAX_ATTEMPT_KEYS) {
-    for (const [candidate, value] of attempts) if (value.resetAt <= now) attempts.delete(candidate);
-    if (attempts.size >= MAX_ATTEMPT_KEYS) attempts.delete(attempts.keys().next().value as string);
-  }
-  const previous = attempts.get(key);
-  const current = !previous || previous.resetAt <= now ? { count: 0, resetAt: now + windowMs } : previous;
-  if (current.count >= maximum) return { allowed: false, retryAfter: Math.max(1, Math.ceil((current.resetAt - now) / 1_000)) };
-  current.count += 1;
-  attempts.set(key, current);
-  return { allowed: true, retryAfter: 0 };
+  return store().consumeAttempt(key, maximum, windowMs);
 }
 
 function rejectLimited(res: Response, retryAfter: number) {
@@ -42,6 +29,11 @@ function cookies(req: Request) {
 }
 function session(req: Request) { return cookies(req)[SESSION_COOKIE]; }
 function publicUser(user: AppUser) { return { id: user.id, login: user.login, displayName: user.displayName }; }
+function registrationOpen() {
+  if (store().setupRequired()) return true;
+  const mode = process.env.IMAIL_REGISTRATION_MODE?.trim().toLowerCase();
+  return mode === 'open' || (!mode && process.env.NODE_ENV !== 'production');
+}
 function setSessionCookie(req: Request, res: Response, value: string) {
   const crossOrigin = requestIsCrossOrigin(req);
   const secure = crossOrigin || req.secure;
@@ -68,7 +60,7 @@ const credentials = z.object({
 export const authRouter = Router();
 authRouter.get('/auth/status', (req, res) => {
   const user = store().userForSession(session(req));
-  res.json({ setupRequired: store().setupRequired(), user: user ? publicUser(user) : null });
+  res.json({ setupRequired: store().setupRequired(), registrationOpen: registrationOpen(), user: user ? publicUser(user) : null });
 });
 authRouter.get('/auth/session', (req, res) => {
   const user = store().userForSession(session(req));
@@ -76,11 +68,16 @@ authRouter.get('/auth/session', (req, res) => {
   res.json({ user: publicUser(user) });
 });
 authRouter.post('/auth/register', asyncRoute(async (req, res) => {
+  if (!registrationOpen()) {
+    store().recordSecurityEvent('registration.denied', req.ip || 'unknown');
+    res.status(403).json({ error: '此服务已关闭新用户注册' }); return;
+  }
   const registrationLimit = consumeAttempt(`register:${req.ip}`, 5, 60 * 60_000);
   if (!registrationLimit.allowed) { rejectLimited(res, registrationLimit.retryAfter); return; }
   const input = credentials.extend({ displayName: z.string().trim().min(1, '请填写显示名称').max(80) }).parse(req.body);
   try {
     const user = await store().createUser(input);
+    store().recordSecurityEvent('registration.succeeded', req.ip || 'unknown', user.id);
     setSessionCookie(req, res, store().createSession(user.id));
     res.status(201).json({ user: publicUser(user) });
   } catch (error) {
@@ -97,13 +94,19 @@ authRouter.post('/auth/login', asyncRoute(async (req, res) => {
   if (!accountLimit.allowed) { rejectLimited(res, accountLimit.retryAfter); return; }
   const user = await store().authenticate(input.login, input.password);
   if (!user) {
+    store().recordSecurityEvent('login.failed', req.ip || 'unknown');
     res.status(401).json({ error: '登录名或密码错误' }); return;
   }
-  attempts.delete(accountKey);
+  store().clearAttempt(accountKey);
+  store().recordSecurityEvent('login.succeeded', req.ip || 'unknown', user.id);
   setSessionCookie(req, res, store().createSession(user.id));
   res.json({ user: publicUser(user) });
 }));
-authRouter.post('/auth/logout', (req, res) => { store().deleteSession(session(req)); clearSessionCookie(req, res); res.status(204).end(); });
+authRouter.post('/auth/logout', (req, res) => {
+  const user = store().userForSession(session(req));
+  if (user) store().recordSecurityEvent('logout', req.ip || 'unknown', user.id);
+  store().deleteSession(session(req)); clearSessionCookie(req, res); res.status(204).end();
+});
 
 export function requireAppSession(req: Request, res: Response, next: NextFunction) {
   if (req.path === '/health' || /^\/oauth\/(google|microsoft|yahoo)\/callback$/.test(req.path)) { next(); return; }
@@ -114,4 +117,17 @@ export function requireAppSession(req: Request, res: Response, next: NextFunctio
   next();
 }
 
-export function closeAuthStore() { authStore?.close(); authStore = undefined; attempts.clear(); }
+export function recordRequestSecurityEvent(req: Request, res: Response, eventType: string, detail: Record<string, string> = {}) {
+  const user = res.locals.appUser as { id?: string } | undefined;
+  recordSecurityEvent(eventType, req.ip || 'unknown', user?.id, detail);
+}
+
+export function recordSecurityEvent(eventType: string, actor: string, userId?: string, detail: Record<string, string> = {}) {
+  store().recordSecurityEvent(eventType, actor, userId, detail);
+}
+
+export function listSecurityEvents(userId: string, limit?: number) {
+  return store().listSecurityEvents(userId, limit);
+}
+
+export function closeAuthStore() { authStore?.close(); authStore = undefined; }

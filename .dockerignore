@@ -1,0 +1,12 @@
+node_modules
+dist
+desktop-runtime
+server-runtime
+src-tauri/target
+src-tauri/binaries
+.git
+.data
+output
+coverage
+.env*
+*.log

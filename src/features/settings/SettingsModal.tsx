@@ -17,7 +17,7 @@ export type SettingsTab = 'general' | 'service' | 'appearance' | 'accounts' | 's
 
 const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof Gear }> = [
   { id: 'general', label: '通用', detail: '启动与阅读行为', icon: Gear },
-  { id: 'service', label: '服务连接', detail: '独立服务端地址', icon: HardDrives },
+  { id: 'service', label: '服务连接', detail: '本地或远程服务', icon: HardDrives },
   { id: 'appearance', label: '主题', detail: '界面风格与色彩', icon: Palette },
   { id: 'accounts', label: '邮箱管理', detail: '连接、授权与工作空间', icon: Envelope },
   { id: 'sync', label: '同步', detail: '频率、范围与状态', icon: SlidersHorizontal },
