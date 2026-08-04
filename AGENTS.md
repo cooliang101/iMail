@@ -11,4 +11,6 @@
 - MCP 能力统一放在 `server/mcp/`，账户管理只允许 `mcp:full` 授权码；任何响应都不得暴露邮箱凭据、OAuth Token 或加密字段。
 - 新增邮件或账户管理行为时，同步评估 HTTP API、MCP 工具与 `docs/mcp-integration.md`，避免两个控制面能力漂移。
 - 联系人与邮件发件人必须复用 `contacts` 数据和其中的 Logo 字段；Logo 使用子域键与可注册主域兜底键，已有成功或失败采集记录的域名不得自动重试。
+- 当前交付平台仅包含 Windows 桌面端和服务端 Docker 镜像；不维护原生 Linux 或 macOS 桌面构建、安装与发布流程。
+- 当前内部测试只在本机构建和验证；普通分支推送与 pull request 不触发 GitHub Actions。未经用户明确授权，不要创建版本 tag 或执行 `workflow_dispatch` 云端打包。
 - 提交前运行 `npm run typecheck`、`npm test` 和 `npm run build`。

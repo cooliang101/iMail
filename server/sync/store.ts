@@ -13,6 +13,8 @@ import { currentUserId } from '../auth/context.js';
 
 type Row = Record<string, string | number | bigint | null>;
 
+const workerHeartbeatStaleMs = 60_000;
+
 export const defaultSyncPolicy = (accountId: string, now = new Date().toISOString()): SyncPolicy => ({
   accountId,
   enabled: true,
@@ -369,15 +371,19 @@ export class SyncStore {
   pruneEvents(before: string) { this.db.prepare('DELETE FROM sync_events WHERE created_at < ?').run(before); }
 
   heartbeat(workerId: string, processId: number, hostName: string, startedAt: string) {
-    const now = new Date().toISOString();
+    const now = new Date();
+    const timestamp = now.toISOString();
     this.db.prepare(`INSERT INTO sync_worker_heartbeats (worker_id, process_id, host_name, started_at, heartbeat_at) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(worker_id) DO UPDATE SET heartbeat_at = excluded.heartbeat_at`).run(workerId, processId, hostName, startedAt, now);
+      ON CONFLICT(worker_id) DO UPDATE SET heartbeat_at = excluded.heartbeat_at`).run(workerId, processId, hostName, startedAt, timestamp);
+    this.db.prepare('DELETE FROM sync_worker_heartbeats WHERE heartbeat_at < ?')
+      .run(new Date(now.getTime() - workerHeartbeatStaleMs).toISOString());
   }
 
   removeHeartbeat(workerId: string) { this.db.prepare('DELETE FROM sync_worker_heartbeats WHERE worker_id = ?').run(workerId); }
 
-  workerHealth() {
-    const workers = (this.db.prepare('SELECT * FROM sync_worker_heartbeats ORDER BY heartbeat_at DESC').all() as Row[]).map((row) => ({
+  workerHealth(now = new Date()) {
+    const cutoff = new Date(now.getTime() - workerHeartbeatStaleMs).toISOString();
+    const workers = (this.db.prepare('SELECT * FROM sync_worker_heartbeats WHERE heartbeat_at >= ? ORDER BY heartbeat_at DESC').all(cutoff) as Row[]).map((row) => ({
       workerId: String(row.worker_id), processId: Number(row.process_id), hostName: String(row.host_name), startedAt: String(row.started_at), heartbeatAt: String(row.heartbeat_at),
     }));
     const queue = this.db.prepare(`SELECT count(*) AS queued, min(created_at) AS oldest_queued_at FROM sync_jobs WHERE status = 'queued'`).get() as Row;

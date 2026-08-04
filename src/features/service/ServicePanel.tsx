@@ -3,17 +3,19 @@ import { Button } from '@fluentui/react-components';
 import { CheckCircle, Cloud, FolderOpen, HardDrives, Pause, SpinnerGap, Trash, WarningCircle } from '@phosphor-icons/react';
 import type { ServiceInfo } from '../../types';
 import {
+  configuredLocalServicePort,
+  configuredLocalServiceUrl,
   configuredServiceMode,
   configuredServiceUrl,
-  LOCAL_SERVICE_URL,
+  normalizeLocalServicePort,
   saveLocalServiceSuspended,
   saveServiceSelection,
   type ServiceMode,
 } from '../../service-config';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
-import { desktopEnableLocalService, desktopLocalServiceStatus, desktopOpenLocalServiceLogs, desktopPauseLocalService, desktopRemoveLocalService, type LocalServiceStatus } from '../../local-service';
+import { desktopEnableLocalService, desktopEnableLocalServiceAtPort, desktopLocalServiceStatus, desktopOpenLocalServiceLogs, desktopPauseLocalService, desktopRemoveLocalService, type LocalServiceStatus } from '../../local-service';
 import { ServiceAddressEditor } from './ServiceAddressEditor';
-import { LocalDataDeletion } from './LocalDataDeletion';
+import { LocalPortRecovery, localPortConflictMessage, suggestedLocalServicePort } from './LocalPortRecovery';
 import { serviceErrorMessage, testServiceConnection } from './service-connection';
 import { suspendManagedLocalService, switchToLocalService, type ServiceTransitionDependencies } from './service-transition';
 
@@ -47,13 +49,15 @@ export function ServicePanel() {
   const [busy, setBusy] = useState(false);
   const [remoteEditorOpen, setRemoteEditorOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<LocalServiceStatus>();
+  const [localPort, setLocalPort] = useState(() => String(configuredLocalServicePort()));
+  const [portRecoveryOpen, setPortRecoveryOpen] = useState(false);
 
   function transitionDependencies(): ServiceTransitionDependencies {
     return {
       desktop,
       currentMode: configuredServiceMode,
       testConnection: testServiceConnection,
-      enableLocal: desktopEnableLocalService,
+      enableLocal: (port) => port === undefined ? desktopEnableLocalService() : desktopEnableLocalServiceAtPort(port),
       pauseLocal: desktopPauseLocalService,
       saveSelection: saveServiceSelection,
     };
@@ -63,24 +67,36 @@ export function ServicePanel() {
     setError('');
     try { setInfo(await testServiceConnection(url)); }
     catch (reason) { setInfo(undefined); setError(serviceErrorMessage(reason, '服务不可用')); }
-    if (desktop) await desktopLocalServiceStatus().then(setLocalStatus).catch(() => undefined);
+    if (desktop) await desktopLocalServiceStatus().then((status) => {
+      setLocalStatus(status);
+      if (status.error && localPortConflictMessage(status.error)) {
+        setLocalPort(String(suggestedLocalServicePort(configuredLocalServicePort())));
+        setPortRecoveryOpen(true);
+      }
+    }).catch(() => undefined);
   }
 
   useEffect(() => {
     void inspect();
   }, []);
 
-  async function activateLocal() {
+  async function activateLocal(useSelectedPort = false) {
     setRemoteEditorOpen(false);
     setBusy(true); setError('');
     try {
-      const { status, info: nextInfo } = await switchToLocalService(LOCAL_SERVICE_URL, transitionDependencies());
+      const port = useSelectedPort ? normalizeLocalServicePort(localPort) : undefined;
+      const { status, info: nextInfo } = await switchToLocalService(configuredLocalServiceUrl(), transitionDependencies(), port);
       setLocalStatus(status);
       setMode('local'); setInfo(nextInfo);
+      setPortRecoveryOpen(false);
       setRemoteEditorOpen(false);
       announceServiceChange();
     } catch (reason) {
       setError(`本地服务尚未就绪：${serviceErrorMessage(reason, '未知错误')}`);
+      if (localPortConflictMessage(reason)) {
+        if (!portRecoveryOpen) setLocalPort(String(suggestedLocalServicePort(configuredLocalServicePort())));
+        setPortRecoveryOpen(true);
+      }
     } finally { setBusy(false); }
   }
 
@@ -88,6 +104,7 @@ export function ServicePanel() {
     setBusy(true); setError('');
     try {
       setLocalStatus(await suspendManagedLocalService({ suspendLocal: desktopPauseLocalService, enableLocal: desktopEnableLocalService, saveSuspended: saveLocalServiceSuspended }));
+      setPortRecoveryOpen(false);
       setInfo(undefined); announceServiceChange();
     }
     catch (reason) { setError(serviceErrorMessage(reason, '暂停本地服务失败')); }
@@ -99,6 +116,7 @@ export function ServicePanel() {
     setBusy(true); setError('');
     try {
       setLocalStatus(await suspendManagedLocalService({ suspendLocal: desktopRemoveLocalService, enableLocal: desktopEnableLocalService, saveSuspended: saveLocalServiceSuspended }));
+      setPortRecoveryOpen(false);
       setInfo(undefined); announceServiceChange();
     }
     catch (reason) { setError(serviceErrorMessage(reason, '移除本地服务失败')); }
@@ -106,14 +124,15 @@ export function ServicePanel() {
   }
 
   const address = configuredServiceUrl();
-  return <div className="settings-panel service-settings-panel">
+  return <section className="settings-feature-panel">
     <header className="settings-panel-heading"><div><span>客户端连接</span><h2>iMail 服务</h2><p>选择使用此设备上的本地服务，或连接用于多设备共享的远程服务。</p></div></header>
+    <div className="settings-panel-body service-settings-panel">
 
     {desktop && <section className="service-mode-grid" aria-label="服务模式">
       <button type="button" className={mode === 'local' ? 'is-selected' : ''} onClick={() => void activateLocal()} disabled={busy}>
         <HardDrives size={28} weight="duotone" /><span><small>此设备</small><strong>本地服务</strong><p>用户级守护服务持续同步，数据保存在当前设备。</p></span>{mode === 'local' && <CheckCircle size={20} weight="fill" />}
       </button>
-      <button type="button" className={mode === 'remote' ? 'is-selected' : ''} onClick={() => setRemoteEditorOpen(true)} disabled={busy}>
+      <button type="button" className={mode === 'remote' ? 'is-selected' : ''} onClick={() => { setPortRecoveryOpen(false); setRemoteEditorOpen(true); }} disabled={busy}>
         <Cloud size={28} weight="duotone" /><span><small>多设备共享</small><strong>远程服务</strong><p>连接你部署的服务实例，多台设备使用同一份数据。</p></span>{mode === 'remote' && <CheckCircle size={20} weight="fill" />}
       </button>
     </section>}
@@ -126,16 +145,16 @@ export function ServicePanel() {
       <Button appearance="subtle" type="button" onClick={() => void inspect()} disabled={busy}>重新检查</Button>
     </section>
 
-    {(!desktop || mode === 'remote' || remoteEditorOpen) && <ServiceAddressEditor onCancel={remoteEditorOpen && mode !== 'remote' ? () => setRemoteEditorOpen(false) : undefined} onSaved={() => { setMode('remote'); setRemoteEditorOpen(false); void inspect(); if (desktop) void desktopLocalServiceStatus().then(setLocalStatus).catch(() => undefined); }} />}
-    {desktop && (mode === 'local' || localStatus?.installed || localStatus?.dataPresent) && <div className="service-local-lifecycle-wrap">
-      <div className="service-local-lifecycle"><p className="service-rollout-note">{localServiceNote(mode, localStatus)}</p>
+    {desktop && portRecoveryOpen && <LocalPortRecovery port={localPort} busy={busy} onPortChange={setLocalPort} onRetry={() => void activateLocal(true)} />}
+
+    {(!desktop || mode === 'remote' || remoteEditorOpen) && <ServiceAddressEditor onCancel={remoteEditorOpen && mode !== 'remote' ? () => setRemoteEditorOpen(false) : undefined} onSaved={() => { setMode('remote'); setPortRecoveryOpen(false); setRemoteEditorOpen(false); void inspect(); if (desktop) void desktopLocalServiceStatus().then(setLocalStatus).catch(() => undefined); }} />}
+    {desktop && (mode === 'local' || localStatus?.installed || localStatus?.dataPresent) && <div className="service-local-lifecycle"><p className="service-rollout-note">{localServiceNote(mode, localStatus)}</p>
       {localStatus?.installed && <div className="service-lifecycle-actions">
         <Button appearance="subtle" icon={<FolderOpen size={16} />} onClick={() => void desktopOpenLocalServiceLogs().catch((reason) => setError(serviceErrorMessage(reason, '打开日志目录失败')))} disabled={busy}>打开日志目录</Button>
         {localStatus.enabled && <Button appearance="subtle" icon={<Pause size={16} />} onClick={() => void pauseLocal()} disabled={busy}>暂停本地服务</Button>}
         <Button appearance="subtle" icon={<Trash size={16} />} onClick={() => void removeLocal()} disabled={busy}>移除运行文件</Button>
       </div>}
-      </div>
-      {localStatus && <LocalDataDeletion status={localStatus} onDeleted={(next) => { setLocalStatus(next); setInfo(undefined); announceServiceChange(); }} />}
     </div>}
-  </div>;
+    </div>
+  </section>;
 }

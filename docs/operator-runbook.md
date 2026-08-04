@@ -30,7 +30,7 @@ Streamable HTTP：
 npm run dev
 ```
 
-默认模式会由 API 启动器拉起并监管 Worker。需要由 systemd、Docker Compose 等分别管理进程时：
+默认模式会由 API 启动器拉起并监管 Worker。Docker Compose 需要分别管理进程时：
 
 ```powershell
 $env:IMAIL_SYNC_WORKER_MODE='external'
@@ -60,7 +60,7 @@ docker compose --env-file .env.remote -f compose.https.example.yml up -d --build
 
 ## 备份与恢复
 
-在线备份使用 SQLite backup API 取得一致数据库快照，并同时复制自动生成的主密钥、持久实例身份与发件人 Logo。备份先写入同目录暂存项，全部成功后再原子提交，并生成包含 iMail 版本、数据库 schema 版本和逐文件 SHA-256 的 v2 完整性清单；恢复仍兼容已有 v1 清单：
+在线备份使用 SQLite backup API 取得一致数据库快照，并同时复制自动生成的主密钥、持久实例身份与发件人 Logo。备份先写入同目录暂存项，全部成功后再原子提交，并生成包含 iMail 版本、数据库 schema 版本和逐文件 SHA-256 的 v2 完整性清单；恢复仍兼容已有 v1 清单。当前 schema v5 在 `accounts.proxy_json` 中保存每邮箱的非密码代理字段，代理密码仍位于加密凭据载荷，二者都会随数据库快照一起备份：
 
 ```bash
 npm run backup -- /safe/backups/imail-2026-08-03
@@ -114,10 +114,10 @@ docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no
 
 ## 冒烟检查
 
-跨平台内部测试门禁位于 `.github/workflows/deployment-release.yml`。它在 Ubuntu 验证远程运行时和 Docker，在 Windows 验证 NSIS 与真实用户守护进程，在 macOS arm64/x64 原生 runner 验证 DMG，并从 ad-hoc 签名后的 `.app` 直接检查深度签名、hardened runtime、只开放 `allow-jit` 的 SEA sidecar、同步 Worker 与优雅退出。macOS 门禁还会在确认用户没有既有 iMail 数据或 LaunchAgent 后，使用真实 `launchctl bootstrap`/`bootout` 验证 supervisor 和崩溃恢复，结束时删除本次创建的守护文件。桌面 Artifacts 保留 14 天；`main` 全部任务成功后，汇总任务使用最小 `contents: write` 权限创建带 SHA-256 校验文件的 Draft Release。Developer ID Application 签名和 Apple notarization 仍延后到正式分发阶段。
+当前交付范围只有 Windows 桌面端与服务端 Docker；Linux 侧只运行 Docker，不维护原生部署单元。内部测试在本机执行，`.github/workflows/deployment-release.yml` 和 `0.0.1` 的运行记录只作为既有证据。Actions 月度额度接近上限，普通分支推送与 pull request 不触发工作流；未经用户明确授权，不要创建版本 tag 或手动运行云端打包。Windows 使用本机 `npm run test:internal-release`，Docker 测试机执行 `npm run test:container-release`。
 
 1. 在“外部接入”的“MCP”标签页签发 `mcp:full` 授权码。
-2. 用 MCP Inspector 或任意标准客户端连接 `http://127.0.0.1:8787/mcp`。
+2. 用 MCP Inspector 或任意标准客户端连接 `http://127.0.0.1:8787/mcp`；桌面本地服务改过端口时使用设置页显示的当前地址。
 3. 确认 `tools/list` 包含 `accounts_list`、`messages_list`、`message_send`、`account_remove`、`theme_custom_get` 和 `theme_custom_update`。
 4. 调用 `imail_status` 与 `accounts_list`，确认响应不含 `encryptedSecret`、密码或 OAuth Token。
 5. 使用普通 `messages:read` Token 连接，预期得到 HTTP 401。
@@ -142,13 +142,13 @@ npm audit --omit=dev
 npm run test:internal-release
 # 安装并启动 Docker 的测试机额外执行
 npm run test:container-release
-# 仅限 CI 或明确允许改写当前用户安装状态的 Windows 测试机
+# 仅限明确允许改写当前用户安装状态的 Windows 测试机
 IMAIL_ALLOW_INSTALLER_SMOKE=true npm run test:windows-installer
 ```
 
 逐项证据和需要在真实平台执行的检查见 [`deployment-verification.md`](./deployment-verification.md)。
 
-发布内部测试标签前，先同步 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、两个 Rust manifest 与 lockfile 中的版本，再从 `main` 对应提交创建三段式标签。标签名必须与应用版本完全一致，例如 `0.0.1`；标签任务通过后会发布带三个桌面安装包和 `SHA256SUMS.txt` 的 GitHub Pre-release，不会标记为 Latest。
+当前不要为了生成内部测试包创建标签或触发 GitHub Actions。需要交付时，直接使用本机 `build:desktop:internal` 产物并记录版本、构建提交、平台/架构与 SHA-256；只有用户明确恢复云端发布流程后，才使用现有三段式版本标签入口及 Artifact、Draft Release 或 Pre-release 行为。
 
 `server/index.test.ts` 覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`server/tokens.test.ts` 覆盖 `imail_mcp_` 格式和 scope 隔离。
 
@@ -176,9 +176,11 @@ curl -fsS --cookie 'imail_session=<当前会话>' \
 - 持续出现 `[sync-idle]` 表示长连接无法稳定建立或被服务商/网络设备关闭；Worker 会按 0.5–30 秒退避重连，同时保留一分钟周期同步兜底。不支持 IDLE 的服务器会按 `IMAIL_SYNC_IDLE_REFRESH_MS` 执行 `STATUS`。
 - 前端 SSE 仅用于刷新界面；断开 SSE 不会影响 Worker。不要把网关订阅状态当成同步健康指标。
 
-本地模式可在“设置 → 服务 → 打开日志目录”查看轮转日志。`supervisor-status.json` 仅记录失败次数、固定原因代码、退出码和发生时间，可用于判断服务是否处于持续退避；它不包含邮箱凭据、会话或 Token。重新启用成功后旧诊断会自动清除。
+本地模式可在“设置 → 服务连接 → 打开日志目录”查看轮转日志。`supervisor-status.json` 仅记录失败次数、固定原因代码、退出码和发生时间，可用于判断服务是否处于持续退避；它不包含邮箱凭据、会话或 Token。重新启用成功后旧诊断会自动清除。
 
-卸载桌面应用或点击“移除运行文件”默认保留 `local-service/data`。永久删除必须使用“永久删除本地数据”，并输入界面给出的确认文字；该操作会删除 SQLite、主密钥、邮箱凭据、邮件缓存和 Logo，无法恢复。若仍需保留邮件，应先完成一致性备份；守护程序仍安装、锁仍存在或数据路径异常时后端会拒绝删除。
+卸载桌面应用或点击“移除运行文件”默认保留 `local-service/data`。“设置 → 服务连接”只管理服务模式、端口和守护生命周期，不提供数据删除。登录用户若进入“设置 → 隐私与数据 → 清除我的邮箱数据”，必须先核对范围，再提交当前 iMail 密码和固定确认文字；服务只清除该用户的邮箱账户与授权、邮件缓存、草稿、联系人、开发者令牌和同步状态，不删除登录账号、服务程序、主密钥或其他用户的数据。该操作无法撤销：需要保留邮件等完整内容时应事先创建服务数据备份；“邮箱授权信息导出”只保留连接配置与凭据，不包含邮件、草稿或联系人。
+
+同一页面的“邮箱授权信息导出”会把当前用户全部邮箱的连接配置、应用专用密码/OAuth Token 与代理凭据写入独立密码保护的 `.imailauth` 文件；邮件、附件、草稿、联系人和 iMail 登录密码不在其中。创建前必须重新验证当前密码，导出密码至少 12 个字符；下载地址与当前用户绑定、只允许下载一次且两分钟后过期。该能力只属于登录会话 HTTP UI，运维人员不得通过 MCP、API Gateway、日志或数据库查询替代它来交付凭据。
 
 ### 发件人 Logo 缺失或错误
 

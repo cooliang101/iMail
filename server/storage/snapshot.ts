@@ -20,6 +20,7 @@ export function readSnapshot(db: DatabaseSync, userId?: string): StoreData {
       status: text(row, 'status') as MailAccount['status'],
     };
     const groupIcon = text(row, 'group_icon') as MailAccount['groupIcon']; if (groupIcon !== 'folder') account.groupIcon = groupIcon;
+    const proxyJson = optionalText(row, 'proxy_json'); if (proxyJson) account.proxy = JSON.parse(proxyJson) as MailAccount['proxy'];
     const mailboxes = json<MailAccount['mailboxes']>(row, 'mailboxes_json'); if (mailboxes?.length) account.mailboxes = mailboxes;
     const lastSyncAt = optionalText(row, 'last_sync_at'); if (lastSyncAt) account.lastSyncAt = lastSyncAt;
     const lastError = optionalText(row, 'last_error'); if (lastError) account.lastError = lastError;

@@ -32,16 +32,16 @@ export function desktopEnableLocalService(invoker: DesktopHttpInvoker = tauriInv
   return invoker<LocalServiceStatus>('local_service_enable');
 }
 
+export function desktopEnableLocalServiceAtPort(port: number, invoker: DesktopHttpInvoker = tauriInvoke) {
+  return invoker<LocalServiceStatus>('local_service_enable', { port });
+}
+
 export function desktopPauseLocalService(invoker: DesktopHttpInvoker = tauriInvoke) {
   return invoker<LocalServiceStatus>('local_service_pause');
 }
 
 export function desktopRemoveLocalService(invoker: DesktopHttpInvoker = tauriInvoke) {
   return invoker<LocalServiceStatus>('local_service_remove');
-}
-
-export function desktopDeleteLocalServiceData(confirmation: string, invoker: DesktopHttpInvoker = tauriInvoke) {
-  return invoker<LocalServiceStatus>('local_service_delete_data', { confirmation });
 }
 
 export function desktopOpenLocalServiceLogs(invoker: DesktopHttpInvoker = tauriInvoke) {

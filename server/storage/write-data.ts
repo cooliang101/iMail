@@ -4,8 +4,8 @@ import type { StoreData } from '../types.js';
 
 export function replaceData(db: DatabaseSync, data: StoreData, migratedAt?: string, manageTransaction = true, userId?: string) {
   const insertAccount = db.prepare(`INSERT INTO accounts
-    (id, provider, email, display_name, group_name, group_icon, color, settings_json, encrypted_secret, auth_method, created_at, last_sync_at, status, last_error, mailboxes_json, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    (id, provider, email, display_name, group_name, group_icon, color, settings_json, proxy_json, encrypted_secret, auth_method, created_at, last_sync_at, status, last_error, mailboxes_json, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const insertMessage = db.prepare(`INSERT INTO messages
     (id, account_id, mailbox, mailbox_role, uid, message_id, from_json, to_json, subject, preview, text_body, html_body, received_at, unread, flagged, has_attachments, attachments_json, labels_json, snoozed_until)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -27,7 +27,7 @@ export function replaceData(db: DatabaseSync, data: StoreData, migratedAt?: stri
       db.prepare('DELETE FROM messages WHERE account_id IN (SELECT id FROM accounts WHERE user_id = ?)').run(userId);
       db.prepare('DELETE FROM accounts WHERE user_id = ?').run(userId);
     } else db.exec('DELETE FROM developer_token_accounts; DELETE FROM developer_token_scopes; DELETE FROM developer_tokens; DELETE FROM drafts; DELETE FROM contacts; DELETE FROM logo_fetch_attempts; DELETE FROM messages; DELETE FROM accounts;');
-    for (const account of data.accounts) insertAccount.run(account.id, account.provider, account.email, account.displayName, account.group, account.groupIcon ?? 'folder', account.color, JSON.stringify(account.settings), account.encryptedSecret, account.authMethod ?? null, account.createdAt, account.lastSyncAt ?? null, account.status, account.lastError ?? null, JSON.stringify(account.mailboxes ?? []), userId ?? account.ownerId ?? '__legacy__');
+    for (const account of data.accounts) insertAccount.run(account.id, account.provider, account.email, account.displayName, account.group, account.groupIcon ?? 'folder', account.color, JSON.stringify(account.settings), account.proxy ? JSON.stringify(account.proxy) : null, account.encryptedSecret, account.authMethod ?? null, account.createdAt, account.lastSyncAt ?? null, account.status, account.lastError ?? null, JSON.stringify(account.mailboxes ?? []), userId ?? account.ownerId ?? '__legacy__');
     for (const message of data.messages) insertMessage.run(message.id, message.accountId, message.mailbox, message.mailboxRole ?? 'inbox', message.uid, message.messageId ?? null, JSON.stringify(message.from), JSON.stringify(message.to), message.subject, message.preview, message.text, message.html ?? null, message.date, Number(message.unread), Number(message.flagged), Number(message.hasAttachments), JSON.stringify(message.attachments), JSON.stringify(message.labels ?? []), message.snoozedUntil ?? null);
     const contactsWithOwners: Array<{ contact: NonNullable<StoreData['contacts']>[number]; ownerId: string }> = [];
     if (userId) {

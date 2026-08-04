@@ -19,7 +19,7 @@ const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof
   { id: 'general', label: '通用', detail: '启动与阅读行为', icon: Gear },
   { id: 'service', label: '服务连接', detail: '本地或远程服务', icon: HardDrives },
   { id: 'appearance', label: '主题', detail: '界面风格与色彩', icon: Palette },
-  { id: 'accounts', label: '邮箱管理', detail: '连接、授权与工作空间', icon: Envelope },
+  { id: 'accounts', label: '邮箱管理', detail: '授权、代理与工作空间', icon: Envelope },
   { id: 'sync', label: '同步', detail: '频率、范围与状态', icon: SlidersHorizontal },
   { id: 'shortcuts', label: '快捷键', detail: '键盘操作与绑定', icon: Keyboard },
   { id: 'notifications', label: '通知', detail: '选择需要关注的动态', icon: Bell },
@@ -58,7 +58,7 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
         {activeTab === 'shortcuts' && <ShortcutPanel bindings={bindings} onChange={onBindingsChange} />}
         {activeTab === 'notifications' && <NotificationPanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'display' && <DisplayPanel preferences={preferences} onChange={onPreferencesChange} />}
-        {activeTab === 'privacy' && <PrivacyPanel accountCount={accounts.length} />}
+        {activeTab === 'privacy' && <PrivacyPanel accountCount={accounts.length} onReload={onReload} setNotice={setNotice} />}
       </main>
     </div></section>
   </Overlay>;

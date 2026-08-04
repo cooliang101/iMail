@@ -12,6 +12,8 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+const MIN_LOCAL_SERVICE_PORT: u16 = 1024;
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DaemonConfig {
@@ -70,11 +72,7 @@ fn validate_config(root: &Path, config: &DaemonConfig) -> Result<(), String> {
             .is_some_and(|value| value.starts_with("imail-service-"));
     let lock_valid = config.supervisor_lock_file.as_os_str().is_empty()
         || config.supervisor_lock_file == root.join("supervisor.lock");
-    #[cfg(debug_assertions)]
-    let port_valid = config.port == 8787
-        || (std::env::var_os("IMAIL_SMOKE_LOCAL_APP_DATA").is_some() && config.host == "127.0.0.1");
-    #[cfg(not(debug_assertions))]
-    let port_valid = config.port == 8787;
+    let port_valid = config.port >= MIN_LOCAL_SERVICE_PORT;
     if !executable_valid
         || config.data_dir != root.join("data")
         || config.control_file != root.join("control-token")
@@ -519,7 +517,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_only_the_fixed_user_service_boundary() {
+    fn accepts_only_the_managed_loopback_service_boundary() {
         let root = Path::new(r"C:\Users\me\AppData\Local\com.cooliang.imail\local-service");
         let managed = config(root);
         assert!(validate_config(root, &managed).is_ok());
@@ -531,5 +529,13 @@ mod tests {
         let mut exposed = config(root);
         exposed.host = "0.0.0.0".into();
         assert!(validate_config(root, &exposed).is_err());
+
+        let mut alternate_port = config(root);
+        alternate_port.port = 18787;
+        assert!(validate_config(root, &alternate_port).is_ok());
+
+        let mut privileged_port = config(root);
+        privileged_port.port = 443;
+        assert!(validate_config(root, &privileged_port).is_err());
     }
 }

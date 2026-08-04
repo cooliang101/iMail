@@ -1,17 +1,19 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@fluentui/react-components';
-import { CheckCircle, HardDrives, PlugsConnected } from '@phosphor-icons/react';
+import { Cloud, HardDrives, PlugsConnected } from '@phosphor-icons/react';
 import { AppInput } from '../../components/form-controls';
 import {
+  configuredLocalServicePort,
+  configuredLocalServiceUrl,
   configuredRemoteServiceUrl,
   configuredServiceMode,
-  LOCAL_SERVICE_URL,
+  normalizeLocalServicePort,
   normalizeServiceUrl,
   saveServiceSelection,
 } from '../../service-config';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
-import { desktopEnableLocalService, desktopLocalServiceStatus, desktopPauseLocalService, type LocalServiceStatus } from '../../local-service';
-import { LocalDataDeletion } from './LocalDataDeletion';
+import { desktopEnableLocalService, desktopEnableLocalServiceAtPort, desktopLocalServiceStatus, desktopPauseLocalService } from '../../local-service';
+import { LocalPortRecovery, localPortConflictMessage, suggestedLocalServicePort } from './LocalPortRecovery';
 import { serviceErrorMessage, testServiceConnection } from './service-connection';
 import { switchToLocalService, switchToRemoteService, type ServiceTransitionDependencies } from './service-transition';
 
@@ -22,10 +24,17 @@ function announceServiceChange() {
 export function ServiceAddressEditor({ compact = false, onCancel, onSaved }: { compact?: boolean; onCancel?: () => void; onSaved?: () => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<'local' | 'remote' | ''>('');
-  const [localStatus, setLocalStatus] = useState<LocalServiceStatus>();
+  const [localPort, setLocalPort] = useState(() => String(configuredLocalServicePort()));
+  const [portRecoveryOpen, setPortRecoveryOpen] = useState(false);
 
   useEffect(() => {
-    if (compact && isTauriRuntime()) void desktopLocalServiceStatus().then(setLocalStatus).catch(() => undefined);
+    if (compact && isTauriRuntime()) void desktopLocalServiceStatus().then((status) => {
+      if (status.error && localPortConflictMessage(status.error)) {
+        const currentPort = configuredLocalServicePort();
+        setLocalPort(String(suggestedLocalServicePort(currentPort)));
+        setPortRecoveryOpen(true);
+      }
+    }).catch(() => undefined);
   }, [compact]);
 
   function transitionDependencies(): ServiceTransitionDependencies {
@@ -33,19 +42,24 @@ export function ServiceAddressEditor({ compact = false, onCancel, onSaved }: { c
       desktop: isTauriRuntime(),
       currentMode: configuredServiceMode,
       testConnection: testServiceConnection,
-      enableLocal: desktopEnableLocalService,
+      enableLocal: (port) => port === undefined ? desktopEnableLocalService() : desktopEnableLocalServiceAtPort(port),
       pauseLocal: desktopPauseLocalService,
       saveSelection: saveServiceSelection,
     };
   }
 
-  async function activateLocal() {
+  async function activateLocal(useSelectedPort = false) {
     setBusy('local'); setError('');
     try {
-      await switchToLocalService(LOCAL_SERVICE_URL, transitionDependencies());
+      const port = useSelectedPort ? normalizeLocalServicePort(localPort) : undefined;
+      await switchToLocalService(configuredLocalServiceUrl(), transitionDependencies(), port);
       announceServiceChange(); onSaved?.();
     } catch (reason) {
       setError(`无法使用本地服务：${serviceErrorMessage(reason, '未知错误')}`);
+      if (localPortConflictMessage(reason)) {
+        if (!portRecoveryOpen) setLocalPort(String(suggestedLocalServicePort(configuredLocalServicePort())));
+        setPortRecoveryOpen(true);
+      }
     } finally { setBusy(''); }
   }
 
@@ -61,15 +75,23 @@ export function ServiceAddressEditor({ compact = false, onCancel, onSaved }: { c
     } finally { setBusy(''); }
   }
 
-  return <form className={`service-address-editor ${compact ? 'is-compact' : ''}`} onSubmit={submit}>
-    <label><span><CheckCircle size={15} weight="fill" />远程服务地址</span><AppInput name="serviceUrl" type="url" defaultValue={configuredRemoteServiceUrl()} placeholder="https://mail.example.com" autoFocus required /></label>
-    <p className="service-transport-note">远程服务必须使用 HTTPS；HTTP 仅允许本机回环开发地址。</p>
-    {error && <div className="auth-error" role="alert">{error}</div>}
-    <div className="service-address-actions">
-      {compact && isTauriRuntime() && <button type="button" onClick={() => void activateLocal()} disabled={Boolean(busy)}><HardDrives size={15} />{busy === 'local' ? '正在检查…' : '使用本地服务'}</button>}
-      {onCancel && <button type="button" onClick={onCancel}>取消</button>}
-      <Button appearance="primary" type="submit" disabled={Boolean(busy)} icon={<PlugsConnected size={16} />}>{busy === 'remote' ? '正在验证…' : '连接远程服务'}</Button>
-    </div>
-    {compact && localStatus?.dataPresent && <LocalDataDeletion status={localStatus} onDeleted={(next) => { setLocalStatus(next); announceServiceChange(); }} />}
-  </form>;
+  const desktop = isTauriRuntime();
+  return <div className={`service-address-editor ${compact ? 'is-compact' : ''}`}>
+    {compact && desktop && <section className="service-local-choice">
+      <div className="service-choice-summary"><HardDrives size={21} weight="duotone" /><span><strong>本地服务</strong><small>数据保存在此设备，后台守护进程持续收取邮件</small></span></div>
+      <Button appearance="secondary" type="button" onClick={() => void activateLocal()} disabled={Boolean(busy)}>{busy === 'local' && !portRecoveryOpen ? '正在启动…' : '使用本地服务'}</Button>
+    </section>}
+    {compact && desktop && portRecoveryOpen && <LocalPortRecovery port={localPort} busy={busy === 'local'} onPortChange={setLocalPort} onRetry={() => void activateLocal(true)} />}
+    {compact && desktop && <div className="service-choice-divider"><span>或</span></div>}
+    <form className="service-remote-form" onSubmit={submit}>
+      {compact && desktop && <div className="service-choice-summary"><Cloud size={21} weight="duotone" /><span><strong>远程服务</strong><small>连接你部署的服务，在多台设备间共享同一份数据</small></span></div>}
+      <label><span>服务地址</span><AppInput name="serviceUrl" type="url" defaultValue={configuredRemoteServiceUrl()} placeholder="https://mail.example.com" autoFocus={!desktop} required /></label>
+      <p className="service-transport-note">请填写 HTTPS 地址；仅本机回环开发地址允许使用 HTTP。</p>
+      {error && <div className="auth-error" role="alert">{error}</div>}
+      <div className="service-address-actions">
+        {onCancel && <button type="button" onClick={onCancel}>取消</button>}
+        <Button appearance="primary" type="submit" disabled={Boolean(busy)} icon={<PlugsConnected size={16} />}>{busy === 'remote' ? '正在验证…' : '连接远程服务'}</Button>
+      </div>
+    </form>
+  </div>;
 }

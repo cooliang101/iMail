@@ -1,9 +1,16 @@
 import { DatabaseSync } from 'node:sqlite';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ensureSchema } from './schema.js';
 
 const databases: DatabaseSync[] = [];
-afterEach(() => { while (databases.length) databases.pop()!.close(); });
+const directories: string[] = [];
+afterEach(() => {
+  while (databases.length) databases.pop()!.close();
+  while (directories.length) rmSync(directories.pop()!, { recursive: true, force: true });
+});
 
 describe('versioned SQLite migrations', () => {
   it('refuses to open a database created by a newer service schema', () => {
@@ -35,13 +42,54 @@ describe('versioned SQLite migrations', () => {
     `);
 
     ensureSchema(db);
-    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('4');
+    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('5');
+    expect(db.prepare("SELECT name, [notnull] FROM pragma_table_info('accounts') WHERE name = 'proxy_json'").get()).toEqual({ name: 'proxy_json', notnull: 0 });
+    expect(db.prepare("SELECT proxy_json FROM accounts WHERE id = 'account-1'").get()).toEqual({ proxy_json: null });
     expect((db.prepare("SELECT rerun_requested FROM sync_jobs WHERE id = 'job-1'").get() as { rerun_requested: number }).rerun_requested).toBe(0);
     expect((db.prepare('SELECT count(*) AS count FROM sync_events').get() as { count: number }).count).toBe(1);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     db.prepare("DELETE FROM accounts WHERE id = 'account-1'").run();
     for (const table of ['sync_policies', 'sync_jobs', 'sync_events']) {
       expect((db.prepare(`SELECT count(*) AS count FROM ${table}`).get() as { count: number }).count).toBe(0);
+    }
+  });
+
+  it('adds nullable proxy storage to a v4 account table without changing existing rows', () => {
+    const db = new DatabaseSync(':memory:'); databases.push(db);
+    db.exec(`
+      CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+      INSERT INTO metadata VALUES ('schema_version', '4');
+      CREATE TABLE accounts (id TEXT PRIMARY KEY, email TEXT NOT NULL) STRICT;
+      INSERT INTO accounts VALUES ('account-1', 'owner@example.com');
+    `);
+
+    ensureSchema(db);
+
+    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('5');
+    expect(db.prepare("SELECT name, [notnull] FROM pragma_table_info('accounts') WHERE name = 'proxy_json'").get()).toEqual({ name: 'proxy_json', notnull: 0 });
+    expect(db.prepare("SELECT id, email, proxy_json FROM accounts WHERE id = 'account-1'").get()).toEqual({ id: 'account-1', email: 'owner@example.com', proxy_json: null });
+  });
+
+  it('rechecks the v5 proxy migration while two SQLite connections share one database', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'imail-migration-')); directories.push(directory);
+    const databasePath = path.join(directory, 'imail.sqlite');
+    const apiConnection = new DatabaseSync(databasePath, { timeout: 5_000 }); databases.push(apiConnection);
+    apiConnection.exec(`
+      CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+      INSERT INTO metadata VALUES ('schema_version', '4');
+      CREATE TABLE accounts (id TEXT PRIMARY KEY, email TEXT NOT NULL) STRICT;
+      INSERT INTO accounts VALUES ('account-1', 'owner@example.com');
+    `);
+    const workerConnection = new DatabaseSync(databasePath, { timeout: 5_000 }); databases.push(workerConnection);
+    expect(workerConnection.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: '4' });
+
+    ensureSchema(apiConnection);
+    expect(() => ensureSchema(workerConnection)).not.toThrow();
+    expect(() => ensureSchema(apiConnection)).not.toThrow();
+
+    for (const connection of [apiConnection, workerConnection]) {
+      expect(connection.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: '5' });
+      expect(connection.prepare("SELECT proxy_json FROM accounts WHERE id = 'account-1'").get()).toEqual({ proxy_json: null });
     }
   });
 });

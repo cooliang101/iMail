@@ -21,7 +21,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [remembered, setRemembered] = useState(loadRememberedUsers);
-  const [remoteServiceOpen, setRemoteServiceOpen] = useState(false);
+  const [serviceSettingsOpen, setServiceSettingsOpen] = useState(false);
   const serviceCheckRunner = useRef(createLatestServiceCheckRunner()).current;
 
   async function checkSession() {
@@ -83,20 +83,20 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <p>把多个邮箱放进一个工作区，统一查看、统一处理、统一设置。邮件凭据由你选择的 iMail 服务加密保存。</p>
     </section>
     <section className="auth-card-wrap">
-      <div className="auth-card">
+      <div className={`auth-card ${serviceSettingsOpen ? 'is-service-view' : ''}`}>
         <header>
-          <small>{mode === 'register' ? '创建应用账号' : '安全登录'}</small>
-          <h2>{setupRequired ? '先创建你的账号' : mode === 'register' ? '创建另一个账号' : '欢迎回来'}</h2>
-          <p>{setupRequired ? '这是首次使用 iMail。创建后，现有本地邮件将安全归属于你。' : mode === 'register' ? '新账号拥有独立的邮箱与邮件空间。' : '选择一个账号，或使用登录名继续。'}</p>
+          <small>{serviceSettingsOpen ? '服务连接' : mode === 'register' ? '创建应用账号' : '安全登录'}</small>
+          <h2>{serviceSettingsOpen ? '选择数据服务' : setupRequired ? '先创建你的账号' : mode === 'register' ? '创建另一个账号' : '欢迎回来'}</h2>
+          <p>{serviceSettingsOpen ? '使用此设备上的后台服务，或连接用于多设备共享的远程服务。' : setupRequired ? '这是首次使用 iMail。创建后，现有本地邮件将安全归属于你。' : mode === 'register' ? '新账号拥有独立的邮箱与邮件空间。' : '选择一个账号，或使用登录名继续。'}</p>
         </header>
-        {switcherVisible && <div className="account-switcher" aria-label="选择账号">
+        {!serviceSettingsOpen && switcherVisible && <div className="account-switcher" aria-label="选择账号">
           {remembered.map((item) => <button key={item.login} type="button" onClick={() => setSelectedLogin(item.login)}>
             <UserCircle size={30} weight="duotone" /><span><strong>{item.displayName}</strong><small>{item.login}</small></span><span>继续</span>
           </button>)}
           <button className="use-another-account" type="button" onClick={() => setSelectedLogin('__manual__')}><UserPlus size={22} />使用其他账号</button>
         </div>}
 
-        {!switcherVisible && <form onSubmit={submit}>
+        {!serviceSettingsOpen && !switcherVisible && <form onSubmit={submit}>
           {mode === 'login' && selectedLogin && selectedLogin !== '__manual__' && <button className="auth-back" type="button" onClick={() => setSelectedLogin('')}><ArrowLeft size={15} />切换账号</button>}
           {mode === 'register' && <label><span>显示名称</span><AppInput name="displayName" autoComplete="name" placeholder="例如：林墨" required /></label>}
           <label><span>登录名</span><AppInput name="login" autoComplete="username" defaultValue={selectedLogin === '__manual__' ? '' : selectedLogin} placeholder="用户名或邮箱" required /></label>
@@ -105,10 +105,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <Button appearance="primary" type="submit" disabled={busy} icon={<LockKey size={18} />}>{busy ? '请稍候…' : mode === 'register' ? '创建并进入 iMail' : '登录 iMail'}</Button>
         </form>}
 
-        {remoteServiceOpen && <ServiceAddressEditor compact onCancel={() => setRemoteServiceOpen(false)} onSaved={() => setRemoteServiceOpen(false)} />}
+        {serviceSettingsOpen && <ServiceAddressEditor compact onSaved={() => setServiceSettingsOpen(false)} />}
         <footer className="auth-card-footer">
-          {!setupRequired && (registrationOpen || mode === 'register') && <span>{mode === 'login' ? '需要独立空间？' : '已经有账号？'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setSelectedLogin(''); setError(''); }}>{mode === 'login' ? '创建新账号' : '返回登录'}</button></span>}
-          <button className="auth-remote-trigger" type="button" aria-expanded={remoteServiceOpen} onClick={() => { setRemoteServiceOpen((open) => !open); setError(''); }}><HardDrives size={14} />服务连接</button>
+          {serviceSettingsOpen ? <button className="auth-service-back" type="button" onClick={() => { setServiceSettingsOpen(false); setError(''); }}><ArrowLeft size={14} />返回登录</button> : <>
+            {!setupRequired && (registrationOpen || mode === 'register') && <span>{mode === 'login' ? '需要独立空间？' : '已经有账号？'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setSelectedLogin(''); setError(''); }}>{mode === 'login' ? '创建新账号' : '返回登录'}</button></span>}
+            <button className="auth-remote-trigger" type="button" aria-expanded="false" onClick={() => { setServiceSettingsOpen(true); setError(''); }}><HardDrives size={14} />服务连接</button>
+          </>}
         </footer>
       </div>
     </section>

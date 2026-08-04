@@ -67,6 +67,26 @@ describe('persistent synchronization control plane', () => {
     expect(() => store.completeJob(claimed, { mailbox: 'INBOX', lastSeenUid: 1, synced: 0, created: 0, updated: 0, deleted: 0 }, 5)).toThrow('同步任务租约已失效');
   });
 
+  it('prunes worker heartbeats that stopped updating', async () => {
+    vi.useFakeTimers();
+    const store = await temporarySyncStore();
+    const startedAt = '2026-07-30T00:00:00.000Z';
+    vi.setSystemTime(startedAt);
+    store.heartbeat('worker-old', 101, 'host-a', startedAt);
+    vi.setSystemTime('2026-07-30T00:00:30.000Z');
+    store.heartbeat('worker-active', 102, 'host-a', '2026-07-30T00:00:30.000Z');
+    expect(store.workerHealth().workers).toHaveLength(2);
+
+    vi.setSystemTime('2026-07-30T00:01:01.000Z');
+    expect(store.workerHealth().workers).toEqual([
+      expect.objectContaining({ workerId: 'worker-active', processId: 102 }),
+    ]);
+    store.heartbeat('worker-active', 102, 'host-a', '2026-07-30T00:00:30.000Z');
+    expect(store.workerHealth().workers).toEqual([
+      expect.objectContaining({ workerId: 'worker-active', processId: 102 }),
+    ]);
+  });
+
   it('queues a follow-up sync when a mailbox wake-up arrives during an active fetch', async () => {
     const store = await temporarySyncStore();
     store.enqueueJob({ accountId: account().id, reason: 'scheduled' });

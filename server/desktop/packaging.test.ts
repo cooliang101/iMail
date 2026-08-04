@@ -15,7 +15,7 @@ describe('desktop packaging configuration', () => {
     expect(readFileSync('scripts/build-service-runtime.mjs', 'utf8')).toContain('pc-windows-msvc');
     expect(manifest.scripts['build:desktop']).toContain('tauri build');
     expect(manifest.scripts['build:desktop:windows']).toContain('x86_64-pc-windows-msvc');
-    expect(manifest.scripts['build:desktop:macos']).toContain('--bundles app,dmg');
+    expect(manifest.scripts['build:desktop:macos']).toBeUndefined();
   });
 
   it('packages the managed service executable without embedding mutable data', () => {
@@ -28,11 +28,10 @@ describe('desktop packaging configuration', () => {
     expect(config.bundle.resources).toBeUndefined();
   });
 
-  it('defines a user-level daemon lifecycle without installing a system service', () => {
+  it('defines a Windows user-level daemon lifecycle without installing a system service', () => {
     const runtime = readFileSync('src-tauri/src/local_service.rs', 'utf8');
     const main = readFileSync('src-tauri/src/main.rs', 'utf8');
     expect(runtime).toContain('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run');
-    expect(runtime).toContain('Library/LaunchAgents');
     expect(runtime).toContain('local_service_enable');
     expect(runtime).toContain('local_service_pause');
     expect(runtime).toContain('local_service_remove');
@@ -75,12 +74,8 @@ describe('desktop packaging configuration', () => {
     expect(caddy).toContain('flush_interval -1');
   });
 
-  it('defines a Windows NSIS package and a hardened macOS DMG', () => {
+  it('defines a current-user Windows NSIS package with uninstall cleanup', () => {
     const windows = json<{ bundle: { targets: string[]; windows: { nsis: { installMode: string } } } }>('src-tauri/tauri.windows.conf.json');
-    const macos = json<{ bundle: { targets: string[]; macOS: { minimumSystemVersion: string; hardenedRuntime: boolean; entitlements: string } } }>('src-tauri/tauri.macos.conf.json');
-    const entitlements = readFileSync('src-tauri/Entitlements.plist', 'utf8');
-    const macosSmoke = readFileSync('scripts/smoke-macos-bundle.mjs', 'utf8');
-    const launchAgentSmoke = readFileSync('scripts/smoke-macos-launch-agent.mjs', 'utf8');
     expect(windows.bundle.targets).toEqual(['nsis']);
     expect(windows.bundle.windows.nsis.installMode).toBe('currentUser');
     expect((windows.bundle.windows.nsis as { installerHooks?: string }).installerHooks).toBe('./windows/hooks.nsh');
@@ -95,40 +90,22 @@ describe('desktop packaging configuration', () => {
     expect(windowsInstallerSmoke).toContain('const desktopLaunchTimeoutMs = 120_000');
     expect(windowsInstallerSmoke).toContain('timeout: desktopLaunchTimeoutMs');
     expect(windowsInstallerSmoke).toContain('uninstallRemovedUserStartup: true');
-    expect(macos.bundle).toMatchObject({ targets: ['dmg'], macOS: { minimumSystemVersion: '11.0', hardenedRuntime: true, entitlements: 'Entitlements.plist' } });
-    expect(entitlements).toContain('com.apple.security.cs.allow-jit');
-    expect(entitlements).not.toContain('com.apple.security.cs.allow-unsigned-executable-memory');
-    expect(entitlements).toContain('com.apple.security.network.client');
-    expect(entitlements).toContain('com.apple.security.network.server');
-    expect(macosSmoke).toContain("['--verify', '--deep', '--strict', '--verbose=2', appBundle]");
-    expect(macosSmoke).toContain("['--display', '--entitlements', ':-', service]");
-    expect(macosSmoke).toContain("match[3].includes('--sync-worker')");
-    expect(macosSmoke).toContain('/api/system/shutdown');
-    expect(macosSmoke).toContain("import('./smoke-macos-launch-agent.mjs')");
-    expect(launchAgentSmoke).toContain("['bootstrap', domain, plist]");
-    expect(launchAgentSmoke).toContain("['bootout', domain, plist]");
-    expect(launchAgentSmoke).toContain("process.kill(firstApi.pid, 'SIGKILL')");
-    expect(launchAgentSmoke).toContain('拒绝覆盖');
   });
 
-  it('gates native installers and the remote container on their real platforms', () => {
+  it('gates the Windows installer and remote Docker image on their real platforms', () => {
     const workflow = readFileSync('.github/workflows/deployment-release.yml', 'utf8');
     expect(workflow).toContain('runs-on: windows-latest');
-    expect(workflow).toContain('runner: macos-15');
-    expect(workflow).toContain('runner: macos-15-intel');
-    expect(workflow).toContain("APPLE_SIGNING_IDENTITY: '-'");
+    expect(workflow).toContain('runs-on: ubuntu-latest');
     expect(workflow).toContain('cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc');
     expect(workflow).toContain('cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked');
     expect(workflow).toContain('npm run test:local-daemon');
     expect(workflow).toContain('npm run test:windows-installer');
-    expect(workflow).toContain('npm run test:macos-bundle');
     expect(workflow).toContain('npm run test:container-release');
-    expect(workflow).toContain('src-tauri/target/release/bundle/dmg/*.dmg');
     expect(workflow).toContain('src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe');
-    const windowsJob = workflow.slice(workflow.indexOf('\n  windows:'), workflow.indexOf('\n  macos:'));
-    const macosJob = workflow.slice(workflow.indexOf('\n  macos:'));
+    expect(workflow).not.toContain('macos-latest');
+    expect(workflow).not.toContain('npm run test:macos-bundle');
+    const windowsJob = workflow.slice(workflow.indexOf('\n  windows:'), workflow.indexOf('\n  draft-release:'));
     expect(windowsJob.indexOf('npm run build:service-runtime')).toBeLessThan(windowsJob.indexOf('cargo test --manifest-path src-tauri/Cargo.toml'));
-    expect(macosJob.indexOf('npm run build:service-runtime')).toBeLessThan(macosJob.indexOf('cargo test --manifest-path src-tauri/Cargo.toml'));
   });
 
   it('keeps one desktop instance and hides the main window to the system tray on close', () => {

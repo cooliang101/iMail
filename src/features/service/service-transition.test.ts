@@ -214,6 +214,18 @@ describe('service mode transition', () => {
     expect(order).toEqual(['enable', 'test', 'save']);
   });
 
+  it('validates and persists the port actually returned by a reconfigured daemon', async () => {
+    const alternate = { ...running, url: 'http://127.0.0.1:18787' };
+    const deps = dependencies({
+      currentMode: () => 'remote',
+      enableLocal: vi.fn(async () => alternate),
+    });
+    await switchToLocalService(running.url, deps, 18787);
+    expect(deps.enableLocal).toHaveBeenCalledWith(18787);
+    expect(deps.testConnection).toHaveBeenCalledWith(alternate.url);
+    expect(deps.saveSelection).toHaveBeenCalledWith({ mode: 'local', localPort: 18787 });
+  });
+
   it('pauses a newly enabled local daemon if switching from remote fails', async () => {
     const deps = dependencies({
       currentMode: () => 'remote',

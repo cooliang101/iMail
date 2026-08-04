@@ -141,6 +141,9 @@ describe('mail account connection', () => {
     expect(describeProtocolError('IMAP', failure).message).not.toContain('Command failed');
     expect(describeProtocolError('IMAP', new Error('authorization=Bearer secret-token password=hunter2')).message)
       .toBe('IMAP 验证失败：authorization=[redacted] [redacted] password=[redacted]');
+    const proxyError = describeProtocolError('IMAP', new Error('proxy http://mail%20user:p%40ss%20word@proxy.local:3128 failed')).message;
+    expect(proxyError).toBe('IMAP 验证失败：proxy http://[redacted]@proxy.local:3128 failed');
+    expect(proxyError).not.toContain('p%40ss%20word');
   });
 
   it('identifies SMTP verification failures separately', async () => {

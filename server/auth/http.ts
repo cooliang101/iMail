@@ -17,6 +17,10 @@ function rejectLimited(res: Response, retryAfter: number) {
   res.status(429).json({ error: '尝试过多，请稍后再试' });
 }
 
+const SENSITIVE_ACTION_USER_ATTEMPTS = 5;
+const SENSITIVE_ACTION_SOURCE_ATTEMPTS = 20;
+const SENSITIVE_ACTION_WINDOW_MS = 15 * 60_000;
+
 function cookies(req: Request) {
   const result: Record<string, string> = {};
   for (const item of (req.headers.cookie ?? '').split(';')) {
@@ -124,6 +128,32 @@ export function recordRequestSecurityEvent(req: Request, res: Response, eventTyp
 
 export function recordSecurityEvent(eventType: string, actor: string, userId?: string, detail: Record<string, string> = {}) {
   store().recordSecurityEvent(eventType, actor, userId, detail);
+}
+
+export async function reauthenticateSensitiveAction(req: Request, res: Response, password: string, action: string) {
+  const user = res.locals.appUser as { id?: string } | undefined;
+  if (!user?.id) { res.status(401).json({ error: '请先登录' }); return false; }
+
+  const actor = req.ip || 'unknown';
+  const sourceKey = `sensitive-action:${action}:source:${actor}`;
+  const userKey = `sensitive-action:${action}:user:${user.id}`;
+  const sourceLimit = consumeAttempt(sourceKey, SENSITIVE_ACTION_SOURCE_ATTEMPTS, SENSITIVE_ACTION_WINDOW_MS);
+  const userLimit = consumeAttempt(userKey, SENSITIVE_ACTION_USER_ATTEMPTS, SENSITIVE_ACTION_WINDOW_MS);
+  if (!sourceLimit.allowed || !userLimit.allowed) {
+    store().recordSecurityEvent('sensitive-action.reauthentication-rate-limited', actor, user.id, { action });
+    rejectLimited(res, Math.max(sourceLimit.retryAfter, userLimit.retryAfter));
+    return false;
+  }
+
+  if (!await store().verifyUserPassword(user.id, password)) {
+    store().recordSecurityEvent('sensitive-action.reauthentication-failed', actor, user.id, { action });
+    res.status(403).json({ error: '当前 iMail 密码不正确' });
+    return false;
+  }
+
+  store().clearAttempt(sourceKey);
+  store().clearAttempt(userKey);
+  return true;
 }
 
 export function listSecurityEvents(userId: string, limit?: number) {

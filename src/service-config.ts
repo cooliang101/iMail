@@ -1,10 +1,14 @@
 export type ServiceMode = 'local' | 'remote';
-export type ServiceSelection = { mode: 'local' } | { mode: 'remote'; remoteUrl: string };
+export type ServiceSelection = { mode: 'local'; localPort?: number } | { mode: 'remote'; remoteUrl: string };
 
 export const SERVICE_MODE_STORAGE_KEY = 'imail.service-mode';
 export const SERVICE_URL_STORAGE_KEY = 'imail.service-url';
 export const LOCAL_SERVICE_SUSPENDED_STORAGE_KEY = 'imail.local-service-suspended';
-export const LOCAL_SERVICE_URL = 'http://127.0.0.1:8787';
+export const LOCAL_SERVICE_PORT_STORAGE_KEY = 'imail.local-service-port';
+export const MIN_LOCAL_SERVICE_PORT = 1024;
+export const MAX_LOCAL_SERVICE_PORT = 65535;
+export const DEFAULT_LOCAL_SERVICE_PORT = 8787;
+export const LOCAL_SERVICE_URL = `http://127.0.0.1:${DEFAULT_LOCAL_SERVICE_PORT}`;
 export const DEFAULT_SERVICE_URL = LOCAL_SERVICE_URL;
 
 const buildTimeServiceUrl = String((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE_URL ?? '').trim();
@@ -44,6 +48,39 @@ export function secureRemoteServiceUrl(value: string) {
   throw new Error('远程服务必须使用 HTTPS；HTTP 仅允许本机回环地址');
 }
 
+export function normalizeLocalServicePort(value: unknown) {
+  const port = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isInteger(port) || port < MIN_LOCAL_SERVICE_PORT || port > MAX_LOCAL_SERVICE_PORT) {
+    throw new Error(`本地服务端口必须是 ${MIN_LOCAL_SERVICE_PORT}–${MAX_LOCAL_SERVICE_PORT} 之间的整数`);
+  }
+  return port;
+}
+
+export function localServiceUrl(port = DEFAULT_LOCAL_SERVICE_PORT) {
+  return `http://127.0.0.1:${normalizeLocalServicePort(port)}`;
+}
+
+export function localServicePortFromUrl(value: string) {
+  const url = new URL(normalizeServiceUrl(value));
+  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port) {
+    throw new Error('本地守护服务地址必须使用 127.0.0.1 和明确端口');
+  }
+  return normalizeLocalServicePort(url.port);
+}
+
+export function configuredLocalServicePort(storage?: ReadStorage) {
+  const selected = storageOrDefault(storage);
+  try {
+    return normalizeLocalServicePort(selected?.getItem(LOCAL_SERVICE_PORT_STORAGE_KEY) ?? DEFAULT_LOCAL_SERVICE_PORT);
+  } catch {
+    return DEFAULT_LOCAL_SERVICE_PORT;
+  }
+}
+
+export function configuredLocalServiceUrl(storage?: ReadStorage) {
+  return localServiceUrl(configuredLocalServicePort(storage));
+}
+
 export function configuredServiceMode(storage?: ReadStorage): ServiceMode {
   const selected = storageOrDefault(storage);
   const explicit = selected?.getItem(SERVICE_MODE_STORAGE_KEY);
@@ -65,7 +102,7 @@ export function configuredRemoteServiceUrl(storage?: ReadStorage) {
 }
 
 export function configuredServiceUrl(storage?: ReadStorage) {
-  if (configuredServiceMode(storage) === 'local') return LOCAL_SERVICE_URL;
+  if (configuredServiceMode(storage) === 'local') return configuredLocalServiceUrl(storage);
   return configuredRemoteServiceUrl(storage) || LOCAL_SERVICE_URL;
 }
 
@@ -86,9 +123,14 @@ export function saveServiceSelection(selection: ServiceSelection, storage?: Writ
     if (remoteUrl === LOCAL_SERVICE_URL) throw new Error('远程服务地址不能使用本机默认地址');
     selected.setItem(SERVICE_URL_STORAGE_KEY, remoteUrl);
   }
-  if (selection.mode === 'local') saveLocalServiceSuspended(false, selected);
+  if (selection.mode === 'local') {
+    if (selection.localPort !== undefined) {
+      selected.setItem(LOCAL_SERVICE_PORT_STORAGE_KEY, String(normalizeLocalServicePort(selection.localPort)));
+    }
+    saveLocalServiceSuspended(false, selected);
+  }
   selected.setItem(SERVICE_MODE_STORAGE_KEY, selection.mode);
-  return selection.mode === 'local' ? LOCAL_SERVICE_URL : configuredRemoteServiceUrl(selected);
+  return selection.mode === 'local' ? configuredLocalServiceUrl(selected) : configuredRemoteServiceUrl(selected);
 }
 
 export function saveServiceUrl(value: string, storage?: Pick<Storage, 'setItem'>) {

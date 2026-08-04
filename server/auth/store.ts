@@ -81,6 +81,11 @@ export class AuthStore {
     return { id: row.id, login: row.login, displayName: row.display_name, createdAt: row.created_at } satisfies AppUser;
   }
 
+  async verifyUserPassword(userId: string, password: string) {
+    const row = this.db.prepare('SELECT password_hash FROM app_users WHERE id = ?').get(userId) as { password_hash: string } | undefined;
+    return Boolean(row && await verifyPassword(password, row.password_hash));
+  }
+
   consumeAttempt(key: string, maximum: number, windowMs: number) {
     const keyHash = digest(key);
     const now = new Date();

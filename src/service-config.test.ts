@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   configuredRemoteServiceUrl,
+  configuredLocalServicePort,
+  configuredLocalServiceUrl,
   configuredLocalServiceSuspended,
   configuredServiceMode,
   configuredServiceUrl,
   LOCAL_SERVICE_URL,
+  localServicePortFromUrl,
+  normalizeLocalServicePort,
   normalizeServiceUrl,
   secureRemoteServiceUrl,
   saveServiceSelection,
@@ -12,6 +16,7 @@ import {
   saveServiceUrl,
   SERVICE_MODE_STORAGE_KEY,
   LOCAL_SERVICE_SUSPENDED_STORAGE_KEY,
+  LOCAL_SERVICE_PORT_STORAGE_KEY,
   SERVICE_URL_STORAGE_KEY,
 } from './service-config';
 
@@ -56,6 +61,25 @@ describe('service configuration', () => {
     expect(configuredServiceMode(storage)).toBe('remote');
     expect(saveServiceSelection({ mode: 'local' }, storage)).toBe(LOCAL_SERVICE_URL);
     expect(configuredRemoteServiceUrl(storage)).toBe('https://remote.example.com');
+  });
+
+  it('persists a selected loopback port for later daemon starts', () => {
+    const storage = memoryStorage();
+    expect(saveServiceSelection({ mode: 'local', localPort: 18787 }, storage)).toBe('http://127.0.0.1:18787');
+    expect(configuredLocalServicePort(storage)).toBe(18787);
+    expect(configuredLocalServiceUrl(storage)).toBe('http://127.0.0.1:18787');
+    expect(configuredServiceUrl(storage)).toBe('http://127.0.0.1:18787');
+    expect(storage.getItem(LOCAL_SERVICE_PORT_STORAGE_KEY)).toBe('18787');
+  });
+
+  it('rejects privileged or malformed local ports and falls back from corrupted storage', () => {
+    expect(normalizeLocalServicePort(1024)).toBe(1024);
+    expect(normalizeLocalServicePort('65535')).toBe(65535);
+    expect(() => normalizeLocalServicePort(443)).toThrow('1024');
+    expect(() => normalizeLocalServicePort('12.5')).toThrow('整数');
+    expect(() => localServicePortFromUrl('http://localhost:8788')).toThrow('127.0.0.1');
+    expect(localServicePortFromUrl('http://127.0.0.1:8788')).toBe(8788);
+    expect(configuredLocalServicePort(memoryStorage({ [LOCAL_SERVICE_PORT_STORAGE_KEY]: 'invalid' }))).toBe(8787);
   });
 
   it('normalizes HTTP service addresses and rejects unsafe URL forms', () => {

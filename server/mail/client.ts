@@ -96,6 +96,7 @@ export function describeProtocolError(stage: 'IMAP' | 'SMTP', error: unknown): E
   const status = [value?.serverResponseCode, value?.responseStatus, value?.code]
     .find((item) => typeof item === 'string' || typeof item === 'number');
   const safeDetail = String(detail).replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ')
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^/\s@]+@/gi, '$1[redacted]@')
     .replace(/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
     .replace(/(access[_-]?token|refresh[_-]?token|password|authorization)(\s*[:=]\s*)[^\s,;]+/gi, '$1$2[redacted]')
     .trim().slice(0, 500);

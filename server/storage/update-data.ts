@@ -38,10 +38,10 @@ export function updateData(db: DatabaseSync, before: StoreData, after: StoreData
   const beforeTokens = by(before.tokens, 'id');
 
   const upsertAccount = db.prepare(`INSERT INTO accounts
-    (id, provider, email, display_name, group_name, group_icon, color, settings_json, encrypted_secret, auth_method, created_at, last_sync_at, status, last_error, mailboxes_json, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, provider, email, display_name, group_name, group_icon, color, settings_json, proxy_json, encrypted_secret, auth_method, created_at, last_sync_at, status, last_error, mailboxes_json, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, email=excluded.email, display_name=excluded.display_name,
-      group_name=excluded.group_name, group_icon=excluded.group_icon, color=excluded.color, settings_json=excluded.settings_json,
+      group_name=excluded.group_name, group_icon=excluded.group_icon, color=excluded.color, settings_json=excluded.settings_json, proxy_json=excluded.proxy_json,
       encrypted_secret=excluded.encrypted_secret, auth_method=excluded.auth_method, last_sync_at=excluded.last_sync_at,
       status=excluded.status, last_error=excluded.last_error, mailboxes_json=excluded.mailboxes_json
     WHERE accounts.user_id=excluded.user_id`);
@@ -87,7 +87,7 @@ export function updateData(db: DatabaseSync, before: StoreData, after: StoreData
 
   for (const account of after.accounts) if (changed(beforeAccounts.get(account.id), account)) upsertAccount.run(
     account.id, account.provider, account.email, account.displayName, account.group, account.groupIcon ?? 'folder', account.color,
-    JSON.stringify(account.settings), account.encryptedSecret, account.authMethod ?? null, account.createdAt, account.lastSyncAt ?? null,
+    JSON.stringify(account.settings), account.proxy ? JSON.stringify(account.proxy) : null, account.encryptedSecret, account.authMethod ?? null, account.createdAt, account.lastSyncAt ?? null,
     account.status, account.lastError ?? null, JSON.stringify(account.mailboxes ?? []), userId,
   );
   for (const message of after.messages) if (changed(beforeMessages.get(message.id), message)) upsertMessage.run(

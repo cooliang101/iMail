@@ -24,14 +24,16 @@ mail.ts / oauth.ts       稳定的公共导出入口
 - `index.ts` 只依赖 `app.ts`。
 - `app.ts` 只负责挂载 `routes/` 和全局中间件。
 - `routes/` 负责协议适配，账户、草稿和通知等复用行为调用 `domain/`；业务模块不反向依赖路由。
+- `routes/security.ts` 只暴露登录会话内的审计、当前用户邮箱数据清除与加密授权导出；后两者必须复用当前密码再验证和安全审计，不加入 Gateway/MCP。
 - `http/` 不保存业务状态；共享的请求校验和响应裁剪统一放在这里。
 - `gateway/` 维护公开 API 契约，不向外暴露内部账户 ID 或存储结构。
 - `mcp/server.ts` 只装配工具；账户与草稿工具分别位于 `mcp/tools/`，并复用 `domain/`，只接受独立的 `mcp:full` 授权码，不返回邮箱凭据。
 - `mail/`、`oauth/` 通过 `store.ts` 访问持久化，不直接操作 HTTP 请求或响应。
-- `storage/` 只关心 SQLite 与领域数据之间的转换；schema 变更由带版本号的迁移推进，同步控制表通过外键随账户级联清理。
+- `storage/` 只关心 SQLite 与领域数据之间的转换；schema 变更由带版本号的迁移推进。schema v5 以 `accounts.proxy_json` 持久化每邮箱非密码代理字段，代理密码仍留在 `encrypted_secret`；同步控制表通过外键随账户级联清理。
 - 面向请求的存储门面必须存在明确用户上下文；只有 Worker、调度器等后台流程可以显式调用 `readAllStore`。后台写入必须使用账户 ID 定向方法，不提供通用全局快照更新。
 - 同步层只写持久化领域事件，不依赖 HTTP presenter、Gateway presenter 或进程内事件总线；SSE 与 WebSocket 各自消费同一事件日志。
 - 账户、草稿和同步资源的写操作必须先验证当前用户归属；HTTP 与 MCP 删除账户时统一清理邮件、草稿、Token 关联和同步控制数据。
+- `domain/privacy.ts` 的数据清除只能作用于当前登录用户并保留应用登录账号、服务文件和其他用户；授权导出只允许登录 HTTP UI 单次下载，禁止把明文凭据送入 Gateway、MCP、日志或普通账户响应。
 - `contacts` 是联系人建议和邮件发件人资料的唯一来源；Logo 元数据属于联系人字段，优先引用子域缓存，缺失时引用可注册主域缓存。
 - Logo 探测只访问发件人同主域，且 `logo_fetch_attempts` 中已有成功或失败记录的域名/子域名永不自动重试。
 

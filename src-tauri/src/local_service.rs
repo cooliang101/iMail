@@ -15,9 +15,9 @@ use tauri::{AppHandle, Manager};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const LOCAL_SERVICE_HOST: &str = "127.0.0.1";
-const LOCAL_SERVICE_PORT: u16 = 8787;
+const DEFAULT_LOCAL_SERVICE_PORT: u16 = 8787;
+const MIN_LOCAL_SERVICE_PORT: u16 = 1024;
 const WINDOWS_RUN_VALUE: &str = "iMailService";
-const DELETE_LOCAL_DATA_CONFIRMATION: &str = "永久删除本地数据";
 #[cfg(any(target_os = "macos", test))]
 const MACOS_LAUNCH_LABEL: &str = "com.cooliang.imail.service";
 
@@ -121,6 +121,15 @@ fn read_config(path: &Path) -> Result<DaemonConfig, String> {
     serde_json::from_str(&content).map_err(|error| format!("本地服务配置无效：{error}"))
 }
 
+fn validate_local_service_port(port: u16) -> Result<(), String> {
+    if port < MIN_LOCAL_SERVICE_PORT {
+        return Err(format!(
+            "本地服务端口必须在 {MIN_LOCAL_SERVICE_PORT}–65535 之间"
+        ));
+    }
+    Ok(())
+}
+
 fn validate_managed_config(root: &Path, config: &DaemonConfig) -> Result<(), String> {
     let executable_in_runtime = config.service_executable.parent()
         == Some(root.join("runtime").as_path())
@@ -131,12 +140,7 @@ fn validate_managed_config(root: &Path, config: &DaemonConfig) -> Result<(), Str
             .is_some_and(|value| value.starts_with("imail-service-"));
     let lock_file_valid = config.supervisor_lock_file.as_os_str().is_empty()
         || config.supervisor_lock_file == root.join("supervisor.lock");
-    #[cfg(debug_assertions)]
-    let port_valid = config.port == LOCAL_SERVICE_PORT
-        || (std::env::var_os("IMAIL_SMOKE_LOCAL_APP_DATA").is_some()
-            && config.host == LOCAL_SERVICE_HOST);
-    #[cfg(not(debug_assertions))]
-    let port_valid = config.port == LOCAL_SERVICE_PORT;
+    let port_valid = config.port >= MIN_LOCAL_SERVICE_PORT;
     if !executable_in_runtime
         || config.data_dir != root.join("data")
         || config.control_file != root.join("control-token")
@@ -388,7 +392,13 @@ async fn status_from_config(
     config: Option<DaemonConfig>,
     error: Option<String>,
 ) -> LocalServiceStatus {
-    let url = format!("http://{LOCAL_SERVICE_HOST}:{LOCAL_SERVICE_PORT}");
+    let url = format!(
+        "http://{LOCAL_SERVICE_HOST}:{}",
+        config
+            .as_ref()
+            .map(|value| value.port)
+            .unwrap_or(DEFAULT_LOCAL_SERVICE_PORT)
+    );
     let data_present = root.join("data").is_dir();
     let Some(config) = config else {
         return LocalServiceStatus {
@@ -706,7 +716,10 @@ impl ExecutableDeployment {
 }
 
 #[tauri::command]
-pub async fn local_service_enable(app: AppHandle) -> Result<LocalServiceStatus, String> {
+pub async fn local_service_enable(
+    app: AppHandle,
+    port: Option<u16>,
+) -> Result<LocalServiceStatus, String> {
     let path = config_path(&app)?;
     let root = local_service_root(&app)?;
     let previous_config = if path.exists() {
@@ -717,6 +730,10 @@ pub async fn local_service_enable(app: AppHandle) -> Result<LocalServiceStatus, 
     let previous_enabled = previous_config
         .as_ref()
         .is_some_and(|value| value.enabled_file.exists());
+    let selected_port = port
+        .or_else(|| previous_config.as_ref().map(|value| value.port))
+        .unwrap_or(DEFAULT_LOCAL_SERVICE_PORT);
+    validate_local_service_port(selected_port)?;
     let runtime = root.join("runtime");
     let data_dir = root.join("data");
     let logs = root.join("logs");
@@ -767,18 +784,21 @@ pub async fn local_service_enable(app: AppHandle) -> Result<LocalServiceStatus, 
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
         supervisor_lock_file: root.join("supervisor.lock"),
         host: LOCAL_SERVICE_HOST.into(),
-        port: LOCAL_SERVICE_PORT,
+        port: selected_port,
     };
     let supervisor_executable = supervisor_source()?;
     let current_identity = fetch_identity(&config).await;
     if current_identity.is_err() && service_port_listening(&config) {
         return Err(format!(
-            "本地端口已被未知或不兼容服务占用：{}",
+            "本地端口 {selected_port} 已被未知或不兼容服务占用，请选择其他端口：{}",
             current_identity
                 .err()
                 .unwrap_or_else(|| "身份检查失败".into())
         ));
     }
+    let port_changed = previous_config
+        .as_ref()
+        .is_some_and(|value| value.port != selected_port);
     let requires_upgrade = current_identity
         .as_ref()
         .is_ok_and(|identity| identity.version != env!("CARGO_PKG_VERSION"));
@@ -786,34 +806,36 @@ pub async fn local_service_enable(app: AppHandle) -> Result<LocalServiceStatus, 
         && previous_config
             .as_ref()
             .map_or(true, |value| value.supervisor_id.is_empty());
-    if requires_upgrade || requires_supervisor_adoption {
+    if requires_upgrade || requires_supervisor_adoption || port_changed {
         config.supervisor_id = uuid::Uuid::new_v4().to_string();
         if config.enabled_file.exists() {
             fs::remove_file(&config.enabled_file)
-                .map_err(|error| format!("准备升级本地服务失败：{error}"))?;
+                .map_err(|error| format!("准备切换本地服务配置失败：{error}"))?;
         }
         let shutdown_config = previous_config.as_ref().unwrap_or(&config);
-        if let Err(error) = request_shutdown(shutdown_config) {
-            let rollback = rollback_activation(
-                &path,
-                &config,
-                previous_config.as_ref(),
-                previous_enabled,
-                &supervisor_executable,
-                None,
-            )
-            .await;
-            return Err(activation_error(error, rollback));
+        if fetch_identity(shutdown_config).await.is_ok() {
+            if let Err(error) = request_shutdown(shutdown_config) {
+                let rollback = rollback_activation(
+                    &path,
+                    &config,
+                    previous_config.as_ref(),
+                    previous_enabled,
+                    &supervisor_executable,
+                    None,
+                )
+                .await;
+                return Err(activation_error(error, rollback));
+            }
         }
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
-            if fetch_identity(&config).await.is_err() {
+            if fetch_identity(shutdown_config).await.is_err() {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
-        if fetch_identity(&config).await.is_ok() {
-            let error = "现有本地服务未能停止，升级已取消".to_string();
+        if fetch_identity(shutdown_config).await.is_ok() {
+            let error = "现有本地服务未能停止，配置切换已取消".to_string();
             let rollback = rollback_activation(
                 &path,
                 &config,
@@ -826,13 +848,13 @@ pub async fn local_service_enable(app: AppHandle) -> Result<LocalServiceStatus, 
             return Err(activation_error(error, rollback));
         }
         for _ in 0..20 {
-            if supervisor_stopped(&config, &path) {
+            if supervisor_stopped(shutdown_config, &path) {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
-        if !supervisor_stopped(&config, &path) {
-            let error = "旧版本守护进程未能停止，升级已取消".to_string();
+        if !supervisor_stopped(shutdown_config, &path) {
+            let error = "现有守护进程未能停止，配置切换已取消".to_string();
             let rollback = rollback_activation(
                 &path,
                 &config,
@@ -1255,44 +1277,6 @@ pub async fn local_service_remove(app: AppHandle) -> Result<LocalServiceStatus, 
     Ok(status_from_config(&root, None, None).await)
 }
 
-fn delete_local_data_directory(root: &Path, confirmation: &str) -> Result<(), String> {
-    if confirmation != DELETE_LOCAL_DATA_CONFIRMATION {
-        return Err("删除确认文字不匹配".into());
-    }
-    for protected in ["daemon.json", "enabled", "supervisor.lock", "runtime"] {
-        if root.join(protected).exists() {
-            return Err("请先移除本地服务运行文件，再删除邮件数据".into());
-        }
-    }
-    let data = root.join("data");
-    let metadata = match fs::symlink_metadata(&data) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(format!("读取本地数据目录失败：{error}")),
-    };
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err("本地数据路径不是受管理的普通目录".into());
-    }
-    fs::remove_dir_all(&data).map_err(|error| format!("删除本地邮件数据失败：{error}"))?;
-    if root
-        .read_dir()
-        .is_ok_and(|mut entries| entries.next().is_none())
-    {
-        let _ = fs::remove_dir(root);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn local_service_delete_data(
-    app: AppHandle,
-    confirmation: String,
-) -> Result<LocalServiceStatus, String> {
-    let root = local_service_root(&app)?;
-    delete_local_data_directory(&root, &confirmation)?;
-    Ok(status_from_config(&root, None, None).await)
-}
-
 #[cfg(any(not(windows), test))]
 fn supervisor_service_args(config: &DaemonConfig) -> Vec<String> {
     vec![
@@ -1629,6 +1613,13 @@ mod tests {
     }
 
     #[test]
+    fn accepts_user_selected_non_privileged_ports() {
+        assert!(validate_local_service_port(DEFAULT_LOCAL_SERVICE_PORT).is_ok());
+        assert!(validate_local_service_port(18787).is_ok());
+        assert!(validate_local_service_port(443).is_err());
+    }
+
+    #[test]
     fn builds_safe_launch_agent_with_login_and_keepalive() {
         let content = launch_agent_contents(
             Path::new("/Applications/iMail & Work.app/Contents/MacOS/imail"),
@@ -1696,30 +1687,4 @@ mod tests {
         fs::remove_dir_all(directory).unwrap();
     }
 
-    #[test]
-    fn deletes_only_uninstalled_managed_data_after_exact_confirmation() {
-        let root = std::env::temp_dir().join(format!(
-            "imail-local-data-deletion-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let data = root.join("data");
-        fs::create_dir_all(&data).unwrap();
-        fs::write(data.join("imail.sqlite"), b"mail-data").unwrap();
-        fs::write(root.join("preserve.txt"), b"unrelated-managed-state").unwrap();
-
-        assert!(delete_local_data_directory(&root, "delete").is_err());
-        assert!(data.exists());
-        fs::write(root.join("daemon.json"), b"installed").unwrap();
-        assert!(delete_local_data_directory(&root, DELETE_LOCAL_DATA_CONFIRMATION).is_err());
-        assert!(data.exists());
-        fs::remove_file(root.join("daemon.json")).unwrap();
-
-        delete_local_data_directory(&root, DELETE_LOCAL_DATA_CONFIRMATION).unwrap();
-        assert!(!data.exists());
-        assert_eq!(
-            fs::read(root.join("preserve.txt")).unwrap(),
-            b"unrelated-managed-state"
-        );
-        fs::remove_dir_all(root).unwrap();
-    }
 }

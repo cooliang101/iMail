@@ -1,15 +1,11 @@
 import { spawnSync } from 'node:child_process';
 
-const buildScript = process.platform === 'win32'
-  ? 'build:desktop:windows'
-  : process.platform === 'darwin'
-    ? 'build:desktop:macos'
-    : null;
-
-if (!buildScript) {
-  console.error('内部桌面测试包目前只支持在 Windows 或 macOS 构建机上生成。');
+if (process.platform !== 'win32') {
+  console.error('当前桌面交付只支持在 Windows 构建机上生成 NSIS 安装包；服务端请使用 Docker。');
   process.exit(1);
 }
+
+const buildScript = 'build:desktop:windows';
 
 const npmCli = process.env.npm_execpath;
 if (!npmCli) {
@@ -17,14 +13,9 @@ if (!npmCli) {
   process.exit(1);
 }
 
-const environment = { ...process.env };
-if (process.platform === 'darwin') {
-  environment.APPLE_SIGNING_IDENTITY = '-';
-}
-
-console.log(`正在生成 ${process.platform === 'win32' ? 'Windows NSIS' : 'macOS ad-hoc DMG'} 内部测试包……`);
+console.log('正在生成 Windows NSIS 内部测试包……');
 const result = spawnSync(process.execPath, [npmCli, 'run', buildScript], {
-  env: environment,
+  env: process.env,
   stdio: 'inherit',
 });
 

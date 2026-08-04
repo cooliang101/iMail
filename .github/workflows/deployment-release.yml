@@ -1,11 +1,8 @@
-name: Internal test verification
+name: Windows and Docker internal verification
 
 on:
   workflow_dispatch:
-  pull_request:
   push:
-    branches:
-      - main
     tags:
       - '*.*.*'
 
@@ -67,57 +64,19 @@ jobs:
       - run: npm run test:desktop-release
       - run: npm run test:local-daemon
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request'
         with:
           name: imail-windows-x64-internal-test
           path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           if-no-files-found: error
           retention-days: 14
 
-  macos:
-    name: macOS ${{ matrix.arch }} internal bundle
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: arm64
-            runner: macos-15
-          - arch: x64
-            runner: macos-15-intel
-    runs-on: ${{ matrix.runner }}
-    env:
-      APPLE_SIGNING_IDENTITY: '-'
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-      - run: npm ci
-      - run: npm run build:service-runtime
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
-      - run: npm run build:desktop:internal
-      - run: npm run test:macos-bundle
-      - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request'
-        with:
-          name: imail-macos-${{ matrix.arch }}-internal-test
-          path: src-tauri/target/release/bundle/dmg/*.dmg
-          if-no-files-found: error
-          retention-days: 14
-
   draft-release:
     name: Collect internal draft release
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs:
       - quality-and-remote
       - container
       - windows
-      - macos
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -149,7 +108,7 @@ jobs:
             --latest=false \
             --target "$GITHUB_SHA" \
             --title "iMail v${{ steps.release.outputs.version }} internal build #${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
-            --notes "仅供内部测试。Windows 安装包未配置商业代码签名，macOS DMG 使用 ad-hoc 签名且未经 Apple notarization。来源提交：${GITHUB_SHA}。CI：${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}。"
+            --notes "仅供内部测试。当前交付范围为 Windows 桌面安装包与服务端 Docker；Windows 安装包未配置商业代码签名。来源提交：${GITHUB_SHA}。CI：${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}。"
 
   tagged-release:
     name: Publish tagged test release
@@ -158,7 +117,6 @@ jobs:
       - quality-and-remote
       - container
       - windows
-      - macos
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -193,4 +151,4 @@ jobs:
             --prerelease \
             --latest=false \
             --title "iMail ${{ steps.release.outputs.version }}" \
-            --notes "内部测试版本。Windows 安装包未配置商业代码签名，macOS DMG 使用 ad-hoc 签名且未经 Apple notarization。来源提交：${GITHUB_SHA}。CI：${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}。"
+            --notes "内部测试版本。当前交付范围为 Windows 桌面安装包与服务端 Docker；Windows 安装包未配置商业代码签名。来源提交：${GITHUB_SHA}。CI：${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}。"

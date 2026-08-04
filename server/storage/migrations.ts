@@ -48,6 +48,15 @@ function transactionWithoutForeignKeys(db: DatabaseSync, migrate: () => void) {
   } finally { db.exec('PRAGMA foreign_keys = ON;'); }
 }
 
+function immediateTransaction(db: DatabaseSync, migrate: () => void) {
+  db.exec('BEGIN IMMEDIATE;');
+  try { migrate(); db.exec('COMMIT;'); }
+  catch (error) {
+    try { db.exec('ROLLBACK;'); } catch { /* Preserve the migration error. */ }
+    throw error;
+  }
+}
+
 function hasLegacyEmailIndex(db: DatabaseSync) {
   return (db.prepare('PRAGMA index_list(accounts)').all() as Row[]).some((index) => {
     if (!Number(index.unique)) return false;
@@ -144,6 +153,14 @@ function migrateSyncJobWakeups(db: DatabaseSync) {
   }
 }
 
+function migrateAccountProxyStorage(db: DatabaseSync) {
+  immediateTransaction(db, () => {
+    // API and worker processes can open the same v4 database concurrently. Recheck
+    // after taking the write lock so exactly one connection performs the ALTER.
+    if (!columns(db, 'accounts').has('proxy_json')) db.exec('ALTER TABLE accounts ADD COLUMN proxy_json TEXT');
+  });
+}
+
 export function runMigrations(db: DatabaseSync) {
   const row = db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value?: string } | undefined;
   const version = Number(row?.value ?? 0);
@@ -155,6 +172,7 @@ export function runMigrations(db: DatabaseSync) {
   if (version < 2) migrateAccountEmailConstraint(db);
   if (version < 3) migrateSyncForeignKeys(db);
   if (version < 4) migrateSyncJobWakeups(db);
+  if (version < 5) migrateAccountProxyStorage(db);
   if (version < CURRENT_SCHEMA_VERSION) {
     db.prepare("INSERT INTO metadata (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .run(String(CURRENT_SCHEMA_VERSION));

@@ -13,6 +13,7 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   const [busyId, setBusyId] = useState<string | null>(null);
   const [credentialId, setCredentialId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [proxyEditingId, setProxyEditingId] = useState<string | null>(null);
   const [syncEditingId, setSyncEditingId] = useState<string | null>(null);
   const [syncStatuses, setSyncStatuses] = useState<AccountSyncStatus[]>([]);
   const [defaultPolicy, setDefaultPolicy] = useState<Omit<SyncPolicy, 'accountId' | 'updatedAt'> | null>(null);
@@ -26,7 +27,7 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   const defaultPolicyRequestedRef = useRef(false);
 
   useEffect(() => {
-    setCredentialId(null); setEditingId(null); setSyncEditingId(null); setConfirmRemoveId(null); setAdvancedSyncOpen(false); setError('');
+    setCredentialId(null); setEditingId(null); setProxyEditingId(null); setSyncEditingId(null); setConfirmRemoveId(null); setAdvancedSyncOpen(false); setError('');
   }, [section]);
 
   useEffect(() => {
@@ -117,22 +118,23 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
     const form = new FormData(event.currentTarget);
     const group = String(form.get('group'));
     const groupIcon = accounts.find((item) => item.group === group)?.groupIcon ?? 'folder';
-    const proxyUpdate = proxyInputFromForm(form);
-    const proxyChanged = proxyUpdate.enabled !== Boolean(account.proxy)
-      || (proxyUpdate.enabled && (
-        proxyUpdate.protocol !== account.proxy?.protocol
-        || proxyUpdate.host !== account.proxy?.host
-        || proxyUpdate.port !== account.proxy?.port
-        || proxyUpdate.username !== account.proxy?.username
-        || proxyUpdate.password !== undefined
-      ));
     try {
-      if (proxyChanged) await api(`/api/accounts/${account.id}/proxy`, { method: 'PUT', body: JSON.stringify(proxyUpdate) });
       await api(`/api/accounts/${account.id}`, { method: 'PATCH', body: JSON.stringify({ displayName: form.get('displayName'), group, groupIcon }) });
       setEditingId(null);
       await onReload();
       setNotice({ kind: 'success', text: `${account.email} 的显示信息已更新` });
     } catch (value) { setError(value instanceof Error ? value.message : '邮箱信息更新失败'); }
+    finally { setBusyId(null); }
+  }
+
+  async function updateProxy(event: FormEvent<HTMLFormElement>, account: Account) {
+    event.preventDefault(); setBusyId(account.id); setError('');
+    try {
+      await api(`/api/accounts/${account.id}/proxy`, { method: 'PUT', body: JSON.stringify(proxyInputFromForm(new FormData(event.currentTarget))) });
+      setProxyEditingId(null);
+      await onReload();
+      setNotice({ kind: 'success', text: `${account.email} 的网络代理已验证并保存` });
+    } catch (value) { setError(value instanceof Error ? value.message : '网络代理更新失败'); }
     finally { setBusyId(null); }
   }
 
@@ -185,17 +187,18 @@ export function AccountSettingsPanel({ accounts, section, onAddAccount, onReload
   const workerOnline = workerHealth?.workers.some((worker) => Date.now() - new Date(worker.heartbeatAt).getTime() < 30_000) ?? false;
 
   return <section className="settings-feature-panel">
-    <header className="settings-panel-heading"><div><span>{section === 'accounts' ? '连接与身份' : '后台同步'}</span><h2>{section === 'accounts' ? '邮箱管理' : '同步'}</h2><p>{section === 'accounts' ? '管理邮箱资料、授权状态与本地连接。' : '设置后台同步频率、范围与失败恢复策略。'}</p></div></header>
+    <header className="settings-panel-heading"><div><span>{section === 'accounts' ? '连接与身份' : '后台同步'}</span><h2>{section === 'accounts' ? '邮箱管理' : '同步'}</h2><p>{section === 'accounts' ? '按邮箱管理资料、授权状态、网络代理与工作空间。' : '设置后台同步频率、范围与失败恢复策略。'}</p></div></header>
     <div className="settings-panel-body">
     {section === 'sync' && workerHealth && <div className={`sync-worker-health ${workerOnline ? 'is-online' : 'is-offline'}`}><span>{workerOnline ? '同步 Worker 运行正常' : '同步 Worker 未运行或心跳已过期'}</span><small>{workerHealth.queuedJobs > 0 ? `${workerHealth.queuedJobs} 个任务正在等待` : '当前没有积压任务'}</small></div>}
     {section === 'sync' && defaultPolicy && <DefaultSyncPolicyForm policy={defaultPolicy} busy={busyId === 'defaults'} onSubmit={(event) => void updateDefaultSyncPolicy(event)} />}
     {section === 'sync' && <button type="button" className={`sync-advanced-toggle ${advancedSyncOpen ? 'is-open' : ''}`} aria-expanded={advancedSyncOpen} aria-controls="account-sync-advanced" onClick={() => setAdvancedSyncOpen((open) => !open)}><span><strong>高级设置</strong><small>按邮箱单独配置同步策略</small></span><em>{accounts.length} 个邮箱</em><CaretDown size={18} weight="bold" /></button>}
     {(section === 'accounts' || advancedSyncOpen) && <div id={section === 'sync' ? 'account-sync-advanced' : undefined} className={section === 'sync' ? 'sync-advanced-content' : undefined}>
     {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>接入第一个邮箱后，即可在这里管理账户和同步策略。</p><button type="button" className="settings-primary-action" onClick={onAddAccount}>添加邮箱</button></div> : <div className="settings-account-list">
-      {accounts.map((account) => <AccountSettingsCard key={account.id} account={account} section={section} syncStatus={syncStatuses.find((item) => item.accountId === account.id)} workspaceOptions={workspaceOptions} busy={busyId === account.id} editing={editingId === account.id} credentialOpen={credentialId === account.id} removeConfirmOpen={confirmRemoveId === account.id} syncEditing={syncEditingId === account.id}
-        onEdit={() => { setSyncEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setEditingId(account.id); }} onCancelEdit={() => setEditingId(null)} onUpdateProfile={(event) => void updateProfile(event, account)} onRetry={() => void retryConnection(account)} onReconnect={() => void reconnect(account)}
-        onOpenCredential={() => { setSyncEditingId(null); setEditingId(null); setConfirmRemoveId(null); setCredentialId(account.id); }} onCloseCredential={() => setCredentialId(null)} onUpdateCredential={(event) => void updateCredential(event, account)} onOpenRemove={() => { setSyncEditingId(null); setEditingId(null); setCredentialId(null); setConfirmRemoveId(account.id); }} onCloseRemove={() => setConfirmRemoveId(null)} onRemove={() => void remove(account)}
-        onOpenSync={() => { setCredentialId(null); setConfirmRemoveId(null); setSyncEditingId(account.id); }} onCloseSync={() => setSyncEditingId(null)} onSaveSync={(changes) => updateSyncPolicy(account, changes)} onQueueSync={() => queueSync(account)} />)}
+      {accounts.map((account) => <AccountSettingsCard key={account.id} account={account} section={section} syncStatus={syncStatuses.find((item) => item.accountId === account.id)} workspaceOptions={workspaceOptions} busy={busyId === account.id} editing={editingId === account.id} proxyEditing={proxyEditingId === account.id} credentialOpen={credentialId === account.id} removeConfirmOpen={confirmRemoveId === account.id} syncEditing={syncEditingId === account.id}
+        onEdit={() => { setSyncEditingId(null); setProxyEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setEditingId(account.id); }} onCancelEdit={() => setEditingId(null)} onUpdateProfile={(event) => void updateProfile(event, account)}
+        onOpenProxy={() => { setSyncEditingId(null); setEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setProxyEditingId(account.id); }} onCloseProxy={() => setProxyEditingId(null)} onUpdateProxy={(event) => void updateProxy(event, account)} onRetry={() => void retryConnection(account)} onReconnect={() => void reconnect(account)}
+        onOpenCredential={() => { setSyncEditingId(null); setEditingId(null); setProxyEditingId(null); setConfirmRemoveId(null); setCredentialId(account.id); }} onCloseCredential={() => setCredentialId(null)} onUpdateCredential={(event) => void updateCredential(event, account)} onOpenRemove={() => { setSyncEditingId(null); setEditingId(null); setProxyEditingId(null); setCredentialId(null); setConfirmRemoveId(account.id); }} onCloseRemove={() => setConfirmRemoveId(null)} onRemove={() => void remove(account)}
+        onOpenSync={() => { setEditingId(null); setProxyEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setSyncEditingId(account.id); }} onCloseSync={() => setSyncEditingId(null)} onSaveSync={(changes) => updateSyncPolicy(account, changes)} onQueueSync={() => queueSync(account)} />)}
     </div>}
     </div>}
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}</div>

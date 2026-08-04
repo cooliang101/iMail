@@ -27,6 +27,8 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .app-select-wrap { display: block; width: 100%; min-width: 0; }
 .app-select { font-size: 11px; }
 .app-checkbox { width: 22px; min-width: 22px; height: 22px; flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+.app-checkbox.has-label { width: auto; min-width: 0; height: auto; flex: 0 1 auto; justify-content: flex-start; }
+.app-checkbox.has-label .fui-Checkbox__label { min-width: 0; }
 .app-checkbox .fui-Checkbox__indicator { margin: 3px; }
 .app-checkbox .fui-Checkbox__input { inset: 0; width: 22px; height: 22px; }
 .app-color-input { position: relative; width: 32px; height: 32px; display: inline-grid; place-items: center; flex: 0 0 32px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface-raised); overflow: hidden; cursor: pointer; transition: border-color var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard), transform var(--duration-fast) var(--ease-standard); }

@@ -11,11 +11,13 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - Yahoo OAuth 2.0 流程（需要 Yahoo 审核开放 `mail-r` / `mail-w`）
 - Gmail、Outlook、Hotmail、QQ、Yahoo 与 iCloud 的交互式应用专用密码 / 授权码引导
 - 设置页可直接复用现有授权重试连接，或验证并更新授权码 / 应用专用密码
+- 邮箱管理提供每邮箱级 HTTP/HTTPS/SOCKS5 代理设置，服务重启、升级与备份恢复后继续保持
 - 通用 IMAP/SMTP 接入
 - 邮箱凭据本地 AES-256-GCM 加密
 - SQLite 本地数据库、外键约束、事务写入与旧 JSON 自动迁移
 - 应用账号注册、密码登录、30 天 HttpOnly 会话与登录页账号切换
 - 邮箱、邮件、联系人、草稿和开发授权码按应用账号强制隔离；未登录 API 统一拒绝访问
+- “隐私与数据”支持独立密码加密的邮箱授权导出，以及两阶段确认、当前密码复核的当前用户邮箱数据清除
 - 设置中心的内置主题、启动、阅读、通知、邮件展示与快捷键偏好按应用账号同步保存；自定义主题令牌保存在当前设备
 - 内置经典薄荷清新、琥珀终端科技风、深海蓝图商业风和 Soft Neubrutalism 柔和撞色四套即时切换主题；账户栏、邮件列表和阅读正文都随主题改变，并支持安全令牌式自定义主题、AI JSON 导入与规范复制
 - 后端持久化同步策略与独立 Worker；前端关闭后仍按账户频率同步，进程重启后自动恢复到期任务
@@ -75,6 +77,8 @@ npm run start:remote
 
 桌面版使用 Tauri v2 承载同一套 React 前端，并随安装包携带独立服务程序。选择本地服务时，应用会将其安装为当前用户的守护进程；选择远程服务时，应用先验证远程实例，再暂停本机服务并连接用于多设备共享的实例。两种模式和迁移路线见 [部署模式更新路线](docs/deployment-modes-roadmap.md)。桌面 WebView 始终使用包内页面，浏览器访问远程服务时则使用服务端托管的同版本 Web 页面。
 
+本地守护服务默认使用 `127.0.0.1:8787`。如果该端口被其他程序占用，登录页或“设置 → 服务连接”会提供新端口输入；确认后应用迁移用户级守护配置并保存选择，数据目录不随端口改变。
+
 远程服务地址必须使用 HTTPS；仅 `localhost`、`127.0.0.0/8` 和 `::1` 这类本机回环开发地址可使用 HTTP。前端在身份握手之前拒绝不安全地址，Rust 网络桥会再次校验并禁止自动跟随 HTTP 重定向，避免登录请求被降级传输。
 
 ```bash
@@ -82,24 +86,28 @@ npm run dev:web
 npm run build:web
 ```
 
-Windows 开发和 NSIS 安装包构建需要 Node.js 22.5+、Rust stable、Microsoft C++ Build Tools 与 WebView2。当前阶段只生成内部测试包，统一入口会按构建机平台选择 Windows NSIS 或 macOS ad-hoc DMG：
+Windows 开发和 NSIS 安装包构建需要 Node.js 22.5+、Rust stable、Microsoft C++ Build Tools 与 WebView2。当前桌面交付只支持 Windows x64，统一入口生成内部测试 NSIS：
 
 ```bash
 npm run dev:desktop
 npm run build:desktop:internal
 ```
 
+当前交付范围只有 Windows 桌面端和服务端 Docker 镜像；不提供原生 Linux 或 macOS 桌面安装包。Linux 侧只需构建并运行 Docker 镜像，不维护额外的原生部署脚本。普通分支推送与 pull request 不触发 GitHub Actions；工作流只保留显式 `workflow_dispatch` 和版本标签入口，未经用户明确授权不要使用。
+
 桌面版默认保持后台运行：点击主窗口关闭按钮会隐藏到系统托盘，左键托盘图标或选择“打开 iMail”可恢复窗口；托盘右键菜单的“写邮件”会恢复窗口并直接打开新邮件编辑器，选择“退出 iMail”才会结束进程。应用采用单实例模式；再次启动 iMail 会恢复并聚焦已有窗口，不会创建第二个进程实例。
 
-“移除运行文件”只注销用户级守护项并保留邮件数据。需要彻底清除本机数据库、邮件缓存、邮箱凭据、主密钥和联系人 Logo 时，使用独立的“永久删除本地数据”入口并输入确认文字；应用会先移除仍安装的守护程序，后端确认没有配置、运行目录或守护锁后才删除固定数据目录。
+“设置 → 服务连接”只负责选择本地/远程服务、端口恢复和用户级守护程序生命周期，不提供数据删除。要清理数据，登录后进入“设置 → 隐私与数据 → 清除我的邮箱数据”：界面先展示清除范围，再要求当前 iMail 密码和指定确认文字。该操作只清除当前登录用户的邮箱授权、邮件缓存、草稿、联系人、开发者令牌与同步状态；保留 iMail 登录账号、服务程序、主密钥、其他用户及其数据。“移除运行文件”和卸载桌面应用也仍默认保留数据。
 
-安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 桌面包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到测试机器。内测前验证真实桌面宿主：
+“隐私与数据”还可导出当前登录用户全部邮箱的连接配置与授权凭据。导出文件使用独立的至少 12 位密码加密，可能包含应用专用密码、OAuth Token 和代理密码，因此文件与密码必须分开保管；导出内容不包含邮件、附件、草稿、联系人或 iMail 登录密码。该能力只通过登录后的应用 HTTP 界面提供，不加入 API Gateway 或 MCP。
+
+安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 桌面包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到测试机器。交付本地产物前可用 `Get-FileHash <安装包路径> -Algorithm SHA256` 生成并记录校验值。内测前验证真实桌面宿主：
 
 ```bash
 npm run test:desktop-release
 ```
 
-macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools。内部测试命令固定使用 ad-hoc 签名；DMG、hardened runtime 和必要的网络/JIT entitlement 已配置，Node/V8 使用 `allow-jit`，但不开放范围更大的未签名可执行内存权限。构建后运行 `npm run test:macos-bundle`，会验证 `.app` 深度签名、hardened runtime、桌面启动、已签名 sidecar、独立同步 Worker 和优雅退出，并在干净测试用户中实际完成 LaunchAgent bootstrap、API 崩溃恢复与 bootout。内部测试包的获取、安装限制和验收口径见[内部测试构建说明](docs/internal-testing.md)；Developer ID 与 notarization 延后到正式分发阶段。
+服务端交付使用仓库根目录的 `Dockerfile` 与 Compose 示例；执行 `npm run test:container-release` 验证镜像构建、非 root 运行、健康检查、Web/API 同源访问以及备份恢复。内部测试包和镜像的验收口径见[内部测试构建说明](docs/internal-testing.md)。
 
 桌面宿主通过 Rust 网络桥连接选定的本地或远程服务 API，并在 Rust 侧维护登录 Cookie、实时事件流与附件下载；持久登录 Cookie 按规范化服务地址隔离并保存在当前用户的私有应用数据目录，退出桌面后可恢复，但不会进入 WebView 存储或 IPC 响应。Web 客户端直接同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。完整边界见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
 
@@ -119,9 +127,9 @@ macOS 需在 macOS 11+ 构建机上安装 Xcode Command Line Tools。内部测�
 
 ### 邮件代理
 
-添加邮箱时展开“网络代理”，或在“设置 → 邮箱管理 → 编辑信息”中为单个账户配置代理。当前支持 `http`、`https` 和 `socks5`，配置会同时用于 IMAP、SMTP、连接测试、后台同步和发信；关闭代理后该账户恢复直连。HTTP/HTTPS 代理使用 CONNECT 隧道，SOCKS5 的目标域名由代理端解析。
+添加邮箱时展开“网络代理”，或在“设置 → 邮箱管理”中点击对应邮箱卡片上的“代理设置”，为单个账户配置代理。当前支持 `http`、`https` 和 `socks5`，配置会同时用于 IMAP、SMTP、连接测试、后台同步和发信；关闭代理后该账户恢复直连。HTTP/HTTPS 代理使用 CONNECT 隧道，SOCKS5 的目标域名由代理端解析。
 
-代理主机、端口、协议和可选用户名保存在账户配置中；代理密码与邮箱凭据一起使用 AES-256-GCM 加密，HTTP API 与 MCP 响应均不返回代理密码。更新已有代理时密码留空会保留原密码；关闭代理会删除已保存的代理密码。OAuth 服务商的网页授权仍由浏览器完成，代理仅作用于 iMail 服务端发起的 IMAP/SMTP 连接。
+代理主机、端口、协议和可选用户名从 SQLite schema v5 起持久化在账户记录中；代理密码仍与邮箱凭据一起使用 AES-256-GCM 加密，HTTP API 与 MCP 响应均不返回代理密码。更新已有代理时密码留空会保留原密码；关闭代理会删除已保存的代理密码。OAuth 服务商的网页授权仍由浏览器完成，代理仅作用于 iMail 服务端发起的 IMAP/SMTP 连接。
 
 ### OAuth 应用配置
 
@@ -171,6 +179,8 @@ APP_MASTER_KEY=请替换为64位十六进制值
 ```text
 http://127.0.0.1:8787/gateway/v1
 ```
+
+以上本地 URL 使用默认端口；若桌面服务设置已改用其他端口，请将本节所有 `8787` 替换为当前服务地址显示的端口。
 
 轻量交互文档：
 
@@ -274,6 +284,8 @@ iMail 内置基于官方 TypeScript SDK v2 的 Streamable HTTP MCP 服务。MCP 
 ```text
 http://127.0.0.1:8787/mcp
 ```
+
+桌面本地服务改过端口时，MCP 客户端也必须使用“当前服务地址”中显示的端口。
 
 客户端应把授权码放入 Bearer 请求头：
 

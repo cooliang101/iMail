@@ -1,12 +1,12 @@
 import type { ServiceInfo } from '../../types';
 import type { LocalServiceStatus } from '../../local-service';
-import { secureRemoteServiceUrl, type ServiceMode, type ServiceSelection } from '../../service-config';
+import { localServicePortFromUrl, secureRemoteServiceUrl, type ServiceMode, type ServiceSelection } from '../../service-config';
 
 export type ServiceTransitionDependencies = {
   desktop: boolean;
   currentMode: () => ServiceMode;
   testConnection: (url: string) => Promise<ServiceInfo>;
-  enableLocal: () => Promise<LocalServiceStatus>;
+  enableLocal: (port?: number) => Promise<LocalServiceStatus>;
   pauseLocal: () => Promise<LocalServiceStatus>;
   saveSelection: (selection: ServiceSelection) => unknown;
 };
@@ -94,16 +94,18 @@ export async function switchToRemoteService(
 export async function switchToLocalService(
   localUrl: string,
   dependencies: ServiceTransitionDependencies,
+  port?: number,
 ) {
   const previousMode = dependencies.currentMode();
   let localEnableAttempted = false;
 
   try {
     localEnableAttempted = true;
-    const status = await dependencies.enableLocal();
+    const status = await dependencies.enableLocal(port);
     if (!status.running) throw new Error(status.error || '本地守护服务尚未就绪');
-    const info = await dependencies.testConnection(localUrl);
-    dependencies.saveSelection({ mode: 'local' });
+    const readyUrl = status.url || localUrl;
+    const info = await dependencies.testConnection(readyUrl);
+    dependencies.saveSelection({ mode: 'local', localPort: localServicePortFromUrl(readyUrl) });
     return { info, status };
   } catch (error) {
     if (localEnableAttempted && previousMode === 'remote') {

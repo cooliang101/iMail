@@ -69,7 +69,6 @@ pub fn run() {
             local_service::local_service_enable,
             local_service::local_service_pause,
             local_service::local_service_remove,
-            local_service::local_service_delete_data,
             local_service::local_service_open_logs,
         ])
         .setup(|app| {

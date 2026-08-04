@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import { createDecipheriv, scrypt } from 'node:crypto';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -25,6 +26,8 @@ let getSyncStore: typeof import('./sync/store.js')['getSyncStore'];
 let withUserContext: typeof import('./auth/context.js')['withUserContext'];
 let authCookie = '';
 let appUserId = '';
+let privacyOtherCookie = '';
+let privacyOtherUserId = '';
 
 const account: MailAccount = {
   id: '11111111-1111-4111-8111-111111111111', provider: 'gmail', email: 'owner@example.com', displayName: 'Owner',
@@ -51,6 +54,9 @@ beforeAll(async () => {
   const registered = await fetch(`${baseUrl}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'test-owner', displayName: 'Test Owner', password: 'test-password-123' }) });
   appUserId = (await registered.json()).user.id;
   authCookie = registered.headers.get('set-cookie')?.split(';')[0] ?? '';
+  const privacyOther = await fetch(`${baseUrl}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'privacy-other', displayName: 'Privacy Other', password: 'privacy-password-123' }) });
+  privacyOtherUserId = (await privacyOther.json()).user.id;
+  privacyOtherCookie = privacyOther.headers.get('set-cookie')?.split(';')[0] ?? '';
 });
 
 afterAll(async () => {
@@ -72,6 +78,32 @@ async function request(route: string, init?: RequestInit) {
   const response = await fetch(`${baseUrl}${route}`, { ...init, headers });
   const body = response.status === 204 ? undefined : await response.json();
   return { response, body };
+}
+
+async function decryptAuthorizationExport(envelope: {
+  format: string;
+  formatVersion: number;
+  kdf: { salt: string; cost: number; blockSize: number; parallelization: number; keyLength: number };
+  cipher: { iv: string; authTag: string };
+  ciphertext: string;
+}, password: string) {
+  const key = await new Promise<Buffer>((resolve, reject) => {
+    scrypt(password, Buffer.from(envelope.kdf.salt, 'base64url'), envelope.kdf.keyLength, {
+      N: envelope.kdf.cost,
+      r: envelope.kdf.blockSize,
+      p: envelope.kdf.parallelization,
+      maxmem: 64 * 1024 * 1024,
+    }, (error, derived) => error ? reject(error) : resolve(derived));
+  });
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(envelope.cipher.iv, 'base64url'));
+    decipher.setAAD(Buffer.from(`${envelope.format}:v${envelope.formatVersion}`, 'utf8'));
+    decipher.setAuthTag(Buffer.from(envelope.cipher.authTag, 'base64url'));
+    return JSON.parse(Buffer.concat([
+      decipher.update(Buffer.from(envelope.ciphertext, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8'));
+  } finally { key.fill(0); }
 }
 
 describe('iMail HTTP API', () => {
@@ -162,6 +194,202 @@ describe('iMail HTTP API', () => {
     const limited = await attempt();
     expect(limited.status).toBe(429);
     expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+  });
+
+  it('persistently rate limits sensitive-action password reauthentication', async () => {
+    const attempt = () => fetch(`${baseUrl}/api/security/clear-user-data`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: privacyOtherCookie },
+      body: JSON.stringify({ currentPassword: 'wrong-privacy-password', confirmation: '清除我的邮箱数据' }),
+    });
+    for (let index = 0; index < 5; index += 1) expect((await attempt()).status).toBe(403);
+    const limited = await attempt();
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+    const audit = await fetch(`${baseUrl}/api/security/audit-events?limit=10`, { headers: { Cookie: privacyOtherCookie } }).then((response) => response.json());
+    expect(audit.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: 'sensitive-action.reauthentication-rate-limited', detail: { action: 'clear-user-data' } }),
+    ]));
+    expect(JSON.stringify(audit)).not.toContain('wrong-privacy-password');
+  });
+
+  it('exports only the current user mailbox authorization configuration in a one-time encrypted file', async () => {
+    const { encryptSecret } = await import('./crypto.js');
+    const appPassword = 'mail-app-password-secret';
+    const proxyPassword = 'proxy-password-secret';
+    const accessToken = 'oauth-access-token-secret';
+    const refreshToken = 'oauth-refresh-token-secret';
+    const exportPassword = 'portable-export-password';
+    const oauthAccount: MailAccount = {
+      ...account,
+      id: '33333333-3333-4333-8333-333333333333',
+      email: 'oauth-owner@example.com',
+      displayName: 'OAuth Owner',
+      authMethod: 'oauth2',
+      createdAt: '2026-07-29T00:00:00.000Z',
+      encryptedSecret: await encryptSecret({
+        authType: 'oauth2', oauthProvider: 'google', accessToken, refreshToken,
+        expiresAt: '2026-08-05T00:00:00.000Z', scopes: ['openid', 'email'], tokenType: 'Bearer',
+      }),
+    };
+    await updateAppStore(async (data) => {
+      data.accounts = [{
+        ...account,
+        authMethod: 'app-password',
+        proxy: { protocol: 'socks5', host: '127.0.0.1', port: 1080, username: 'proxy-user' },
+        encryptedSecret: await encryptSecret({ authType: 'app-password', password: appPassword, proxyPassword }),
+      }, oauthAccount];
+      data.messages = [{
+        id: 'export-must-not-include-message', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 501,
+        from: { name: 'Private Sender', address: 'sender@example.com' }, to: [{ name: 'Owner', address: account.email }],
+        subject: 'must-not-export-subject', preview: 'must-not-export-preview', text: 'must-not-export-body',
+        date: '2026-08-04T00:00:00.000Z', unread: true, flagged: false, hasAttachments: true,
+        attachments: [{ filename: 'must-not-export-attachment.txt', contentType: 'text/plain', size: 7 }],
+      }];
+      data.drafts = [{
+        id: '77777777-7777-4777-8777-777777777777', accountId: account.id, to: [], cc: [], subject: 'must-not-export-draft', text: 'must-not-export-draft-body', html: '', attachments: [],
+        createdAt: '2026-08-04T00:00:00.000Z', updatedAt: '2026-08-04T00:00:00.000Z',
+      }];
+    });
+
+    const unauthorized = await fetch(`${baseUrl}/api/security/mail-authorization-exports`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'test-password-123', exportPassword }),
+    });
+    expect(unauthorized.status).toBe(401);
+    const wrongPassword = await request('/api/security/mail-authorization-exports', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'wrong-current-password', exportPassword }),
+    });
+    expect(wrongPassword.response.status).toBe(403);
+    expect((await request('/api/security/mail-authorization-exports', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'test-password-123', exportPassword: 'too-short' }),
+    })).response.status).toBe(400);
+
+    const expiring = await request('/api/security/mail-authorization-exports', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'test-password-123', exportPassword }),
+    });
+    const expiringId = String(expiring.body.downloadPath).split('/').at(-1)!;
+    const { consumeMailAuthorizationExport } = await import('./domain/privacy.js');
+    expect(consumeMailAuthorizationExport(expiringId, appUserId, new Date(expiring.body.expiresAt).getTime() + 1)).toBeUndefined();
+    expect((await fetch(`${baseUrl}${expiring.body.downloadPath}`, { headers: { Cookie: authCookie } })).status).toBe(404);
+
+    const prepared = await request('/api/security/mail-authorization-exports', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'test-password-123', exportPassword }),
+    });
+    expect(prepared.response.status).toBe(200);
+    expect(prepared.response.headers.get('cache-control')).toContain('no-store');
+    expect(prepared.body).toMatchObject({
+      downloadPath: expect.stringMatching(/^\/api\/security\/mail-authorization-exports\/[A-Za-z0-9_-]+$/),
+      filename: expect.stringMatching(/^imail-mail-authorizations-\d{4}-\d{2}-\d{2}\.imailauth$/),
+      accountCount: 2,
+      expiresAt: expect.any(String),
+    });
+    expect(JSON.stringify(prepared.body)).not.toContain(appPassword);
+    expect((await fetch(`${baseUrl}${prepared.body.downloadPath}`, { headers: { Cookie: privacyOtherCookie } })).status).toBe(404);
+
+    const downloaded = await fetch(`${baseUrl}${prepared.body.downloadPath}`, { headers: { Cookie: authCookie } });
+    expect(downloaded.status).toBe(200);
+    expect(downloaded.headers.get('content-type')).toContain('application/vnd.imail.mail-authorization-export+json');
+    expect(downloaded.headers.get('content-disposition')).toContain(prepared.body.filename);
+    expect(downloaded.headers.get('cache-control')).toContain('no-store');
+    const encryptedText = await downloaded.text();
+    for (const secret of [appPassword, proxyPassword, accessToken, refreshToken, 'must-not-export-body', 'must-not-export-attachment.txt', 'must-not-export-draft-body']) expect(encryptedText).not.toContain(secret);
+    const envelope = JSON.parse(encryptedText);
+    expect(envelope).toMatchObject({
+      format: 'imail-mail-authorizations', formatVersion: 1,
+      kdf: { algorithm: 'scrypt', cost: 32768, blockSize: 8, parallelization: 1, keyLength: 32 },
+      cipher: { algorithm: 'aes-256-gcm' }, ciphertext: expect.any(String),
+    });
+    const payload = await decryptAuthorizationExport(envelope, exportPassword);
+    expect(payload).toMatchObject({ format: 'imail-mail-authorizations', formatVersion: 1, accounts: expect.any(Array) });
+    expect(payload.accounts).toHaveLength(2);
+    const passwordExport = payload.accounts.find((item: { email: string }) => item.email === account.email);
+    expect(passwordExport).toMatchObject({
+      provider: 'gmail', authMethod: 'app-password',
+      settings: account.settings,
+      proxy: { protocol: 'socks5', host: '127.0.0.1', port: 1080, username: 'proxy-user' },
+      authorization: { authType: 'app-password', password: appPassword, proxyPassword },
+    });
+    const oauthExport = payload.accounts.find((item: { email: string }) => item.email === oauthAccount.email);
+    expect(oauthExport.authorization).toMatchObject({ authType: 'oauth2', oauthProvider: 'google', accessToken, refreshToken, scopes: ['openid', 'email'], tokenType: 'Bearer' });
+    for (const forbidden of ['id', 'ownerId', 'encryptedSecret', 'messages', 'drafts', 'contacts', 'tokens', 'mailboxes', 'lastSyncAt', 'lastError', 'status']) {
+      expect(passwordExport).not.toHaveProperty(forbidden);
+    }
+    for (const excluded of ['must-not-export-body', 'must-not-export-attachment.txt', 'must-not-export-draft-body', 'Private Sender', 'test-password-123']) {
+      expect(JSON.stringify(payload)).not.toContain(excluded);
+    }
+    expect((await fetch(`${baseUrl}${prepared.body.downloadPath}`, { headers: { Cookie: authCookie } })).status).toBe(404);
+    const audit = await request('/api/security/audit-events?limit=20');
+    expect(audit.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: 'privacy.mail-authorization-export.prepared', detail: { accountCount: '2' } }),
+      expect.objectContaining({ eventType: 'privacy.mail-authorization-export.downloaded', detail: { accountCount: '2' } }),
+      expect.objectContaining({ eventType: 'sensitive-action.reauthentication-failed', detail: { action: 'mail-authorization-export' } }),
+    ]));
+    for (const secret of [appPassword, proxyPassword, accessToken, refreshToken, exportPassword]) expect(JSON.stringify(audit.body)).not.toContain(secret);
+  });
+
+  it('clears only the current user mailbox data after password reauthentication and exact confirmation', async () => {
+    const { encryptSecret } = await import('./crypto.js');
+    const otherAccount: MailAccount = {
+      ...account,
+      id: '44444444-4444-4444-8444-444444444444',
+      email: 'privacy-other@example.com',
+      encryptedSecret: await encryptSecret({ authType: 'app-password', password: 'other-mail-password' }),
+    };
+    await withUserContext(privacyOtherUserId, () => updateStore((data) => {
+      data.accounts = [otherAccount]; data.messages = []; data.tokens = []; data.drafts = [];
+    }));
+    await updateAppStore(async (data) => {
+      data.accounts = [{ ...account, authMethod: 'app-password', encryptedSecret: await encryptSecret({ authType: 'app-password', password: 'owner-mail-password' }) }];
+      data.messages = [{
+        id: 'clear-owner-message', accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', uid: 601,
+        from: { name: 'Sender', address: 'sender@example.com' }, to: [], subject: 'Clear', preview: '', text: 'private body',
+        date: '2026-08-04T00:00:00.000Z', unread: false, flagged: false, hasAttachments: false, attachments: [],
+      }];
+      data.drafts = [{ id: '55555555-5555-4555-8555-555555555555', accountId: account.id, to: [], cc: [], subject: 'Private draft', text: '', html: '', attachments: [], createdAt: '2026-08-04T00:00:00.000Z', updatedAt: '2026-08-04T00:00:00.000Z' }];
+      data.tokens = [{ id: '66666666-6666-4666-8666-666666666666', name: 'Clear token', tokenHash: 'clear-token-hash', prefix: 'imail_clear', scopes: ['accounts:read'], accountIds: [account.id], createdAt: '2026-08-04T00:00:00.000Z', expiresAt: '2026-08-05T00:00:00.000Z' }];
+    });
+    const pending = await request('/api/security/mail-authorization-exports', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'test-password-123', exportPassword: 'pending-export-password' }),
+    });
+    expect(pending.response.status).toBe(200);
+
+    const wrongConfirmation = await request('/api/security/clear-user-data', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'test-password-123', confirmation: '清除全部数据' }),
+    });
+    expect(wrongConfirmation.response.status).toBe(400);
+    const wrongPassword = await request('/api/security/clear-user-data', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'wrong-current-password', confirmation: '清除我的邮箱数据' }),
+    });
+    expect(wrongPassword.response.status).toBe(403);
+    expect((await request('/api/accounts')).body.accounts).toHaveLength(1);
+
+    const cleared = await request('/api/security/clear-user-data', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'test-password-123', confirmation: '清除我的邮箱数据' }),
+    });
+    expect(cleared.response.status).toBe(204);
+    expect((await request('/api/auth/session')).body.user.id).toBe(appUserId);
+    expect((await request('/api/accounts')).body.accounts).toEqual([]);
+    expect((await request('/api/messages')).body.messages).toEqual([]);
+    expect((await request('/api/drafts')).body.drafts).toEqual([]);
+    expect((await request('/api/developer-tokens')).body.tokens).toEqual([]);
+    expect(getSyncStore().getPolicy(account.id)).toBeUndefined();
+    expect((await fetch(`${baseUrl}${pending.body.downloadPath}`, { headers: { Cookie: authCookie } })).status).toBe(404);
+    const otherAccounts = await fetch(`${baseUrl}/api/accounts`, { headers: { Cookie: privacyOtherCookie } }).then((response) => response.json());
+    expect(otherAccounts.accounts).toEqual([expect.objectContaining({ id: otherAccount.id, email: otherAccount.email })]);
+    const audit = await request('/api/security/audit-events?limit=20');
+    expect(audit.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: 'privacy.user-data-cleared', detail: { accountCount: '1' } }),
+      expect.objectContaining({ eventType: 'sensitive-action.reauthentication-failed', detail: { action: 'clear-user-data' } }),
+    ]));
+    expect(JSON.stringify(audit.body)).not.toContain('owner-mail-password');
   });
 
   it('audits sensitive management actions without exposing authorization codes', async () => {

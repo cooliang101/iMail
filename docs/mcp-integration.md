@@ -24,6 +24,8 @@ URL: http://127.0.0.1:8787/mcp
 Authorization: Bearer imail_mcp_xxx
 ```
 
+`8787` 是本地守护服务的默认端口。若桌面端因端口占用选择了其他端口，请以“设置 → 服务连接”显示的当前服务地址为准。
+
 通用配置：
 
 ```json
@@ -86,6 +88,8 @@ Authorization: Bearer imail_mcp_xxx
 ## 5. 安全约束
 
 - MCP 响应不返回邮箱授权码、邮箱/代理密码、OAuth Token、主密钥或 `encryptedSecret`。
+- “设置 → 隐私与数据”的邮箱授权导出只属于登录会话保护的应用 HTTP UI。即使授权码具有 `mcp:full`，MCP 也不能创建或下载该文件；API Gateway 同样不提供该能力。
+- 清除当前用户邮箱数据也不作为 MCP 或 Gateway 工具提供。需要执行时，用户必须在应用 UI 中完成两阶段确认、当前 iMail 密码复核和固定确认文字。
 - HTTP 默认限制 Host/Origin 为回环地址；远程部署必须配置 HTTPS 和 `MCP_ALLOWED_HOSTS`。
 - 附件上传总大小限制 15 MB，工具参数和邮件正文继续受现有 Zod 限制。
 - 授权码撤销或过期后，后续 HTTP 请求会立即拒绝认证。

@@ -218,7 +218,7 @@ MCP：
 部署方式：
 
 - 桌面/单机版：统一启动器拉起 API 和 Worker，并分别监管。
-- 服务端版：由 systemd、Docker Compose 或其他进程管理器分别运行 API 和 Worker。
+- 服务端 Docker：由容器入口或 Docker Compose 运行 API 与 Worker。
 - Worker 不依赖前端连接，也不应依赖 API 进程内存；两者仅通过持久化状态协作。
 
 完成标准：

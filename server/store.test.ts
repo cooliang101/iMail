@@ -70,10 +70,12 @@ describe('SQLiteStore', () => {
 
   it('persists records after closing and reopening the database', async () => {
     const { store, directory, legacyPath } = await temporaryStore();
-    await store.update((data) => { data.accounts.push(account()); });
+    const persisted = account({ proxy: { protocol: 'socks5', host: 'proxy.internal', port: 1080, username: 'mail-user' } });
+    await store.update((data) => { data.accounts.push(persisted); });
+    expect((await store.read()).accounts).toEqual([persisted]);
     store.close(); stores.splice(stores.indexOf(store), 1);
     const reopened = new SQLiteStore(path.join(directory, 'imail.sqlite'), legacyPath); stores.push(reopened);
-    expect((await reopened.read()).accounts).toEqual([account()]);
+    expect((await reopened.read()).accounts).toEqual([persisted]);
   });
 
   it('migrates the legacy global email constraint to a per-user constraint', async () => {
@@ -93,7 +95,7 @@ describe('SQLiteStore', () => {
     await withUserContext('user-b', () => store.update((data) => { data.accounts.push(account({ id: 'account-b' })); }));
     expect((await withUserContext('user-b', () => store.read())).accounts[0].email).toBe(account().email);
     const migrated = new DatabaseSync(databasePath);
-    expect((migrated.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('4');
+    expect((migrated.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('5');
     for (const table of ['sync_policies', 'mailbox_sync_states', 'sync_jobs', 'sync_events']) {
       expect((migrated.prepare(`PRAGMA foreign_key_list(${table})`).all() as Array<{ table: string; from: string; on_delete: string }>))
         .toEqual(expect.arrayContaining([expect.objectContaining({ table: 'accounts', from: 'account_id', on_delete: 'CASCADE' })]));
@@ -280,13 +282,14 @@ describe('SQLiteStore', () => {
   });
 
   it('migrates legacy JSON once and preserves it as a migrated backup', async () => {
-    const legacy = { accounts: [account()], messages: [message()], tokens: [token()], drafts: [] };
+    const legacyAccount = account({ proxy: { protocol: 'https', host: 'legacy-proxy.example.com', port: 8443, username: 'legacy-user' } });
+    const legacy = { accounts: [legacyAccount], messages: [message()], tokens: [token()], drafts: [] };
     const { store, directory, legacyPath } = await temporaryStore(legacy);
     expect(await store.read()).toEqual({ ...legacy, contacts: [{ address: 'sender@example.com', name: 'Sender', messageCount: 1, lastContactAt: '2026-07-28T01:00:00.000Z' }], logoFetchAttempts: [] });
     await expect(readFile(`${legacyPath}.migrated`, 'utf8')).resolves.toContain('owner@example.com');
     store.close(); stores.splice(stores.indexOf(store), 1);
     await writeFile(legacyPath, JSON.stringify({ accounts: [], messages: [], tokens: [] }), 'utf8');
     const reopened = new SQLiteStore(path.join(directory, 'imail.sqlite'), legacyPath); stores.push(reopened);
-    expect((await reopened.read()).accounts).toHaveLength(1);
+    expect((await reopened.read()).accounts).toEqual([legacyAccount]);
   });
 });

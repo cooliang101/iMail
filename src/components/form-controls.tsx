@@ -37,7 +37,8 @@ export function AppTextarea({ className, ...props }: TextareaProps) {
 }
 
 export function AppCheckbox({ className, ...props }: CheckboxProps) {
-  return <Checkbox className={classes('app-checkbox', className)} {...props} />;
+  const hasLabel = props.label !== undefined && props.label !== null && props.label !== '';
+  return <Checkbox className={classes(`app-checkbox${hasLabel ? ' has-label' : ''}`, className)} {...props} />;
 }
 
 export type AppSelectOption = { value: string; label: string; disabled?: boolean };
