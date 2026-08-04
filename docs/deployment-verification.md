@@ -6,6 +6,8 @@
 
 同日使用开发实例中的 4 个真实邮箱账户执行了非破坏性验证，测试过程不读取或输出邮件正文、邮箱凭据和 Token：在没有 5173 前端进程时，Gmail、iCloud、Outlook 与 QQ 均由后台 Worker 完成新一轮同步，16 个邮箱状态全部回到 `connected/idle`。随后从在线数据创建带完整性清单的一致性备份并恢复到系统临时目录，用当前代码在隔离端口启动副本；四个账户均完成启动同步且 0 失败，SQLite `quick_check` 为 `ok`，服务优雅退出后没有遗留 Worker 心跳。测试结束后已删除临时备份与恢复副本，在线开发服务未停止。
 
+用户明确授权的唯一一次 Docker 云端测试为 [GitHub Actions 运行 30893667189](https://github.com/cooliang101/iMail/actions/runs/30893667189)：`docker` 目标在约 2 分 15 秒内成功构建并推送 `linux/amd64`，Windows job 为 `skipped`，没有重跑。镜像标签为 `ghcr.io/cooliang101/imail:edge` 与 `ghcr.io/cooliang101/imail:sha-ed8b61dd1da4f95aaa6f8708d7195128123ee5b4`，OCI digest 为 `sha256:cd84903a12dbd26b46f1f3b8144a2568c41c5d37ddd0c7a80a34c7a19786b35f`。
+
 设置界面另用隔离临时服务和两个虚构邮箱执行视觉验收：确认服务页内容边距、隐藏滚动条、授权导出展开、两阶段清除确认、每邮箱代理状态与独立代理表单均正常；验收发现并修复了带文字 `AppCheckbox` 被固定为 22px 宽的问题。未提交清除、导出或代理保存动作，验收完成后已停止临时端口并删除全部临时数据。
 
 ## 自动验证入口
