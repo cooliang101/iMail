@@ -20,9 +20,9 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - “隐私与数据”支持独立密码加密的邮箱授权导出，以及两阶段确认、当前密码复核的当前用户邮箱数据清除
 - 设置中心的内置主题、启动、阅读、通知、邮件展示与快捷键偏好按应用账号同步保存；自定义主题令牌保存在当前设备
 - 内置经典薄荷清新、琥珀终端科技风、深海蓝图商业风和 Soft Neubrutalism 柔和撞色四套即时切换主题；账户栏、邮件列表和阅读正文都随主题改变，并支持安全令牌式自定义主题、AI JSON 导入与规范复制
-- 后端持久化同步策略与独立 Worker；前端关闭后仍按账户频率同步，进程重启后自动恢复到期任务
-- 收件箱显式保持 IMAP IDLE 实时监听；断线自动重连，运行中到达的新事件保证补跑，连接失败时仍由持久化周期轮询兜底
-- 设置页可配置新账户默认策略和账户级频率、文件夹范围、启动补同步、失败重试与通知
+- 后端采用 push-first 同步模型与独立 Worker；前端关闭后仍由邮箱服务变化推送唤醒增量拉取
+- 收件箱显式保持 IMAP IDLE 实时监听；启动和断线重连会立即校准，运行中到达的新事件保证补跑，固定低频后台校准兜底断线与非收件箱变化
+- 设置页只展示邮件接收服务健康、账户最近状态与“立即校准”；文件夹游标、变化监听、重连恢复和校准计划均由系统维护
 - 首次同步最近 80 封邮件，后续按 IMAP UID 增量更新收件箱、已发送和归档缓存
 - 邮件摘要分页、正文懒加载与大邮箱虚拟列表
 - 已读、星标、归档与移至垃圾箱会同步写回源 IMAP 邮箱；兼容 Gmail All Mail 归档体系
@@ -142,27 +142,27 @@ docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull 
 
 复制 `.env.example` 为 `.env`，然后按需要配置服务商。OAuth Client Secret 只能保存在本地 `.env`，不得提交到 Git。
 
-Google Cloud Console：
+Google Cloud Console（Windows 桌面端）：
 
-1. 创建 OAuth 2.0 Web application Client。
-2. 登记回调 `http://localhost:8787/api/oauth/google/callback`。
-3. 配置 OAuth consent screen 与测试用户，并申请 `https://mail.google.com/`。
-4. 填写 `GOOGLE_OAUTH_CLIENT_ID`、`GOOGLE_OAUTH_CLIENT_SECRET`。
+1. 创建 OAuth 2.0 Desktop app Client。
+2. 配置 OAuth consent screen 与测试用户，并申请 `https://mail.google.com/`。
+3. 将 Desktop app 凭据中的两个字段分别填入 `GOOGLE_OAUTH_DESKTOP_CLIENT_ID` 与 `GOOGLE_OAUTH_DESKTOP_CLIENT_SECRET`。
+4. Windows 安装包使用 authorization code + PKCE；Google 的 Desktop Client Secret 会作为 Token 端点参数打包，但在公共客户端中不视为可保密凭据。
 
 Microsoft Entra：
 
 1. 创建 App Registration，账户类型选择同时支持组织账户与个人 Microsoft 账户。
-2. 登记回调 `http://localhost:8787/api/oauth/microsoft/callback`。
+2. 远程服务登记由 `OAUTH_CALLBACK_BASE_URL` 派生的 HTTPS 回调；原生桌面公共客户端登记 `http://localhost/api/oauth/microsoft/callback`，授权时按本地服务实际端口生成回调（Entra 的 `localhost` 匹配会忽略端口）。
 3. 添加 Office 365 Exchange Online Delegated Permissions：`IMAP.AccessAsUser.All` 与 `SMTP.Send`。
-4. 填写 `MICROSOFT_OAUTH_CLIENT_ID`；Web 机密客户端同时填写 `MICROSOFT_OAUTH_CLIENT_SECRET`。
+4. 桌面 Client ID 填入 `MICROSOFT_OAUTH_DESKTOP_CLIENT_ID`；Windows 安装包与 Google 共用 authorization code + PKCE、动态 loopback 回调和无 Client Secret 的公共客户端流程。Web 机密客户端继续填写 `MICROSOFT_OAUTH_CLIENT_ID` 与 `MICROSOFT_OAUTH_CLIENT_SECRET`。
 
 Yahoo Developer Network：
 
 1. 先在 [Yahoo Developer Access](https://senders.yahooinc.com/developer/developer-access/) 申请 IMAP/SMTP 商业接入。
-2. 审核通过并获得 `mail-r`、`mail-w` 后登记回调 `http://localhost:8787/api/oauth/yahoo/callback`。
+2. 审核通过并获得 `mail-r`、`mail-w` 后，登记由 `OAUTH_CALLBACK_BASE_URL` 派生的 HTTPS 回调。
 3. 填写 `YAHOO_OAUTH_CLIENT_ID`、`YAHOO_OAUTH_CLIENT_SECRET`，并设置 `YAHOO_MAIL_OAUTH_APPROVED=true`。
 
-可用的公开回调地址、scope 与当前配置状态可通过 `GET /api/providers` 查看。生产环境必须设置 HTTPS 的 `OAUTH_CALLBACK_BASE_URL` 和 `FRONTEND_URL`。
+可用的公开回调地址、scope 与当前配置状态可通过 `GET /api/providers` 查看。Windows 桌面端的 Google 与 Microsoft Desktop app 统一使用系统浏览器、PKCE 与 `localhost` loopback 回调，端口取当前本地守护服务实际端口，因此不注册自定义 URI scheme。Microsoft 不打包 Client Secret；Google 会携带 Desktop app 凭据中的 Client Secret，但该字段在公共客户端中不具备保密性。生产环境必须设置 HTTPS 的 `OAUTH_CALLBACK_BASE_URL` 和 `FRONTEND_URL`。
 
 应用用户、会话、邮箱账户、邮件缓存、联系人档案、Logo 采集记录、草稿、标签、稍后处理状态和开发 Token 保存在 `.data/imail.sqlite`。首次启动必须创建应用账号；升级已有数据库时，第一个注册用户会接管升级前的本地邮件数据。不同应用用户的数据彼此隔离，并可分别添加相同邮箱地址。密码使用带随机盐的 scrypt 派生值保存，会话使用 HttpOnly、SameSite=Lax Cookie，数据库只保存会话令牌的 SHA-256 哈希。登录按 IP 与账号双重限速，注册按 IP 限速；登录页只在浏览器本地记住曾登录账号的显示名称和登录名，不保存密码。
 

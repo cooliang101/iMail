@@ -40,7 +40,7 @@ describe('backup and restore preparation', () => {
     const output = execFileSync(process.execPath, ['scripts/prepare-restore.mjs', backup, restored], {
       cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     });
-    expect(JSON.parse(output)).toMatchObject({ ok: true, databaseVerified: true, integrityManifestVerified: true, backupServiceVersion: '0.0.1', schemaVersion: 5, supportedSchemaVersion: 5, masterKeyIncluded: true, instanceIdIncluded: true, senderLogosIncluded: true });
+    expect(JSON.parse(output)).toMatchObject({ ok: true, databaseVerified: true, integrityManifestVerified: true, backupServiceVersion: '0.0.1', schemaVersion: 5, supportedSchemaVersion: 6, masterKeyIncluded: true, instanceIdIncluded: true, senderLogosIncluded: true });
     expect(JSON.parse(readFileSync(path.join(backup, 'backup-manifest.json'), 'utf8'))).toMatchObject({ formatVersion: 2, service: 'imail', serviceVersion: '0.0.1', schemaVersion: 5 });
     const snapshot = new DatabaseSync(path.join(restored, 'imail.sqlite'), { readOnly: true });
     expect(snapshot.prepare('SELECT id, proxy_json FROM accounts ORDER BY id').all()).toEqual([{ id: 'before-backup', proxy_json: proxyJson }]);
@@ -112,14 +112,14 @@ describe('backup and restore preparation', () => {
       cwd: process.cwd(), env: { ...process.env, IMAIL_DATA_DIR: data }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     });
     expect(JSON.parse(output)).toMatchObject({
-      ok: true, activeDataUntouched: true, backupSchemaVersion: 3, migratedSchemaVersion: 5,
+      ok: true, activeDataUntouched: true, backupSchemaVersion: 3, migratedSchemaVersion: 6,
       integrityManifestVerified: true, sqliteQuickCheck: true, foreignKeysVerified: true,
     });
     const active = new DatabaseSync(path.join(data, 'imail.sqlite'), { readOnly: true });
     expect(active.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: '3' });
     active.close();
     const migrated = new DatabaseSync(path.join(preflight, 'imail.sqlite'), { readOnly: true });
-    expect(migrated.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: '5' });
+    expect(migrated.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: '6' });
     migrated.close();
 
     const futureData = path.join(root, 'future-active');

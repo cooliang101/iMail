@@ -82,7 +82,7 @@ export function createMailMcpServer() {
   });
 
   server.registerTool('sync_policy_get', {
-    title: '读取同步策略', description: '读取默认同步策略、账户级策略、邮箱同步状态和最近任务。',
+    title: '读取自动同步设置', description: '读取默认及账户级自动同步设置、邮箱校准状态和最近任务。',
     inputSchema: z.object({ email: z.string().email().optional() }), annotations: { readOnlyHint: true, idempotentHint: true },
   }, async ({ email }) => {
     const data = await readStore(); const syncStore = getSyncStore();
@@ -94,12 +94,12 @@ export function createMailMcpServer() {
   });
 
   server.registerTool('sync_policy_update', {
-    title: '更新同步策略', description: '更新全局默认策略或指定邮箱的后端自动同步策略。仅影响调度，不依赖任何前端连接。',
+    title: '更新自动同步设置', description: '更新全局默认设置或指定邮箱的自动同步开关、文件夹范围和失败通知。变化唤醒与后台校准不依赖任何前端连接。',
     inputSchema: z.object({
       email: z.string().email().optional().describe('不填时修改新账户使用的默认策略'),
-      enabled: z.boolean().optional(), intervalMinutes: z.number().int().min(1).max(60).optional(),
+      enabled: z.boolean().optional(),
       folderMode: z.enum(['inbox', 'standard', 'selected']).optional(), selectedMailboxes: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
-      syncOnStart: z.boolean().optional(), retryOnRecovery: z.boolean().optional(), notifyOnError: z.boolean().optional(),
+      notifyOnError: z.boolean().optional(),
     }).refine((value) => Object.keys(value).some((key) => key !== 'email'), '至少提供一个同步设置'),
     annotations: { idempotentHint: true },
   }, async ({ email, ...changes }) => {

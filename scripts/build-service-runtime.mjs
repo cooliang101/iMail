@@ -10,6 +10,40 @@ const runtimeDir = path.join(root, 'desktop-runtime');
 const binaryDir = path.join(root, 'src-tauri', 'binaries');
 const extension = process.platform === 'win32' ? '.exe' : '';
 
+// Tauri invokes this script from npm without Node's --env-file flag. Load the
+// local build configuration explicitly, then compile only the desktop OAuth
+// client registration into the SEA bundle. The .env file itself is never
+// copied into the application package.
+const localEnvironment = path.join(root, '.env');
+if (existsSync(localEnvironment)) process.loadEnvFile(localEnvironment);
+
+function configuredValue(...names) {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+const desktopOAuth = {
+  GOOGLE_OAUTH_CLIENT_ID: configuredValue('GOOGLE_OAUTH_DESKTOP_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_ID'),
+  // Google includes this field in Desktop app credentials and may require it
+  // at the token endpoint. It is an identifier-like public-client parameter,
+  // not a secret that a distributed executable can protect.
+  GOOGLE_OAUTH_CLIENT_SECRET: configuredValue('GOOGLE_OAUTH_DESKTOP_CLIENT_SECRET'),
+  MICROSOFT_OAUTH_CLIENT_ID: configuredValue('MICROSOFT_OAUTH_DESKTOP_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_ID'),
+};
+
+const desktopOAuthDefines = Object.fromEntries(Object.entries(desktopOAuth)
+  .filter(([, value]) => value !== undefined)
+  .map(([name, value]) => [`process.env.${name}`, JSON.stringify(value)]));
+
+const configuredProviders = [
+  desktopOAuth.GOOGLE_OAUTH_CLIENT_ID && desktopOAuth.GOOGLE_OAUTH_CLIENT_SECRET ? 'Google public client + PKCE' : undefined,
+  desktopOAuth.MICROSOFT_OAUTH_CLIENT_ID ? 'Microsoft public client + PKCE' : undefined,
+].filter(Boolean);
+console.log(`iMail desktop OAuth clients: ${configuredProviders.join(', ') || 'none'}`);
+
 function targetTriple() {
   const output = execFileSync('rustc', ['-Vv'], { encoding: 'utf8' });
   const match = output.match(/^host:\s*(\S+)$/m);
@@ -32,7 +66,13 @@ await build({
   sourcemap: false,
   minify: false,
   logLevel: 'info',
-  define: { 'process.env.npm_package_version': JSON.stringify(process.env.npm_package_version ?? '0.0.1') },
+  define: {
+    'process.env.npm_package_version': JSON.stringify(process.env.npm_package_version ?? '0.0.1'),
+    // Microsoft uses a secretless public client. Google Desktop credentials
+    // may require their non-confidential client_secret field in addition to PKCE.
+    'process.env.MICROSOFT_OAUTH_CLIENT_SECRET': 'undefined',
+    ...desktopOAuthDefines,
+  },
 });
 
 const seaBlob = path.join(runtimeDir, 'imail-service.blob');

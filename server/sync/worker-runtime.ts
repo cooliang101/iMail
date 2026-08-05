@@ -2,7 +2,7 @@ import { hostname } from 'node:os';
 import { syncMailbox } from '../mail.js';
 import { readAllStore } from '../store.js';
 import type { MailboxSyncState, SyncJob } from '../types.js';
-import { startScheduler } from './scheduler.js';
+import { reconciliationIntervalMinutes, startScheduler } from './scheduler.js';
 import { getSyncStore, type SyncStore } from './store.js';
 import { startIdleWatchers } from './idle.js';
 
@@ -28,7 +28,7 @@ function classifyFailure(error: unknown) {
   return { code, message, authRequired };
 }
 
-export async function executeSyncJob(job: SyncJob, workerId: string, syncStore: SyncStore, leaseMs: number, dependencies: { loadStore?: typeof readAllStore; runSync?: typeof syncMailbox } = {}) {
+export async function executeSyncJob(job: SyncJob, workerId: string, syncStore: SyncStore, leaseMs: number, dependencies: { loadStore?: typeof readAllStore; runSync?: typeof syncMailbox; reconciliationMinutes?: number } = {}) {
   const loadStore = dependencies.loadStore ?? readAllStore;
   const data = await loadStore();
   const account = data.accounts.find((item) => item.id === job.accountId);
@@ -51,14 +51,14 @@ export async function executeSyncJob(job: SyncJob, workerId: string, syncStore: 
       uidValidity: previous.uidValidity, lastSeenUid: previous.lastSeenUid, highestModseq: previous.highestModseq,
     });
     if (!(await loadStore()).accounts.some((item) => item.id === account.id)) { syncStore.deleteAccountData(account.id); return; }
-    syncStore.completeJob(job, result, policy.intervalMinutes);
+    syncStore.completeJob(job, result, dependencies.reconciliationMinutes ?? reconciliationIntervalMinutes());
     try { syncStore.recordMessageCreated(account, result.createdMessages); }
     catch (eventError) { console.error('[sync-worker] message event persistence failed', eventError instanceof Error ? eventError.message : eventError); }
   } catch (error) {
     if (!(await loadStore()).accounts.some((item) => item.id === account.id)) { syncStore.deleteAccountData(account.id); return; }
     const failure = classifyFailure(error);
     const failureCount = (previous?.consecutiveFailures ?? 0) + 1;
-    const retryMinutes = failure.authRequired || !policy.retryOnRecovery ? undefined : retryScheduleMinutes[Math.min(failureCount - 1, retryScheduleMinutes.length - 1)];
+    const retryMinutes = failure.authRequired ? undefined : retryScheduleMinutes[Math.min(failureCount - 1, retryScheduleMinutes.length - 1)];
     syncStore.failJob(job, { mailbox: job.mailbox ?? previous?.mailbox ?? mailboxKey, ...failure }, retryMinutes);
   } finally { clearInterval(heartbeat); }
 }

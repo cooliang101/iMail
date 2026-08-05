@@ -6,6 +6,7 @@ const managedEnvironment = [
   'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET',
   'MICROSOFT_OAUTH_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_SECRET',
   'YAHOO_OAUTH_CLIENT_ID', 'YAHOO_OAUTH_CLIENT_SECRET', 'YAHOO_MAIL_OAUTH_APPROVED',
+  'OAUTH_CALLBACK_BASE_URL', 'PORT',
 ] as const;
 
 afterEach(() => {
@@ -15,7 +16,7 @@ afterEach(() => {
 describe('OAuth authorization', () => {
   it('builds Google authorization code + PKCE request with mail and offline access', async () => {
     process.env.GOOGLE_OAUTH_CLIENT_ID = 'google-client';
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-secret';
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-desktop-secret';
     const result = await beginOAuth({ provider: 'gmail', group: '个人' });
     const url = new URL(result.authorizationUrl);
     expect(url.origin).toBe('https://accounts.google.com');
@@ -26,6 +27,14 @@ describe('OAuth authorization', () => {
     expect((url.searchParams.get('state') ?? '').split('.')).toHaveLength(3);
   });
 
+  it('derives the desktop loopback callback from the active service port', async () => {
+    process.env.GOOGLE_OAUTH_CLIENT_ID = 'google-client';
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-desktop-secret';
+    process.env.PORT = '18787';
+    const result = await beginOAuth({ provider: 'gmail' });
+    expect(new URL(result.authorizationUrl).searchParams.get('redirect_uri')).toBe('http://localhost:18787/api/oauth/google/callback');
+  });
+
   it('uses Microsoft IMAP, SMTP and refresh scopes for Outlook', async () => {
     process.env.MICROSOFT_OAUTH_CLIENT_ID = 'microsoft-client';
     const result = await beginOAuth({ provider: 'outlook' });
@@ -33,6 +42,13 @@ describe('OAuth authorization', () => {
     expect(scope).toContain('IMAP.AccessAsUser.All');
     expect(scope).toContain('SMTP.Send');
     expect(scope).toContain('offline_access');
+  });
+
+  it('uses the same active-port loopback form for Microsoft', async () => {
+    process.env.MICROSOFT_OAUTH_CLIENT_ID = 'microsoft-client';
+    process.env.PORT = '18787';
+    const result = await beginOAuth({ provider: 'outlook' });
+    expect(new URL(result.authorizationUrl).searchParams.get('redirect_uri')).toBe('http://localhost:18787/api/oauth/microsoft/callback');
   });
 
   it('uses the Microsoft consumer tenant for Hotmail and Outlook.com accounts', async () => {
@@ -67,7 +83,7 @@ describe('OAuth authorization', () => {
 
   it('builds a reconnect request only for an existing OAuth account', async () => {
     process.env.GOOGLE_OAUTH_CLIENT_ID = 'google-client';
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-secret';
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-desktop-secret';
     const account = {
       id: 'account-1', provider: 'gmail', email: 'owner@example.com', displayName: 'Owner',
       group: '个人', color: '#168f78', authMethod: 'oauth2', encryptedSecret: 'encrypted',

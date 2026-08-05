@@ -12,6 +12,8 @@ iMail 服务独立拥有邮箱凭据、SQLite、同步 Worker、HTTP API、Gatew
 
 本地守护服务固定绑定 `127.0.0.1`，默认端口为 `8787`。若目标端口已被未知进程或其他 iMail 实例占用，客户端不会连接或终止它，而是让用户选择 `1024–65535` 之间的其他端口。启用事务以守护进程实际返回的 URL 完成身份检查，并把端口同时写入客户端选择和受管守护配置；已有守护进程换端口时先停旧代，失败则恢复旧配置与启用状态。
 
+Windows 桌面 OAuth 不按服务商维护不同的客户端模式：Google 与 Microsoft 都使用系统浏览器、authorization code + PKCE、无 Client Secret 的公共客户端和 `localhost` loopback 回调。打包服务在加载 OAuth 配置前将守护进程启动参数 `--port` 写入 `PORT`，两者的回调地址都由该实际端口动态生成；本地桌面环境不得设置 `OAUTH_CALLBACK_BASE_URL` 将其固定到默认端口。远程服务则通过同一 OAuth 引擎显式配置 HTTPS `OAUTH_CALLBACK_BASE_URL` 与机密 Web Client 凭据。
+
 远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源，不从本地或远程服务下载应用页面。完整路线见 [本地守护服务与远程共享部署更新路线](./deployment-modes-roadmap.md)。
 
 Web 生产构建注册独立 Service Worker：带内容哈希的 JS、CSS、字体和图片采用缓存优先，页面导航采用网络优先并回退到已缓存应用外壳。`/api`、`/gateway`、`/mcp` 与 `text/event-stream` 请求始终绕过缓存；Tauri 运行时不注册 Service Worker。
@@ -52,12 +54,12 @@ Frontend / MCP ── settings, status, sync-now ──► API
 IMAP providers ◄──────────────────────────── Sync Worker
 ```
 
-- `server/sync/store.ts`：同步策略、邮箱状态、任务租约、事件、Worker 心跳和积压指标。
-- `server/sync/scheduler.ts`：扫描到期策略，合并重复任务并处理启动补同步和退避恢复。
+- `server/sync/store.ts`：自动同步设置、邮箱状态、任务租约、事件、Worker 心跳和积压指标。
+- `server/sync/scheduler.ts`：扫描到期的一致性校准，合并重复任务并处理启动校准和退避恢复。
 - `server/sync/worker-runtime.ts`：领取任务、续租、执行 IMAP 同步、推进游标并记录安全错误。
 - `server/sync/idle.ts`：为可用账户显式进入收件箱 IDLE；连接错误或 IDLE 意外结束后按 0.5–30 秒退避重连。不支持 IDLE 的服务商通过同一连接定期执行 `STATUS`；所有通知只负责唤醒持久化任务。
 - `server/sync/worker.ts`：独立进程入口和信号关闭。
-- `server/routes/sync.ts`：策略、状态、任务查询和前端 SSE 通知。客户端复用单个 SSE 连接；`sync.completed` 携带经过裁剪的邮件摘要增量，前端直接合并新增、标记变化与删除；`sync.status` 在连接、任务状态变化和 Worker 心跳时推送完整运行状态，设置页不再查询 `api/messages` 或 `api/sync-status`。默认策略仍按需单独读取，不参与轮询。浏览器场景是单向服务端推送，因此无需额外引入 MQTT broker。
+- `server/routes/sync.ts`：自动同步设置、状态、任务查询和前端 SSE 通知。客户端复用单个 SSE 连接；`sync.completed` 携带经过裁剪的邮件摘要增量，前端直接合并新增、标记变化与删除；`sync.status` 在连接、任务状态变化和 Worker 心跳时推送完整运行状态。同步运行状态用于后台刷新与诊断，不再占用独立设置页面。浏览器场景是单向服务端推送，因此无需额外引入 MQTT broker。
 
 同步执行只把安全裁剪后的领域事件写入 SQLite。SSE 和开发者 WebSocket 从同一持久化事件日志读取，避免独立 Worker 无法触达进程内事件总线，也避免同一封新邮件被内存总线和数据库重复投递。
 

@@ -1,9 +1,11 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { asyncRoute } from '../http/async-route.js';
 import { oauthStartSchema } from '../http/schemas.js';
-import { beginOAuth, completeOAuth, oauthCallbackHtml, type OAuthProviderKey } from '../oauth.js';
+import { beginOAuth, completeOAuth, completedOAuthAccount, oauthCallbackHtml, type OAuthProviderKey } from '../oauth.js';
 import { currentUserId } from '../auth/context.js';
 import { recordRequestSecurityEvent, recordSecurityEvent } from '../auth/http.js';
+import { publicAccount } from '../http/presenters.js';
 
 export const oauthRouter = Router();
 
@@ -12,6 +14,12 @@ oauthRouter.post('/oauth/start', asyncRoute(async (req, res) => {
   const result = await beginOAuth(input);
   recordRequestSecurityEvent(req, res, 'account.oauth-started', { provider: input.provider });
   res.json(result);
+}));
+
+oauthRouter.post('/oauth/status', asyncRoute(async (req, res) => {
+  const { state } = z.object({ state: z.string().min(1) }).parse(req.body);
+  const account = await completedOAuthAccount(state);
+  res.json(account ? { completed: true, account: publicAccount(account) } : { completed: false });
 }));
 
 for (const providerKey of ['google', 'microsoft', 'yahoo'] as const) {

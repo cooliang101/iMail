@@ -472,10 +472,10 @@ describe('iMail HTTP API', () => {
     const called = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'accounts_list', arguments: {} } });
     expect(called.body.result.structuredContent.accounts[0]).toMatchObject({ email: account.email, displayName: account.displayName });
     expect(JSON.stringify(called.body)).not.toContain(account.encryptedSecret);
-    const policyUpdated = await mcp({ jsonrpc: '2.0', id: 31, method: 'tools/call', params: { name: 'sync_policy_update', arguments: { email: account.email, intervalMinutes: 15 } } });
-    expect(policyUpdated.body.result.structuredContent.policy).toMatchObject({ intervalMinutes: 15 });
+    const policyUpdated = await mcp({ jsonrpc: '2.0', id: 31, method: 'tools/call', params: { name: 'sync_policy_update', arguments: { email: account.email, folderMode: 'standard', notifyOnError: false } } });
+    expect(policyUpdated.body.result.structuredContent.policy).toMatchObject({ folderMode: 'standard', notifyOnError: false });
     const policyRead = await mcp({ jsonrpc: '2.0', id: 32, method: 'tools/call', params: { name: 'sync_policy_get', arguments: { email: account.email } } });
-    expect(policyRead.body.result.structuredContent.accounts[0]).toMatchObject({ accountEmail: account.email, policy: { intervalMinutes: 15 } });
+    expect(policyRead.body.result.structuredContent.accounts[0]).toMatchObject({ accountEmail: account.email, policy: { folderMode: 'standard', notifyOnError: false } });
     expect(JSON.stringify(policyRead.body)).not.toContain(account.encryptedSecret);
     const settingsUpdated = await mcp({ jsonrpc: '2.0', id: 33, method: 'tools/call', params: { name: 'settings_update', arguments: { theme: 'soft-neubrutalism', defaultMessageView: 'rendered', notificationKinds: { unread: false } } } });
     expect(settingsUpdated.body.result.structuredContent.preferences).toMatchObject({ theme: 'soft-neubrutalism', defaultMessageView: 'rendered', notificationKinds: { unread: false, snooze: true, error: true }, shortcutBindings: { focusSearch: 'Mod+K' } });
@@ -545,14 +545,15 @@ describe('iMail HTTP API', () => {
     expect(result.body).toEqual({ error: '这个邮箱已经添加' });
   });
 
-  it('persists backend sync policy and queues work without executing IMAP in the request', async () => {
+  it('persists push-first automatic sync settings and queues work without executing IMAP in the request', async () => {
     const defaults = await request('/api/sync-policy');
-    expect(defaults.body.policy).toMatchObject({ enabled: true, intervalMinutes: 1, folderMode: 'inbox' });
+    expect(defaults.body.policy).toEqual({ enabled: true, folderMode: 'inbox', selectedMailboxes: [], notifyOnError: true });
     const updated = await request(`/api/accounts/${account.id}/sync-policy`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ intervalMinutes: 15, folderMode: 'standard', syncOnStart: true }),
+      body: JSON.stringify({ folderMode: 'standard', notifyOnError: false }),
     });
-    expect(updated.body.policy).toMatchObject({ accountId: account.id, intervalMinutes: 15, folderMode: 'standard' });
+    expect(updated.body.policy).toMatchObject({ accountId: account.id, folderMode: 'standard', notifyOnError: false });
+    expect(updated.body.policy).not.toHaveProperty('intervalMinutes');
     const queued = await request(`/api/accounts/${account.id}/sync`, { method: 'POST' });
     expect(queued.body).toMatchObject({ queued: true, synced: 0, jobId: expect.any(String) });
     const duplicate = await request(`/api/accounts/${account.id}/mailboxes/sync`, {
@@ -560,7 +561,7 @@ describe('iMail HTTP API', () => {
     });
     expect(duplicate.body.jobId).toBe(queued.body.jobId);
     const status = await request('/api/sync-status');
-    expect(status.body.accounts[0]).toMatchObject({ accountId: account.id, policy: { intervalMinutes: 15 }, jobs: [{ id: queued.body.jobId, status: 'queued', reason: 'manual' }] });
+    expect(status.body.accounts[0]).toMatchObject({ accountId: account.id, policy: { folderMode: 'standard', notifyOnError: false }, jobs: [{ id: queued.body.jobId, status: 'queued', reason: 'manual' }] });
     expect(status.body.accounts[0].jobs).toHaveLength(1);
     expect(JSON.stringify(status.body)).not.toContain(account.encryptedSecret);
 
@@ -579,7 +580,7 @@ describe('iMail HTTP API', () => {
     expect(statusEvent).not.toBeNull();
     expect(JSON.parse(statusEvent![1]).accounts[0]).toMatchObject({
       accountId: account.id,
-      policy: { intervalMinutes: 15 },
+      policy: { folderMode: 'standard', notifyOnError: false },
       jobs: [{ id: queued.body.jobId, status: 'queued' }],
     });
     expect(statusEvent![1]).not.toContain(account.encryptedSecret);

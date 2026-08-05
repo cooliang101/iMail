@@ -18,11 +18,8 @@ const workerHeartbeatStaleMs = 60_000;
 export const defaultSyncPolicy = (accountId: string, now = new Date().toISOString()): SyncPolicy => ({
   accountId,
   enabled: true,
-  intervalMinutes: 1,
   folderMode: 'inbox',
   selectedMailboxes: [],
-  syncOnStart: true,
-  retryOnRecovery: true,
   notifyOnError: true,
   updatedAt: now,
 });
@@ -39,10 +36,9 @@ function optional(row: Row, key: string) {
 
 function policyFromRow(row: Row): SyncPolicy {
   return {
-    accountId: String(row.account_id), enabled: Boolean(row.enabled), intervalMinutes: Number(row.interval_minutes),
+    accountId: String(row.account_id), enabled: Boolean(row.enabled),
     folderMode: String(row.folder_mode) as SyncFolderMode,
     selectedMailboxes: JSON.parse(String(row.selected_mailboxes_json)) as string[],
-    syncOnStart: Boolean(row.sync_on_start), retryOnRecovery: Boolean(row.retry_on_recovery),
     notifyOnError: Boolean(row.notify_on_error), updatedAt: String(row.updated_at),
   };
 }
@@ -78,42 +74,24 @@ export class SyncStore {
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     if (databasePath !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     ensureSchema(this.db);
-    this.migrateFastInboxPollingDefault();
   }
 
   close() { this.db.close(); }
-
-  private migrateFastInboxPollingDefault() {
-    const migrationKey = 'sync_fast_inbox_polling_v1';
-    if (this.db.prepare('SELECT 1 AS applied FROM metadata WHERE key = ?').get(migrationKey)) return;
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
-      // Five minutes was the original implicit default. Move untouched/default-looking
-      // policies to the one-minute safety net used when IMAP IDLE is unavailable.
-      this.db.prepare('UPDATE sync_policies SET interval_minutes = 1 WHERE interval_minutes = 5').run();
-      const rows = this.db.prepare("SELECT key, value FROM metadata WHERE key LIKE 'sync_default_policy:%'").all() as Row[];
-      for (const row of rows) {
-        try {
-          const value = JSON.parse(String(row.value)) as Partial<SyncPolicySettings>;
-          if (value.intervalMinutes !== 5) continue;
-          this.db.prepare('UPDATE metadata SET value = ? WHERE key = ?').run(JSON.stringify({ ...value, intervalMinutes: 1 }), String(row.key));
-        } catch {
-          // Malformed optional defaults already fall back safely in getDefaultPolicy().
-        }
-      }
-      this.db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)').run(migrationKey, new Date().toISOString());
-      this.db.exec('COMMIT');
-    } catch (error) {
-      this.db.exec('ROLLBACK');
-      throw error;
-    }
-  }
 
   getDefaultPolicy(): SyncPolicySettings {
     const key = `sync_default_policy:${currentUserId() ?? '__legacy__'}`;
     const row = this.db.prepare('SELECT value FROM metadata WHERE key = ?').get(key) as Row | undefined;
     if (!row) return defaultSettings();
-    try { return { ...defaultSettings(), ...JSON.parse(String(row.value)) as Partial<SyncPolicySettings> }; }
+    try {
+      const value = JSON.parse(String(row.value)) as Partial<SyncPolicySettings>;
+      const defaults = defaultSettings();
+      return {
+        enabled: typeof value.enabled === 'boolean' ? value.enabled : defaults.enabled,
+        folderMode: value.folderMode === 'standard' || value.folderMode === 'selected' || value.folderMode === 'inbox' ? value.folderMode : defaults.folderMode,
+        selectedMailboxes: Array.isArray(value.selectedMailboxes) ? value.selectedMailboxes.filter((mailbox): mailbox is string => typeof mailbox === 'string') : defaults.selectedMailboxes,
+        notifyOnError: typeof value.notifyOnError === 'boolean' ? value.notifyOnError : defaults.notifyOnError,
+      };
+    }
     catch { return defaultSettings(); }
   }
 
@@ -128,8 +106,8 @@ export class SyncStore {
     const now = new Date().toISOString();
     const defaults = { ...defaultSyncPolicy(accountId, now), ...this.getDefaultPolicy() };
     this.db.prepare(`INSERT OR IGNORE INTO sync_policies
-      (account_id, enabled, interval_minutes, folder_mode, selected_mailboxes_json, sync_on_start, retry_on_recovery, notify_on_error, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(accountId, Number(defaults.enabled), defaults.intervalMinutes, defaults.folderMode, JSON.stringify(defaults.selectedMailboxes), Number(defaults.syncOnStart), Number(defaults.retryOnRecovery), Number(defaults.notifyOnError), now);
+      (account_id, enabled, folder_mode, selected_mailboxes_json, notify_on_error, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(accountId, Number(defaults.enabled), defaults.folderMode, JSON.stringify(defaults.selectedMailboxes), Number(defaults.notifyOnError), now);
     return this.getPolicy(accountId)!;
   }
 
@@ -149,10 +127,10 @@ export class SyncStore {
   updatePolicy(accountId: string, changes: Partial<Omit<SyncPolicy, 'accountId' | 'updatedAt'>>): SyncPolicy {
     const current = this.ensurePolicy(accountId);
     const updated: SyncPolicy = { ...current, ...changes, accountId, updatedAt: new Date().toISOString() };
-    this.db.prepare(`UPDATE sync_policies SET enabled = ?, interval_minutes = ?, folder_mode = ?, selected_mailboxes_json = ?,
-      sync_on_start = ?, retry_on_recovery = ?, notify_on_error = ?, updated_at = ? WHERE account_id = ?`).run(
-      Number(updated.enabled), updated.intervalMinutes, updated.folderMode, JSON.stringify(updated.selectedMailboxes),
-      Number(updated.syncOnStart), Number(updated.retryOnRecovery), Number(updated.notifyOnError), updated.updatedAt, accountId,
+    this.db.prepare(`UPDATE sync_policies SET enabled = ?, folder_mode = ?, selected_mailboxes_json = ?,
+      notify_on_error = ?, updated_at = ? WHERE account_id = ?`).run(
+      Number(updated.enabled), updated.folderMode, JSON.stringify(updated.selectedMailboxes),
+      Number(updated.notifyOnError), updated.updatedAt, accountId,
     );
     if (!updated.enabled) {
       this.db.prepare("UPDATE sync_jobs SET status = 'cancelled', finished_at = ? WHERE account_id = ? AND status = 'queued'").run(updated.updatedAt, accountId);
@@ -258,8 +236,8 @@ export class SyncStore {
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
 
-  completeJob(job: SyncJob, result: { mailbox: string; uidValidity?: string; highestModseq?: string; lastSeenUid: number; synced: number; created: number; updated: number; deleted: number; messageChanges?: Array<{ before?: CachedMessage; after?: CachedMessage }> }, intervalMinutes: number) {
-    const now = new Date(); const nowIso = now.toISOString(); const next = new Date(now.getTime() + intervalMinutes * 60_000).toISOString();
+  completeJob(job: SyncJob, result: { mailbox: string; uidValidity?: string; highestModseq?: string; lastSeenUid: number; synced: number; created: number; updated: number; deleted: number; messageChanges?: Array<{ before?: CachedMessage; after?: CachedMessage }> }, reconciliationMinutes: number) {
+    const now = new Date(); const nowIso = now.toISOString(); const next = new Date(now.getTime() + reconciliationMinutes * 60_000).toISOString();
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const active = this.db.prepare("SELECT rerun_requested FROM sync_jobs WHERE id = ? AND status = 'running' AND locked_by = ?")

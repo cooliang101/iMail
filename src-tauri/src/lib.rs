@@ -1,11 +1,17 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager,
+    AppHandle, Emitter, Manager, State,
 };
 
 mod http_bridge;
 mod local_service;
+
+#[derive(Default)]
+struct DesktopWindowState {
+    frontend_ready: AtomicBool,
+}
 
 pub fn run_local_service_daemon_from_args() -> bool {
     local_service::run_daemon_from_args()
@@ -23,11 +29,28 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
+fn show_ready_main_window(app: &AppHandle) {
+    if app
+        .state::<DesktopWindowState>()
+        .frontend_ready
+        .load(Ordering::Acquire)
+    {
+        show_main_window(app);
+    }
+}
+
+#[tauri::command]
+fn desktop_frontend_ready(app: AppHandle, state: State<'_, DesktopWindowState>) {
+    state.frontend_ready.store(true, Ordering::Release);
+    show_main_window(&app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .manage(DesktopWindowState::default())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app);
+            show_ready_main_window(app);
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -41,10 +64,16 @@ pub fn run() {
             }
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => show_main_window(app),
+            "show" => show_ready_main_window(app),
             "compose" => {
-                show_main_window(app);
-                let _ = app.emit("desktop-compose", ());
+                show_ready_main_window(app);
+                if app
+                    .state::<DesktopWindowState>()
+                    .frontend_ready
+                    .load(Ordering::Acquire)
+                {
+                    let _ = app.emit("desktop-compose", ());
+                }
             }
             "quit" => app.exit(0),
             _ => {}
@@ -56,10 +85,11 @@ pub fn run() {
                 ..
             } = event
             {
-                show_main_window(app);
+                show_ready_main_window(app);
             }
         })
         .invoke_handler(tauri::generate_handler![
+            desktop_frontend_ready,
             http_bridge::desktop_http_request,
             http_bridge::desktop_download,
             http_bridge::desktop_read_binary,

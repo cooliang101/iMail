@@ -1,5 +1,5 @@
 import { Button } from '@fluentui/react-components';
-import { Archive, ArrowRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Trash, Tray, UserCircle, WarningCircle, X } from '@phosphor-icons/react';
+import { Archive, ArrowRight, ArrowsLeftRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Trash, Tray, WarningCircle, X } from '@phosphor-icons/react';
 import type { Account } from '../../types';
 import type { AppView, ContextTarget, MessageStats, WorkspaceFolder } from '../../app-model';
 import { WorkspaceFolderItem, WorkspaceIcon } from '../organize';
@@ -20,6 +20,7 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
       <button className={accountFilter === 'all' ? 'active' : ''} onClick={() => onSelectScope('inbox')}><Tray size={18} /><span><strong>全部邮箱</strong><small>{accounts.length} 个账户</small></span></button>
       {accounts.map((account) => <button key={account.id} className={accountFilter === account.id ? 'active' : ''} onClick={() => onSelectScope('inbox', account.id)}><AccountProviderMark provider={account.provider} /><span><strong>{account.displayName}</strong><small>{account.email}</small></span></button>)}
       <div><button onClick={onAddAccount}><Plus size={16} />添加邮箱</button><button onClick={onSettings}><Gear size={16} />设置</button></div>
+      <button className="mobile-user-switch" type="button" onClick={onLogout}><ArrowsLeftRight size={17} /><span><strong>{user.displayName}</strong><small>{user.login} · 切换账号</small></span></button>
     </div>
     <nav className="nav-block">
       <button data-icon-tone="primary" className={view === 'inbox' && !groupFilter ? 'active' : ''} onClick={() => onSelectScope('inbox')}><Tray size={19} /><span>统一收件箱</span><b>{messageStats.unread || ''}</b></button>
@@ -44,6 +45,5 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
     {labels.length > 0 && <><div className="section-label"><span>邮件标签</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} data-icon-tone="info" className={activeLabel === label ? 'active' : ''} onClick={() => onSelectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
     <div className="sidebar-spacer" />
     <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => onSelectScope('tokens')}><Code size={19} /><span><strong>外部接入</strong><small>MCP 与邮件 API</small></span><ArrowRight size={16} /></button>
-    <button className="user-strip" type="button" onClick={onLogout} title="退出并切换应用账号"><UserCircle size={32} weight="duotone" /><span><strong>{user.displayName}</strong><small>{user.login} · 切换账号</small></span><CaretDown size={15} /></button>
   </aside>;
 }

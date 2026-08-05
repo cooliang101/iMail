@@ -161,6 +161,38 @@ function migrateAccountProxyStorage(db: DatabaseSync) {
   });
 }
 
+function migratePushFirstSyncPolicies(db: DatabaseSync) {
+  if (!columns(db, 'sync_policies').has('interval_minutes')) return;
+  transactionWithoutForeignKeys(db, () => {
+    if (!columns(db, 'sync_policies').has('interval_minutes')) return;
+    db.exec(`
+      DROP TABLE IF EXISTS sync_policies_push_first;
+      CREATE TABLE sync_policies_push_first (
+        account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        folder_mode TEXT NOT NULL DEFAULT 'inbox' CHECK (folder_mode IN ('inbox', 'standard', 'selected')),
+        selected_mailboxes_json TEXT NOT NULL DEFAULT '[]',
+        notify_on_error INTEGER NOT NULL DEFAULT 1 CHECK (notify_on_error IN (0, 1)),
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      INSERT INTO sync_policies_push_first (account_id, enabled, folder_mode, selected_mailboxes_json, notify_on_error, updated_at)
+        SELECT account_id, enabled, folder_mode, selected_mailboxes_json, notify_on_error, updated_at FROM sync_policies;
+      DROP TABLE sync_policies;
+      ALTER TABLE sync_policies_push_first RENAME TO sync_policies;
+    `);
+    const rows = db.prepare("SELECT key, value FROM metadata WHERE key LIKE 'sync_default_policy:%'").all() as Array<{ key: string; value: string }>;
+    for (const row of rows) {
+      try {
+        const value = JSON.parse(row.value) as Record<string, unknown>;
+        delete value.intervalMinutes; delete value.syncOnStart; delete value.retryOnRecovery;
+        db.prepare('UPDATE metadata SET value = ? WHERE key = ?').run(JSON.stringify(value), row.key);
+      } catch {
+        db.prepare('DELETE FROM metadata WHERE key = ?').run(row.key);
+      }
+    }
+  });
+}
+
 export function runMigrations(db: DatabaseSync) {
   const row = db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value?: string } | undefined;
   const version = Number(row?.value ?? 0);
@@ -173,6 +205,7 @@ export function runMigrations(db: DatabaseSync) {
   if (version < 3) migrateSyncForeignKeys(db);
   if (version < 4) migrateSyncJobWakeups(db);
   if (version < 5) migrateAccountProxyStorage(db);
+  if (version < 6) migratePushFirstSyncPolicies(db);
   if (version < CURRENT_SCHEMA_VERSION) {
     db.prepare("INSERT INTO metadata (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .run(String(CURRENT_SCHEMA_VERSION));

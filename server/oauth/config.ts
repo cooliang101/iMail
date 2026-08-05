@@ -16,7 +16,9 @@ export type OAuthConfig = {
   configurationHint: string;
 };
 
-const callbackBase = process.env.OAUTH_CALLBACK_BASE_URL ?? `http://localhost:${process.env.PORT ?? 8787}/api/oauth`;
+function callbackBase() {
+  return process.env.OAUTH_CALLBACK_BASE_URL ?? `http://localhost:${process.env.PORT ?? 8787}/api/oauth`;
+}
 
 export function providerConfig(key: OAuthProviderKey, accountProvider?: ProviderId): OAuthConfig {
   if (key === 'google') {
@@ -24,11 +26,11 @@ export function providerConfig(key: OAuthProviderKey, accountProvider?: Provider
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
     return {
       key, clientId, clientSecret,
-      redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI ?? `${callbackBase}/google/callback`,
+      redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI ?? `${callbackBase()}/google/callback`,
       authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth', tokenEndpoint: 'https://oauth2.googleapis.com/token',
       userInfoEndpoint: 'https://openidconnect.googleapis.com/v1/userinfo',
       scopes: ['openid', 'email', 'profile', 'https://mail.google.com/'], configured: Boolean(clientId && clientSecret),
-      configurationHint: '配置 GOOGLE_OAUTH_CLIENT_ID 与 GOOGLE_OAUTH_CLIENT_SECRET，并在 Google Cloud Console 登记回调地址。',
+      configurationHint: '配置 Google Desktop App 凭据中的 Client ID 与 Client Secret；桌面公共客户端仍使用 PKCE，Client Secret 不作为可保密凭据。',
     };
   }
   if (key === 'microsoft') {
@@ -36,13 +38,13 @@ export function providerConfig(key: OAuthProviderKey, accountProvider?: Provider
     const tenant = accountProvider === 'hotmail' ? 'consumers' : 'common';
     return {
       key, clientId, clientSecret: process.env.MICROSOFT_OAUTH_CLIENT_SECRET,
-      redirectUri: process.env.MICROSOFT_OAUTH_REDIRECT_URI ?? `${callbackBase}/microsoft/callback`,
+      redirectUri: process.env.MICROSOFT_OAUTH_REDIRECT_URI ?? `${callbackBase()}/microsoft/callback`,
       authorizationEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`,
       tokenEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
       jwksUri: 'https://login.microsoftonline.com/common/discovery/v2.0/keys',
       scopes: ['openid', 'email', 'profile', 'offline_access', 'https://outlook.office.com/IMAP.AccessAsUser.All', 'https://outlook.office.com/SMTP.Send'],
       configured: Boolean(clientId),
-      configurationHint: '配置 MICROSOFT_OAUTH_CLIENT_ID；机密 Web 应用还应配置 MICROSOFT_OAUTH_CLIENT_SECRET，并在 Entra 登记回调地址。',
+      configurationHint: '配置 Microsoft Desktop App 的 OAuth Client ID；桌面公共客户端使用 PKCE，不需要 Client Secret。',
     };
   }
   const clientId = process.env.YAHOO_OAUTH_CLIENT_ID;
@@ -50,7 +52,7 @@ export function providerConfig(key: OAuthProviderKey, accountProvider?: Provider
   const approved = process.env.YAHOO_MAIL_OAUTH_APPROVED === 'true';
   return {
     key, clientId, clientSecret,
-    redirectUri: process.env.YAHOO_OAUTH_REDIRECT_URI ?? `${callbackBase}/yahoo/callback`,
+    redirectUri: process.env.YAHOO_OAUTH_REDIRECT_URI ?? `${callbackBase()}/yahoo/callback`,
     authorizationEndpoint: 'https://api.login.yahoo.com/oauth2/request_auth', tokenEndpoint: 'https://api.login.yahoo.com/oauth2/get_token',
     userInfoEndpoint: 'https://api.login.yahoo.com/openid/v1/userinfo', scopes: ['openid', 'email', 'profile', 'mail-r', 'mail-w'],
     configured: Boolean(clientId && clientSecret && approved),

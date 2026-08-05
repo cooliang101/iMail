@@ -15,10 +15,11 @@
 | `IMAIL_SYNC_WORKER_MODE` | `child` | `child` 由 API 启动器监管；`external` 由外部管理器运行；`disabled` 仅用于诊断 |
 | `IMAIL_SYNC_CONCURRENCY` | `3` | Worker 最大并发同步任务数，范围 1–10 |
 | `IMAIL_SYNC_WORKER_POLL_MS` | `1000` | Worker 领取任务间隔，最小 250ms |
-| `IMAIL_SYNC_SCHEDULER_INTERVAL_MS` | `5000` | 到期策略扫描间隔，最小 5 秒 |
+| `IMAIL_SYNC_SCHEDULER_INTERVAL_MS` | `5000` | 到期校准任务扫描间隔，最小 5 秒 |
 | `IMAIL_SYNC_STARTUP_DELAY_MS` | `1000` | 服务启动后的首次补同步延迟 |
 | `IMAIL_SYNC_JOB_LEASE_MS` | `120000` | 任务租约时间，最小 10 秒；执行中会自动续租 |
-| `IMAIL_SYNC_IDLE_ENABLED` | `true` | 是否启用收件箱 IMAP IDLE 实时唤醒；关闭后仍按周期轮询 |
+| `IMAIL_SYNC_RECONCILE_MINUTES` | `30` | 后台一致性校准间隔，范围 5–1440 分钟；这是运维可靠性参数，不是用户同步频率 |
+| `IMAIL_SYNC_IDLE_ENABLED` | `true` | 是否启用收件箱 IMAP IDLE 变化唤醒；关闭后仍由后台一致性校准保证最终一致 |
 | `IMAIL_SYNC_IDLE_RECONCILE_MS` | `5000` | IDLE 连接期望状态检查与断线重建间隔，最小 5 秒 |
 | `IMAIL_SYNC_IDLE_REFRESH_MS` | `60000` | IDLE 保活刷新周期；不支持 IDLE 的服务商以此间隔执行 STATUS 兜底，最小 15 秒 |
 

@@ -18,8 +18,9 @@ export const mailProxySchema = z.object({
   password: z.string().max(512).optional(),
 });
 
-export const accountProxyUpdateSchema = z.discriminatedUnion('enabled', [
+export const accountProxyUpdateSchema = z.union([
   z.object({ enabled: z.literal(false) }),
+  z.object({ enabled: z.literal(true), sourceAccountId: z.string().uuid() }),
   mailProxySchema.extend({ enabled: z.literal(true) }),
 ]);
 

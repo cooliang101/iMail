@@ -71,6 +71,9 @@ export function startIdleWatchers(options: { syncStore?: SyncStore; reconcileInt
       if (!isCurrent()) { await client.logout().catch(() => undefined); return; }
       await client.mailboxOpen('INBOX', { readOnly: true });
       if (!isCurrent()) { await client.logout().catch(() => undefined); return; }
+      // IDLE only signals that the mailbox may have changed. Reconcile once on
+      // every successful (re)connection to cover events missed while offline.
+      wake();
       watcher.stableTimer = setTimeout(() => reconnectAttempts.delete(account.id), 30_000);
       watcher.stableTimer.unref();
       watcher.idleTask = client.idle().then((result) => {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CachedMessage, MailAccount, StoreData, SyncPolicy } from '../types.js';
 import type { SyncExecutionResult } from '../mail.js';
-import { enqueueDueSyncs, targetsForPolicy } from './scheduler.js';
+import { enqueueDueSyncs, reconciliationIntervalMinutes, targetsForPolicy } from './scheduler.js';
 import { SyncStore } from './store.js';
 import { SQLiteStore } from '../store.js';
 import { executeSyncJob } from './worker-runtime.js';
@@ -43,12 +43,20 @@ afterEach(async () => {
 });
 
 describe('persistent synchronization control plane', () => {
+  it('uses a bounded system reconciliation interval', () => {
+    expect(reconciliationIntervalMinutes(30)).toBe(30);
+    expect(reconciliationIntervalMinutes(1)).toBe(5);
+    expect(reconciliationIntervalMinutes(47.6)).toBe(48);
+    expect(reconciliationIntervalMinutes(2_000)).toBe(1_440);
+    expect(reconciliationIntervalMinutes(Number.NaN)).toBe(30);
+  });
+
   it('persists defaults and account-level policy overrides', async () => {
     const store = await temporarySyncStore();
-    expect(store.getDefaultPolicy()).toMatchObject({ enabled: true, intervalMinutes: 1, folderMode: 'inbox' });
-    store.updateDefaultPolicy({ intervalMinutes: 15, folderMode: 'standard' });
-    expect(store.ensurePolicy(account().id)).toMatchObject({ intervalMinutes: 15, folderMode: 'standard' });
-    expect(store.updatePolicy(account().id, { enabled: false })).toMatchObject({ enabled: false, intervalMinutes: 15 });
+    expect(store.getDefaultPolicy()).toEqual({ enabled: true, folderMode: 'inbox', selectedMailboxes: [], notifyOnError: true });
+    store.updateDefaultPolicy({ folderMode: 'standard', notifyOnError: false });
+    expect(store.ensurePolicy(account().id)).toMatchObject({ folderMode: 'standard', notifyOnError: false });
+    expect(store.updatePolicy(account().id, { enabled: false })).toMatchObject({ enabled: false, folderMode: 'standard' });
   });
 
   it('deduplicates active jobs and reclaims an expired lease', async () => {
@@ -142,7 +150,7 @@ describe('persistent synchronization control plane', () => {
       { path: 'Projects', name: 'Projects', delimiter: '/', selectable: true, subscribed: true },
       { path: 'Sent', name: 'Sent', delimiter: '/', specialUse: '\\Sent', selectable: true, subscribed: true },
     ];
-    const base: Omit<SyncPolicy, 'folderMode'> = { accountId: configured.id, enabled: true, intervalMinutes: 5, selectedMailboxes: [], syncOnStart: true, retryOnRecovery: true, notifyOnError: true, updatedAt: new Date().toISOString() };
+    const base: Omit<SyncPolicy, 'folderMode'> = { accountId: configured.id, enabled: true, selectedMailboxes: [], notifyOnError: true, updatedAt: new Date().toISOString() };
     expect(targetsForPolicy(configured, { ...base, folderMode: 'standard' })).toEqual([{ mailboxRole: 'inbox' }, { mailboxRole: 'sent' }, { mailboxRole: 'archive' }]);
     expect(targetsForPolicy(configured, { ...base, folderMode: 'selected', selectedMailboxes: ['Projects', 'Missing'] })).toEqual([{ mailboxRole: 'inbox' }, { mailbox: 'Projects', mailboxRole: 'custom' }]);
     expect(targetsForPolicy(configured, { ...base, folderMode: 'selected', selectedMailboxes: ['Sent'] })).toEqual([{ mailboxRole: 'inbox' }, { mailboxRole: 'sent' }]);
@@ -199,6 +207,7 @@ describe('persistent synchronization control plane', () => {
     expect(createClient).toHaveBeenCalledWith(account(), { disableAutoIdle: true, maxIdleTime: 60_000, missingIdleCommand: 'STATUS' });
     expect(client.mailboxOpen).toHaveBeenCalledWith('INBOX', { readOnly: true });
     expect(client.idle).toHaveBeenCalledOnce();
+    expect(store.listJobs({ accountId: account().id })).toEqual([expect.objectContaining({ reason: 'recovery', status: 'queued', mailboxRole: 'inbox' })]);
     client.emit('exists', { count: 2, prevCount: 1 });
     expect(store.listJobs({ accountId: account().id })).toEqual([expect.objectContaining({ reason: 'recovery', status: 'queued', mailboxRole: 'inbox' })]);
     await watchers.close();

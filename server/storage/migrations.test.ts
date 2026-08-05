@@ -25,6 +25,7 @@ describe('versioned SQLite migrations', () => {
       PRAGMA foreign_keys = ON;
       CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
       INSERT INTO metadata VALUES ('schema_version', '2');
+      INSERT INTO metadata VALUES ('sync_default_policy:user-1', '{"enabled":true,"intervalMinutes":5,"folderMode":"standard","selectedMailboxes":[],"syncOnStart":true,"retryOnRecovery":true,"notifyOnError":false}');
       CREATE TABLE accounts (
         id TEXT PRIMARY KEY, provider TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE, display_name TEXT NOT NULL,
         group_name TEXT NOT NULL, group_icon TEXT NOT NULL DEFAULT 'folder', color TEXT NOT NULL, settings_json TEXT NOT NULL,
@@ -42,7 +43,10 @@ describe('versioned SQLite migrations', () => {
     `);
 
     ensureSchema(db);
-    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('5');
+    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('6');
+    expect(db.prepare("SELECT enabled, folder_mode, notify_on_error FROM sync_policies WHERE account_id = 'account-1'").get()).toEqual({ enabled: 1, folder_mode: 'inbox', notify_on_error: 1 });
+    expect(db.prepare("SELECT name FROM pragma_table_info('sync_policies') WHERE name IN ('interval_minutes', 'sync_on_start', 'retry_on_recovery')").all()).toEqual([]);
+    expect(JSON.parse((db.prepare("SELECT value FROM metadata WHERE key = 'sync_default_policy:user-1'").get() as { value: string }).value)).toEqual({ enabled: true, folderMode: 'standard', selectedMailboxes: [], notifyOnError: false });
     expect(db.prepare("SELECT name, [notnull] FROM pragma_table_info('accounts') WHERE name = 'proxy_json'").get()).toEqual({ name: 'proxy_json', notnull: 0 });
     expect(db.prepare("SELECT proxy_json FROM accounts WHERE id = 'account-1'").get()).toEqual({ proxy_json: null });
     expect((db.prepare("SELECT rerun_requested FROM sync_jobs WHERE id = 'job-1'").get() as { rerun_requested: number }).rerun_requested).toBe(0);
@@ -65,7 +69,7 @@ describe('versioned SQLite migrations', () => {
 
     ensureSchema(db);
 
-    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('5');
+    expect((db.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('6');
     expect(db.prepare("SELECT name, [notnull] FROM pragma_table_info('accounts') WHERE name = 'proxy_json'").get()).toEqual({ name: 'proxy_json', notnull: 0 });
     expect(db.prepare("SELECT id, email, proxy_json FROM accounts WHERE id = 'account-1'").get()).toEqual({ id: 'account-1', email: 'owner@example.com', proxy_json: null });
   });
@@ -88,7 +92,7 @@ describe('versioned SQLite migrations', () => {
     expect(() => ensureSchema(apiConnection)).not.toThrow();
 
     for (const connection of [apiConnection, workerConnection]) {
-      expect(connection.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: '5' });
+      expect(connection.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get()).toEqual({ value: '6' });
       expect(connection.prepare("SELECT proxy_json FROM accounts WHERE id = 'account-1'").get()).toEqual({ proxy_json: null });
     }
   });

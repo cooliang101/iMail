@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, HardDrives, Keyboard, LockKey, Palette, SlidersHorizontal, X } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, HardDrives, Keyboard, LockKey, Palette, X } from '@phosphor-icons/react';
 import type { Account } from '../../types';
 import type { AppPreferences, Notice, ShortcutBindings } from '../../app-model';
 import { Overlay } from '../../components/shared';
@@ -13,14 +13,13 @@ import { PrivacyPanel } from './PrivacyPanel';
 import { ShortcutPanel } from './ShortcutPanel';
 import { ServicePanel } from '../service';
 
-export type SettingsTab = 'general' | 'service' | 'appearance' | 'accounts' | 'sync' | 'shortcuts' | 'notifications' | 'display' | 'privacy';
+export type SettingsTab = 'general' | 'service' | 'appearance' | 'accounts' | 'shortcuts' | 'notifications' | 'display' | 'privacy';
 
 const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof Gear }> = [
   { id: 'general', label: '通用', detail: '启动与阅读行为', icon: Gear },
   { id: 'service', label: '服务连接', detail: '本地或远程服务', icon: HardDrives },
   { id: 'appearance', label: '主题', detail: '界面风格与色彩', icon: Palette },
   { id: 'accounts', label: '邮箱管理', detail: '授权、代理与工作空间', icon: Envelope },
-  { id: 'sync', label: '同步', detail: '频率、范围与状态', icon: SlidersHorizontal },
   { id: 'shortcuts', label: '快捷键', detail: '键盘操作与绑定', icon: Keyboard },
   { id: 'notifications', label: '通知', detail: '选择需要关注的动态', icon: Bell },
   { id: 'display', label: '邮件展示', detail: '正文默认查看方式', icon: Eye },
@@ -54,7 +53,7 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
         {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'service' && <ServicePanel />}
         {activeTab === 'appearance' && <AppearancePanel preferences={preferences} onChange={onPreferencesChange} />}
-        {(activeTab === 'accounts' || activeTab === 'sync') && <AccountSettingsPanel accounts={accounts} section={activeTab} onAddAccount={onAddAccount} onReload={onReload} setNotice={setNotice} />}
+        {activeTab === 'accounts' && <AccountSettingsPanel accounts={accounts} onAddAccount={onAddAccount} onReload={onReload} setNotice={setNotice} />}
         {activeTab === 'shortcuts' && <ShortcutPanel bindings={bindings} onChange={onBindingsChange} />}
         {activeTab === 'notifications' && <NotificationPanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'display' && <DisplayPanel preferences={preferences} onChange={onPreferencesChange} />}

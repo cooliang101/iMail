@@ -124,7 +124,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
           }
           if (!oauthCancelledRef.current) setError('授权等待已超时，请重新发起登录。');
         } catch (value) {
-          if (!oauthCancelledRef.current) setError(value instanceof Error ? value.message : '无法打开邮箱登录，请稍后重试。');
+          if (!oauthCancelledRef.current) setError(value instanceof Error ? value.message : typeof value === 'string' ? value : '无法打开邮箱登录，请稍后重试。');
         } finally {
           setBusy(false);
         }
@@ -141,7 +141,7 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
         popup.location.replace(result.authorizationUrl);
       } catch (value) {
         popup.close(); popupRef.current = null; setBusy(false);
-        setError(value instanceof Error ? value.message : '无法打开邮箱登录，请稍后重试。');
+        setError(value instanceof Error ? value.message : typeof value === 'string' ? value : '无法打开邮箱登录，请稍后重试。');
       }
       return;
     }

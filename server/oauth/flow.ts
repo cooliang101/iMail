@@ -30,6 +30,13 @@ function cleanupCompleted() {
   for (const [state, value] of completed) if (value.completedAt < cutoff) completed.delete(state);
 }
 
+export async function completedOAuthAccount(state: string) {
+  cleanupCompleted();
+  const remembered = completed.get(state);
+  if (!remembered || remembered.ownerId !== (currentUserId() ?? '__legacy__')) return undefined;
+  return (await readStore()).accounts.find((account) => account.id === remembered.accountId);
+}
+
 export async function beginOAuth(input: { provider: ProviderId; displayName?: string; group?: string; color?: string; accountId?: string; expectedEmail?: string; proxy?: MailProxySettings & { password?: string } }) {
   cleanupCompleted();
   const providerKey = oauthKeyFor(input.provider);

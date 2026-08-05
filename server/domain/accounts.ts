@@ -84,13 +84,26 @@ export async function replaceAccountPassword(id: string, password: string) {
   return connected;
 }
 
-export async function updateAccountProxy(id: string, input: { enabled: false } | ({ enabled: true } & MailProxySettings & { password?: string })) {
+type AccountProxyUpdate = { enabled: false }
+  | { enabled: true; sourceAccountId: string }
+  | ({ enabled: true } & MailProxySettings & { password?: string });
+
+export async function updateAccountProxy(id: string, input: AccountProxyUpdate) {
   const account = await accountById(id);
   const secret = await decryptSecret(account.encryptedSecret);
-  const proxy = input.enabled
-    ? { protocol: input.protocol, host: input.host, port: input.port, username: input.username }
-    : undefined;
-  const proxyPassword = input.enabled ? (input.password === undefined ? secret.proxyPassword : input.password || undefined) : undefined;
+  let proxy: MailProxySettings | undefined;
+  let proxyPassword: string | undefined;
+  if (input.enabled && 'sourceAccountId' in input) {
+    if (input.sourceAccountId === id) throw invalid('PROXY_SOURCE_SAME_ACCOUNT', '不能从当前邮箱复制代理');
+    const source = await accountById(input.sourceAccountId);
+    if (!source.proxy) throw invalid('PROXY_SOURCE_MISSING', '所选邮箱没有可复用的代理配置');
+    const sourceSecret = await decryptSecret(source.encryptedSecret);
+    proxy = { ...source.proxy };
+    proxyPassword = sourceSecret.proxyPassword;
+  } else if (input.enabled) {
+    proxy = { protocol: input.protocol, host: input.host, port: input.port, username: input.username };
+    proxyPassword = input.password === undefined ? secret.proxyPassword : input.password || undefined;
+  }
   const candidate: MailAccount = {
     ...account,
     proxy,

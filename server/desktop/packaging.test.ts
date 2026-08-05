@@ -12,7 +12,13 @@ describe('desktop packaging configuration', () => {
     expect(manifest.scripts['build:web']).not.toContain('tauri');
     expect(manifest.scripts['build:server']).not.toContain('tauri');
     expect(manifest.scripts['build:service-runtime']).toContain('build-service-runtime.mjs');
-    expect(readFileSync('scripts/build-service-runtime.mjs', 'utf8')).toContain('pc-windows-msvc');
+    const serviceBuilder = readFileSync('scripts/build-service-runtime.mjs', 'utf8');
+    expect(serviceBuilder).toContain('pc-windows-msvc');
+    expect(serviceBuilder).toContain('if (existsSync(localEnvironment)) process.loadEnvFile(localEnvironment)');
+    expect(serviceBuilder).toContain("configuredValue('GOOGLE_OAUTH_DESKTOP_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_ID')");
+    expect(serviceBuilder).toContain("configuredValue('GOOGLE_OAUTH_DESKTOP_CLIENT_SECRET')");
+    expect(serviceBuilder).toContain("configuredValue('MICROSOFT_OAUTH_DESKTOP_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_ID')");
+    expect(serviceBuilder).toContain("'process.env.MICROSOFT_OAUTH_CLIENT_SECRET': 'undefined'");
     expect(manifest.scripts['build:desktop']).toContain('tauri build');
     expect(manifest.scripts['build:desktop:windows']).toContain('x86_64-pc-windows-msvc');
     expect(manifest.scripts['build:desktop:macos']).toBeUndefined();
@@ -26,6 +32,12 @@ describe('desktop packaging configuration', () => {
     expect(config.app.windows).toHaveLength(1);
     expect(config.bundle.externalBin).toEqual(['binaries/imail-service']);
     expect(config.bundle.resources).toBeUndefined();
+  });
+
+  it('allows the desktop client to open validated OAuth URLs in the system browser', () => {
+    const capability = json<{ permissions: string[] }>('src-tauri/capabilities/default.json');
+    expect(capability.permissions).toContain('opener:allow-open-url');
+    expect(capability.permissions).toContain('opener:allow-default-urls');
   });
 
   it('defines a Windows user-level daemon lifecycle without installing a system service', () => {

@@ -169,11 +169,8 @@ export type SyncState = 'idle' | 'scheduled' | 'running' | 'backoff' | 'paused';
 export type SyncPolicy = {
   accountId: string;
   enabled: boolean;
-  intervalMinutes: number;
   folderMode: SyncFolderMode;
   selectedMailboxes: string[];
-  syncOnStart: boolean;
-  retryOnRecovery: boolean;
   notifyOnError: boolean;
   updatedAt: string;
 };

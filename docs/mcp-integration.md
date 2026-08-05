@@ -4,7 +4,7 @@ iMail 为可信 Agent 提供 Streamable HTTP MCP 接入，使用“外部接入�
 
 每个 MCP 授权码都归属于创建它的应用账号。`mcp:full` 表示管理该应用账号当前及未来接入的全部邮箱，不会越过应用账号边界读取其他用户的数据。
 
-设置、主题、同步策略和邮箱账户管理工具的调用会写入当前应用账号的安全审计。审计只保存工具名与授权码 ID，不保存工具参数、完整授权码或邮箱凭据。
+设置、主题、自动同步设置和邮箱账户管理工具的调用会写入当前应用账号的安全审计。审计只保存工具名与授权码 ID，不保存工具参数、完整授权码或邮箱凭据。
 
 ## 1. 签发授权码
 
@@ -55,11 +55,11 @@ Authorization: Bearer imail_mcp_xxx
 | 账户 | `account_update` | 更新名称、工作空间、图标和颜色 |
 | 账户 | `account_update_authorization_code` | 验证并替换非 OAuth 账户凭据 |
 | 账户 | `account_test_connection` | 验证已保存的 IMAP/SMTP 凭据 |
-| 账户 | `account_proxy_update` | 启用、修改或关闭账户级 HTTP/HTTPS/SOCKS5 代理 |
+| 账户 | `account_proxy_update` | 启用、修改、关闭或从另一邮箱复用账户级 HTTP/HTTPS/SOCKS5 代理 |
 | 账户 | `account_remove` | 移除账户及其本地缓存和草稿 |
 | 同步 | `mailbox_sync` | 为单个/全部账户的特殊或自定义文件夹创建持久化同步任务 |
-| 同步 | `sync_policy_get` | 读取默认/账户级策略、邮箱状态和最近任务 |
-| 同步 | `sync_policy_update` | 更新默认或账户级后端同步策略 |
+| 同步 | `sync_policy_get` | 读取默认/账户级自动同步设置、邮箱状态和最近任务 |
+| 同步 | `sync_policy_update` | 更新自动同步开关、文件夹范围与失败通知 |
 | 邮件 | `messages_list` | 分页和多条件查询本地缓存 |
 | 邮件 | `message_get` | 完整正文、HTML、标签与附件元数据 |
 | 邮件 | `message_update` | 已读、星标、标签和稍后处理 |
@@ -79,11 +79,12 @@ Authorization: Bearer imail_mcp_xxx
 - 操作账户前先调用 `accounts_list`，使用邮箱地址定位，不猜内部 ID。
 - 操作邮件前先调用 `messages_list` 或 `message_get`，确认发件人、主题和目标邮箱。
 - `mailbox_sync` 返回 `jobId` 和排队状态；任务由独立 Worker 执行，调用方可用 `sync_policy_get` 查看状态，不应依赖 MCP 连接存活。
+- `sync_policy_update` 只接受 `enabled`、`folderMode`、`selectedMailboxes` 和 `notifyOnError`。IMAP 推送负责变化唤醒，启动、重连与低频一致性校准由服务自动执行，不提供按账户分钟频率或恢复重试开关。
 - `mailbox_sync` 和 `messages_list` 的 `mailboxRole` 支持 `inbox`、`sent`、`archive`、`drafts`、`trash`、`junk` 与 `custom`；常见的 Drafts、Deleted Items/Message(s)、Junk/Spam 等无 Special-Use 标记文件夹也会归入对应标准角色。
 - 发送邮件前确认 `accountEmail`、收件人、主题和正文；发送不是幂等操作。
 - `account_remove`、`message_move` 和 `draft_delete` 带 destructive annotation，执行前应获得用户确认。
 - 使用 Gmail、Outlook、Hotmail、QQ、Yahoo 或 iCloud 的应用专用密码/授权码时，把服务商生成的凭据传给 `account_add_with_code.authorizationCode`；Microsoft 账户还必须允许 IMAP/SMTP 密码验证。不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。
-- `account_add_with_code.proxy` 可在添加时设置代理；已有账户使用 `account_proxy_update`。`protocol` 仅接受 `http`、`https`、`socks5`，关闭时只需传 `enabled: false`。修改代理且省略 `password` 会保留已加密的现有代理密码。
+- `account_add_with_code.proxy` 可在添加时设置代理；已有账户使用 `account_proxy_update`。`protocol` 仅接受 `http`、`https`、`socks5`，关闭时只需传 `enabled: false`。修改代理且省略 `password` 会保留已加密的现有代理密码；传入 `enabled: true` 与 `sourceEmail` 可复制另一邮箱的代理和加密密码，复制后两边可独立修改。
 
 ## 5. 安全约束
 

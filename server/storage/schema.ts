@@ -55,11 +55,8 @@ export function ensureSchema(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS sync_policies (
       account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
       enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-      interval_minutes INTEGER NOT NULL DEFAULT 5 CHECK (interval_minutes BETWEEN 1 AND 60),
       folder_mode TEXT NOT NULL DEFAULT 'inbox' CHECK (folder_mode IN ('inbox', 'standard', 'selected')),
       selected_mailboxes_json TEXT NOT NULL DEFAULT '[]',
-      sync_on_start INTEGER NOT NULL DEFAULT 1 CHECK (sync_on_start IN (0, 1)),
-      retry_on_recovery INTEGER NOT NULL DEFAULT 1 CHECK (retry_on_recovery IN (0, 1)),
       notify_on_error INTEGER NOT NULL DEFAULT 1 CHECK (notify_on_error IN (0, 1)),
       updated_at TEXT NOT NULL
     ) STRICT;

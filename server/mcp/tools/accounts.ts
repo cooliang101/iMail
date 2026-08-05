@@ -67,12 +67,18 @@ export function registerAccountTools(server: McpServer) {
   }, async ({ email }) => output({ account: publicAccount(await validateStoredAccountConnection(await accountByEmail(email))) }));
 
   server.registerTool('account_proxy_update', {
-    title: '更新邮箱代理', description: '启用、修改或关闭账户级 HTTP、HTTPS、SOCKS5 代理。代理密码加密保存且不会返回。',
-    inputSchema: accountProxyUpdateSchema.and(z.object({ email: z.string().email() })),
+    title: '更新邮箱代理', description: '启用、修改、关闭账户级代理，或复用另一邮箱的代理。代理密码加密保存且不会返回。',
+    inputSchema: z.union([
+      accountProxyUpdateSchema.and(z.object({ email: z.string().email() })),
+      z.object({ email: z.string().email(), enabled: z.literal(true), sourceEmail: z.string().email() }),
+    ]),
     annotations: { idempotentHint: false },
   }, async ({ email, ...input }) => {
     const account = await accountByEmail(email);
-    return output({ account: publicAccount(await updateAccountProxy(account.id, input)) });
+    const update = 'sourceEmail' in input
+      ? { enabled: true as const, sourceAccountId: (await accountByEmail(input.sourceEmail)).id }
+      : input;
+    return output({ account: publicAccount(await updateAccountProxy(account.id, update)) });
   });
 
   server.registerTool('account_remove', {

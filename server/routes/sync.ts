@@ -7,11 +7,8 @@ import { getSyncStore } from '../sync/store.js';
 const folderModeSchema = z.enum(['inbox', 'standard', 'selected']);
 const policyChangesSchema = z.object({
   enabled: z.boolean().optional(),
-  intervalMinutes: z.number().int().min(1).max(60).optional(),
   folderMode: folderModeSchema.optional(),
   selectedMailboxes: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
-  syncOnStart: z.boolean().optional(),
-  retryOnRecovery: z.boolean().optional(),
   notifyOnError: z.boolean().optional(),
 }).refine((value) => Object.keys(value).length > 0, '至少提供一个同步设置');
 

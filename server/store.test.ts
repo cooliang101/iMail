@@ -95,7 +95,7 @@ describe('SQLiteStore', () => {
     await withUserContext('user-b', () => store.update((data) => { data.accounts.push(account({ id: 'account-b' })); }));
     expect((await withUserContext('user-b', () => store.read())).accounts[0].email).toBe(account().email);
     const migrated = new DatabaseSync(databasePath);
-    expect((migrated.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('5');
+    expect((migrated.prepare("SELECT value FROM metadata WHERE key = 'schema_version'").get() as { value: string }).value).toBe('6');
     for (const table of ['sync_policies', 'mailbox_sync_states', 'sync_jobs', 'sync_events']) {
       expect((migrated.prepare(`PRAGMA foreign_key_list(${table})`).all() as Array<{ table: string; from: string; on_delete: string }>))
         .toEqual(expect.arrayContaining([expect.objectContaining({ table: 'accounts', from: 'account_id', on_delete: 'CASCADE' })]));

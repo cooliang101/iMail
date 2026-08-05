@@ -39,7 +39,7 @@ vi.mock('jose', () => ({
   jwtVerify: vi.fn(async () => ({ payload: state.jwtPayload })),
 }));
 
-import { beginOAuth, completeOAuth, resolveAccountSecret } from './oauth.js';
+import { beginOAuth, completeOAuth, completedOAuthAccount, resolveAccountSecret } from './oauth.js';
 
 const managedEnvironment = [
   'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET',
@@ -76,7 +76,7 @@ beforeEach(() => {
 describe('complete OAuth provider flows', () => {
   it('exchanges Google code, reads identity, stores refresh token and makes duplicate callbacks idempotent', async () => {
     process.env.GOOGLE_OAUTH_CLIENT_ID = 'google-client';
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-secret';
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-desktop-secret';
     const started = await beginOAuth({ provider: 'gmail', displayName: 'Personal Gmail', group: '个人' });
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     state.fetchHandler = async (input, init) => {
@@ -89,16 +89,18 @@ describe('complete OAuth provider flows', () => {
     expect(connected).toMatchObject({ provider: 'gmail', email: 'owner@gmail.com', displayName: 'Personal Gmail', status: 'connected' });
     expect(JSON.parse(state.store.accounts[0].encryptedSecret)).toMatchObject({ accessToken: 'google-access', refreshToken: 'google-refresh', oauthProvider: 'google' });
     expect(String(requests[0].init?.body)).toContain('code_verifier=');
+    expect(String(requests[0].init?.body)).toContain('client_secret=google-desktop-secret');
     expect(requests[1].init?.headers).toMatchObject({ Authorization: 'Bearer google-access' });
 
     const duplicate = await completeOAuth({ providerKey: 'google', state: started.state, error: 'server_error' });
     expect(duplicate.id).toBe(connected.id);
     expect(state.store.accounts).toHaveLength(1);
+    await expect(completedOAuthAccount(started.state)).resolves.toMatchObject({ id: connected.id });
   });
 
   it('keeps a newly authorized account and refresh token when IMAP validation is temporarily unavailable', async () => {
     process.env.GOOGLE_OAUTH_CLIENT_ID = 'google-client';
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-secret';
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-desktop-secret';
     const started = await beginOAuth({ provider: 'gmail' });
     state.validationError = new Error('IMAP 验证失败：服务暂时不可用');
     state.fetchHandler = async (input) => String(input).includes('/token')
@@ -113,7 +115,6 @@ describe('complete OAuth provider flows', () => {
 
   it('completes Microsoft consumer OAuth for Hotmail with verified ID-token identity', async () => {
     process.env.MICROSOFT_OAUTH_CLIENT_ID = 'microsoft-client';
-    process.env.MICROSOFT_OAUTH_CLIENT_SECRET = 'microsoft-secret';
     const started = await beginOAuth({ provider: 'hotmail', group: '工作' });
     const authorize = new URL(started.authorizationUrl);
     state.jwtPayload = {
@@ -122,8 +123,9 @@ describe('complete OAuth provider flows', () => {
       preferred_username: 'owner@hotmail.com',
       name: 'Hotmail Owner',
     };
-    state.fetchHandler = async (input) => {
+    state.fetchHandler = async (input, init) => {
       expect(String(input)).toContain('/consumers/oauth2/v2.0/token');
+      expect(String(init?.body)).not.toContain('client_secret=');
       return json({ access_token: 'microsoft-access', refresh_token: 'microsoft-refresh', expires_in: 3600, id_token: 'signed-id-token' });
     };
 
@@ -154,7 +156,7 @@ describe('complete OAuth provider flows', () => {
 
   it('coalesces concurrent refreshes and persists the rotated access token', async () => {
     process.env.GOOGLE_OAUTH_CLIENT_ID = 'google-client';
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-secret';
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'google-desktop-secret';
     const configured = account();
     state.store.accounts = [configured];
     state.fetchHandler = async () => json({ access_token: 'refreshed-access', expires_in: 3600 });

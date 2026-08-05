@@ -5,6 +5,10 @@ import { canonicalSyncTarget } from '../mail/mailbox-role.js';
 
 export type SyncTarget = { mailbox?: string; mailboxRole: MailboxRole };
 
+export function reconciliationIntervalMinutes(value = Number(process.env.IMAIL_SYNC_RECONCILE_MINUTES ?? 30)) {
+  return Number.isFinite(value) ? Math.min(24 * 60, Math.max(5, Math.round(value))) : 30;
+}
+
 export function targetsForPolicy(account: MailAccount, policy: SyncPolicy): SyncTarget[] {
   const targets: SyncTarget[] = [{ mailboxRole: 'inbox' }];
   if (policy.folderMode === 'standard') targets.push({ mailboxRole: 'sent' }, { mailboxRole: 'archive' });
@@ -34,7 +38,7 @@ export async function enqueueDueSyncs(reason: SyncJobReason = 'scheduled', syncS
   const jobs = [];
   for (const account of accounts) {
     const policy = syncStore.ensurePolicy(account.id);
-    if (!policy.enabled || (reason === 'startup' && !policy.syncOnStart)) continue;
+    if (!policy.enabled) continue;
     if (account.status === 'connected') syncStore.resumeAfterAuthorization(account.id);
     const states = syncStore.listMailboxStates(account.id);
     for (const target of targetsForPolicy(account, policy)) {

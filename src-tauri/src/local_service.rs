@@ -603,6 +603,13 @@ fn files_equal(left: &Path, right: &Path) -> Result<bool, String> {
     }
 }
 
+fn service_binary_requires_refresh(source: &Path, target: &Path) -> Result<bool, String> {
+    if !target.is_file() {
+        return Ok(true);
+    }
+    files_equal(source, target).map(|equal| !equal)
+}
+
 fn sibling_with_suffix(path: &Path, suffix: &str) -> Result<PathBuf, String> {
     let file_name = path
         .file_name()
@@ -802,11 +809,13 @@ pub async fn local_service_enable(
     let requires_upgrade = current_identity
         .as_ref()
         .is_ok_and(|identity| identity.version != env!("CARGO_PKG_VERSION"));
+    let requires_binary_refresh =
+        service_binary_requires_refresh(&source, &config.service_executable)?;
     let requires_supervisor_adoption = current_identity.is_ok()
         && previous_config
             .as_ref()
             .map_or(true, |value| value.supervisor_id.is_empty());
-    if requires_upgrade || requires_supervisor_adoption || port_changed {
+    if requires_upgrade || requires_binary_refresh || requires_supervisor_adoption || port_changed {
         config.supervisor_id = uuid::Uuid::new_v4().to_string();
         if config.enabled_file.exists() {
             fs::remove_file(&config.enabled_file)
@@ -867,25 +876,26 @@ pub async fn local_service_enable(
             return Err(activation_error(error, rollback));
         }
     }
-    let mut executable_deployment = if current_identity.is_err() || requires_upgrade {
-        match stage_executable(&source, &config.service_executable) {
-            Ok(deployment) => deployment,
-            Err(error) => {
-                let rollback = rollback_activation(
-                    &path,
-                    &config,
-                    previous_config.as_ref(),
-                    previous_enabled,
-                    &supervisor_executable,
-                    None,
-                )
-                .await;
-                return Err(activation_error(error, rollback));
+    let mut executable_deployment =
+        if current_identity.is_err() || requires_upgrade || requires_binary_refresh {
+            match stage_executable(&source, &config.service_executable) {
+                Ok(deployment) => deployment,
+                Err(error) => {
+                    let rollback = rollback_activation(
+                        &path,
+                        &config,
+                        previous_config.as_ref(),
+                        previous_enabled,
+                        &supervisor_executable,
+                        None,
+                    )
+                    .await;
+                    return Err(activation_error(error, rollback));
+                }
             }
-        }
-    } else {
-        None
-    };
+        } else {
+            None
+        };
     if let Some(deployment) = executable_deployment.as_mut() {
         if let Err(error) = deployment.activate() {
             let rollback = rollback_activation(
@@ -1687,4 +1697,21 @@ mod tests {
         fs::remove_dir_all(directory).unwrap();
     }
 
+    #[test]
+    fn refreshes_a_changed_service_binary_even_when_the_app_version_is_unchanged() {
+        let directory =
+            std::env::temp_dir().join(format!("imail-service-refresh-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        let bundled = directory.join("bundled.exe");
+        let installed = directory.join("installed.exe");
+
+        fs::write(&bundled, b"new-oauth-config").unwrap();
+        assert!(service_binary_requires_refresh(&bundled, &installed).unwrap());
+        fs::write(&installed, b"old-oauth-config").unwrap();
+        assert!(service_binary_requires_refresh(&bundled, &installed).unwrap());
+        fs::write(&installed, b"new-oauth-config").unwrap();
+        assert!(!service_binary_requires_refresh(&bundled, &installed).unwrap());
+
+        fs::remove_dir_all(directory).unwrap();
+    }
 }

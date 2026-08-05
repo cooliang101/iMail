@@ -52,6 +52,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     window.addEventListener('imail:unauthorized', unauthorized);
     return () => window.removeEventListener('imail:unauthorized', unauthorized);
   }, []);
+  useEffect(() => {
+    if (checking || !isTauriRuntime()) return;
+    void import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke('desktop_frontend_ready'))
+      .catch((reason) => console.error('[desktop-ready]', reason));
+  }, [checking]);
 
   async function logout() {
     serviceCheckRunner.cancel();

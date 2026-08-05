@@ -57,7 +57,6 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
-  const [syncing, setSyncing] = useState(false);
   const [messageTotal, setMessageTotal] = useState(0);
   const [messagesHasMore, setMessagesHasMore] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -162,19 +161,17 @@ function App() {
 
   useEffect(() => {
     if (!['sent', 'archive', 'drafts', 'trash', 'junk'].includes(view) || accounts.length === 0) return;
-    let cancelled = false; setSyncing(true);
+    let cancelled = false;
     void api(`/api/mailboxes/${view}/sync`, { method: 'POST' })
-      .catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
-      .finally(() => { if (!cancelled) setSyncing(false); });
+      .catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); });
     return () => { cancelled = true; };
   }, [view]);
 
   useEffect(() => {
     if (view !== 'folder' || !activeMailbox) return;
-    let cancelled = false; setSyncing(true);
+    let cancelled = false;
     void Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) })))
-      .catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); })
-      .finally(() => { if (!cancelled) setSyncing(false); });
+      .catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); });
     return () => { cancelled = true; };
   }, [view, activeMailbox]);
 
@@ -205,17 +202,15 @@ function App() {
 
   async function syncAll() {
     if (realAccounts.length === 0) { setAddOpen(true); return; }
-    setSyncing(true);
     try {
       const role = ['sent', 'archive', 'drafts', 'trash', 'junk'].includes(view)
         ? view
         : view === 'inbox' || view === 'starred' || view === 'snoozed' ? 'inbox' : null;
       if (view === 'folder' && activeMailbox) await Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) })));
       else if (role) await api(role === 'inbox' ? '/api/sync' : `/api/mailboxes/${role}/sync`, { method: 'POST' });
-      setNotice({ kind: 'success', text: '同步任务已加入后端队列，可在“同步设置”查看进度' });
+      setNotice({ kind: 'success', text: '同步任务已加入后台队列' });
     }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '同步失败' }); }
-    finally { setSyncing(false); }
   }
 
   async function openNotifications() {
@@ -361,24 +356,18 @@ function App() {
   }
 
   async function syncAccount(accountId: string) {
-    setSyncing(true);
     try { await api(`/api/accounts/${accountId}/sync`, { method: 'POST' }); setNotice({ kind: 'success', text: '邮箱已加入后端同步队列' }); }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮箱同步失败' }); }
-    finally { setSyncing(false); }
   }
 
   async function syncWorkspace(group: string) {
-    setSyncing(true);
     try { await Promise.all(accounts.filter((account) => account.group === group).map((account) => api(`/api/accounts/${account.id}/sync`, { method: 'POST' }))); setNotice({ kind: 'success', text: `${group} 已加入后端同步队列` }); }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '工作空间同步失败' }); }
-    finally { setSyncing(false); }
   }
 
   async function syncFolder(folder: WorkspaceFolder) {
-    setSyncing(true);
     try { await Promise.all(folder.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) }))); setNotice({ kind: 'success', text: `${folder.name} 已加入后端同步队列` }); }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '文件夹同步失败' }); }
-    finally { setSyncing(false); }
   }
 
   async function openMessageContext(message: Message, point: { x: number; y: number }) {
@@ -418,13 +407,13 @@ function App() {
   return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     {notice && <div className={`toast toast-${notice.kind}`}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
 
-    <AppAccountRail accounts={accounts} accountFilter={accountFilter} onSelect={(accountId) => selectScope('inbox', accountId)} onAdd={() => setAddOpen(true)} onSettings={() => setSettingsTab('general')} onContextMenu={(event, accountId) => { event.preventDefault(); setContextTarget(accountId ? { kind: 'account', accountId, x: event.clientX, y: event.clientY } : { kind: 'background', x: event.clientX, y: event.clientY }); }} />
+    <AppAccountRail user={user} accounts={accounts} accountFilter={accountFilter} onSelect={(accountId) => selectScope('inbox', accountId)} onAdd={() => setAddOpen(true)} onSettings={() => setSettingsTab('general')} onSwitchAccount={() => void logout()} onContextMenu={(event, accountId) => { event.preventDefault(); setContextTarget(accountId ? { kind: 'account', accountId, x: event.clientX, y: event.clientY } : { kind: 'background', x: event.clientX, y: event.clientY }); }} />
     <AppSidebar user={user} accounts={accounts} groups={groups} workspaceFolders={workspaceFolders} labels={labels} messageStats={messageStats} draftsCount={drafts.length} view={view} accountFilter={accountFilter} groupFilter={groupFilter} activeLabel={activeLabel} activeMailbox={activeMailbox} expandedWorkspaces={expandedWorkspaces} sidebarOpen={sidebarOpen}
       onClose={() => setSidebarOpen(false)} onCompose={openCompose} onAddAccount={() => { setAddOpen(true); setSidebarOpen(false); }} onSettings={() => { setSettingsTab('general'); setSidebarOpen(false); }} onSelectScope={selectScope} onSelectMailbox={selectMailbox} onSelectLabel={selectLabel} onEditWorkspace={setWorkspaceOpen}
       onToggleWorkspace={(group) => setExpandedWorkspaces((current) => { const next = new Set(current); if (next.has(group)) next.delete(group); else next.add(group); return next; })} onContextTarget={setContextTarget} onLogout={() => void logout()} />
 
     <main className="workspace">
-      <AppTopbar sidebarCollapsed={sidebarCollapsed} sidebarOpen={sidebarOpen} search={search} searchShortcut={shortcutLabel(shortcutBindings.focusSearch)} syncing={syncing} searchInputRef={searchInputRef} onToggleSidebar={() => setSidebarCollapsed((current) => !current)} onOpenMobileSidebar={() => setSidebarOpen(true)} onSearchChange={setSearch} onSync={() => void syncAll()} onNotifications={() => void openNotifications()} />
+      <AppTopbar sidebarCollapsed={sidebarCollapsed} sidebarOpen={sidebarOpen} search={search} searchShortcut={shortcutLabel(shortcutBindings.focusSearch)} searchInputRef={searchInputRef} onToggleSidebar={() => setSidebarCollapsed((current) => !current)} onOpenMobileSidebar={() => setSidebarOpen(true)} onSearchChange={setSearch} onNotifications={() => void openNotifications()} />
 
       {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
