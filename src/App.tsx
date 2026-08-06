@@ -9,6 +9,7 @@ import { AppAccountRail, AppSidebar, AppTopbar } from './features/navigation';
 import { applyMessageChanges, applyMessageStatsChanges, messageTotalDelta, MessagePane, MessageReader, type MailListFilter, type MessageChange } from './features/mail';
 import { AddAccountModal } from './features/accounts';
 import { ComposePane, DraftWelcome, DraftWorkspace, type ComposePaneHandle } from './features/compose';
+import { ContactsWorkspace } from './features/contacts';
 import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceModal } from './features/organize';
 import { CreateApiTokenModal, CreateMcpTokenModal, TokenWorkspace } from './features/developer';
 import { isBrowserRefreshShortcut, isEditableShortcutTarget, loadShortcutBindings, shortcutDefinitions, shortcutLabel, shortcutMatches, shortcutStorageKeyFor } from './features/shortcuts';
@@ -54,6 +55,7 @@ function App() {
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [activeDraft, setActiveDraft] = useState<Draft | undefined>();
   const [composeAccountId, setComposeAccountId] = useState<string | undefined>();
+  const [composeInitialTo, setComposeInitialTo] = useState<string[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -133,6 +135,7 @@ function App() {
         setRealMessages((current) => applyMessageChanges(current, changes, query, currentAccounts));
         setMessageTotal((current) => Math.max(0, current + messageTotalDelta(changes, query, currentAccounts)));
         setMessageStats((current) => applyMessageStatsChanges(current, changes, currentAccounts));
+        void api<{ contacts: Contact[] }>('/api/contacts').then((result) => setContacts(result.contacts)).catch(() => undefined);
       } catch {
         // A malformed optional event payload must not interrupt the current mailbox view.
       }
@@ -145,6 +148,7 @@ function App() {
   const visibleMessages = mailFilter === 'unread' ? messages.filter((message) => message.unread) : messages;
 
   useEffect(() => {
+    if (view === 'contacts' || view === 'tokens') { setMessagesLoading(false); setReady(true); return; }
     let cancelled = false;
     messageQueryRef.current = messageQuery;
     const timer = window.setTimeout(() => {
@@ -176,7 +180,7 @@ function App() {
   }, [view, activeMailbox]);
 
   useEffect(() => {
-    if (!selected || selected.text !== undefined) return;
+    if (view === 'contacts' || view === 'tokens' || !selected || selected.text !== undefined) return;
     let cancelled = false;
     void api<{ message: Message }>(`/api/messages/${selected.id}`).then(({ message }) => {
       if (!cancelled) setRealMessages((current) => current.map((item) => item.id === message.id
@@ -184,7 +188,7 @@ function App() {
         : item));
     }).catch((error) => { if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件正文加载失败' }); });
     return () => { cancelled = true; };
-  }, [selected?.id, selected?.text]);
+  }, [selected?.id, selected?.text, view]);
 
   const loadMoreMessages = useCallback(async () => {
     if (messagesLoading || !messagesHasMore) return;
@@ -205,7 +209,7 @@ function App() {
     try {
       const role = ['sent', 'archive', 'drafts', 'trash', 'junk'].includes(view)
         ? view
-        : view === 'inbox' || view === 'starred' || view === 'snoozed' ? 'inbox' : null;
+        : view === 'inbox' || view === 'starred' || view === 'snoozed' || view === 'contacts' ? 'inbox' : null;
       if (view === 'folder' && activeMailbox) await Promise.all(activeMailbox.targets.map((target) => api(`/api/accounts/${target.accountId}/mailboxes/sync`, { method: 'POST', body: JSON.stringify({ mailbox: target.path }) })));
       else if (role) await api(role === 'inbox' ? '/api/sync' : `/api/mailboxes/${role}/sync`, { method: 'POST' });
       setNotice({ kind: 'success', text: '同步任务已加入后台队列' });
@@ -315,6 +319,7 @@ function App() {
   }
 
   function selectScope(nextView: AppView, nextAccount = 'all', nextGroup: string | null = null) {
+    if ((view === 'contacts') !== (nextView === 'contacts')) setSearch('');
     setView(nextView); setAccountFilter(nextAccount); setGroupFilter(nextGroup); setActiveLabel(null); setActiveMailbox(null); setSidebarOpen(false); setSelectedId(null);
   }
 
@@ -329,8 +334,9 @@ function App() {
     input?.focus(); input?.select();
   }
 
-  function openCompose(accountId?: string) {
-    setComposeAccountId(accountId); setActiveDraft(undefined); setComposeMode('new'); setView('inbox'); setSidebarOpen(false);
+  function openCompose(accountId?: string, initialTo: string[] = []) {
+    if (initialTo.length > 0) setSearch('');
+    setComposeAccountId(accountId); setComposeInitialTo(initialTo); setActiveDraft(undefined); setComposeMode('new'); setView('inbox'); setSidebarOpen(false);
   }
 
   function saveShortcutBindings(bindings: ShortcutBindings) {
@@ -381,6 +387,7 @@ function App() {
       if (isBrowserRefreshShortcut(event)) return;
       const definition = shortcutDefinitions.find(({ id }) => shortcutMatches(event, shortcutBindings[id]));
       if (!definition) return;
+      if (definition.scope === 'mail' && (view === 'contacts' || view === 'tokens')) return;
       if (isEditableShortcutTarget(event.target) && definition.id !== 'focusSearch' && definition.id !== 'openShortcutSettings') return;
       event.preventDefault(); setContextTarget(null);
       switch (definition.id) {
@@ -408,17 +415,17 @@ function App() {
     {notice && <div className={`toast toast-${notice.kind}`}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
 
     <AppAccountRail user={user} accounts={accounts} accountFilter={accountFilter} onSelect={(accountId) => selectScope('inbox', accountId)} onAdd={() => setAddOpen(true)} onSettings={() => setSettingsTab('general')} onSwitchAccount={() => void logout()} onContextMenu={(event, accountId) => { event.preventDefault(); setContextTarget(accountId ? { kind: 'account', accountId, x: event.clientX, y: event.clientY } : { kind: 'background', x: event.clientX, y: event.clientY }); }} />
-    <AppSidebar user={user} accounts={accounts} groups={groups} workspaceFolders={workspaceFolders} labels={labels} messageStats={messageStats} draftsCount={drafts.length} view={view} accountFilter={accountFilter} groupFilter={groupFilter} activeLabel={activeLabel} activeMailbox={activeMailbox} expandedWorkspaces={expandedWorkspaces} sidebarOpen={sidebarOpen}
+    <AppSidebar user={user} accounts={accounts} groups={groups} workspaceFolders={workspaceFolders} labels={labels} messageStats={messageStats} draftsCount={drafts.length} contactsCount={contacts.length} view={view} accountFilter={accountFilter} groupFilter={groupFilter} activeLabel={activeLabel} activeMailbox={activeMailbox} expandedWorkspaces={expandedWorkspaces} sidebarOpen={sidebarOpen}
       onClose={() => setSidebarOpen(false)} onCompose={openCompose} onAddAccount={() => { setAddOpen(true); setSidebarOpen(false); }} onSettings={() => { setSettingsTab('general'); setSidebarOpen(false); }} onSelectScope={selectScope} onSelectMailbox={selectMailbox} onSelectLabel={selectLabel} onEditWorkspace={setWorkspaceOpen}
       onToggleWorkspace={(group) => setExpandedWorkspaces((current) => { const next = new Set(current); if (next.has(group)) next.delete(group); else next.add(group); return next; })} onContextTarget={setContextTarget} onLogout={() => void logout()} />
 
     <main className="workspace">
-      <AppTopbar sidebarCollapsed={sidebarCollapsed} sidebarOpen={sidebarOpen} search={search} searchShortcut={shortcutLabel(shortcutBindings.focusSearch)} searchInputRef={searchInputRef} onToggleSidebar={() => setSidebarCollapsed((current) => !current)} onOpenMobileSidebar={() => setSidebarOpen(true)} onSearchChange={setSearch} onNotifications={() => void openNotifications()} />
+      <AppTopbar sidebarCollapsed={sidebarCollapsed} sidebarOpen={sidebarOpen} search={search} searchPlaceholder={view === 'contacts' ? '搜索联系人姓名或邮箱' : '搜索当前范围内的邮件'} searchShortcut={shortcutLabel(shortcutBindings.focusSearch)} searchInputRef={searchInputRef} onToggleSidebar={() => setSidebarCollapsed((current) => !current)} onOpenMobileSidebar={() => setSidebarOpen(true)} onSearchChange={setSearch} onNotifications={() => void openNotifications()} />
 
-      {view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /> :
+      {view === 'contacts' ? <ContactsWorkspace contacts={contacts} search={search} onCompose={(contact) => openCompose(activeAccount?.id, [contact.address])} /> : view === 'tokens' ? <TokenWorkspace accounts={realAccounts} tokens={tokens} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
           {view === 'drafts' ? <DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> : <MessagePane title={groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddOpen(true)} />}
-          {composeMode ? <ComposePane ref={composePaneRef} key={`${composeMode}-${activeDraft?.id ?? selected?.id ?? composeAccountId ?? 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} initialAccountId={composeAccountId} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setComposeAccountId(undefined); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setComposeAccountId(undefined); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' && !selected ? <DraftWelcome onCreate={() => openCompose(activeAccount?.id)} /> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} defaultBodyView={preferences.defaultMessageView} onReply={() => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
+          {composeMode ? <ComposePane ref={composePaneRef} key={`${composeMode}-${(activeDraft?.id ?? selected?.id ?? composeAccountId ?? composeInitialTo.join(',')) || 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} initialAccountId={composeAccountId} initialTo={composeInitialTo} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /> : view === 'drafts' && !selected ? <DraftWelcome onCreate={() => openCompose(activeAccount?.id)} /> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} defaultBodyView={preferences.defaultMessageView} onReply={() => { setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}

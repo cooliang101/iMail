@@ -1,12 +1,13 @@
 import { Button } from '@fluentui/react-components';
-import { Archive, ArrowRight, ArrowsLeftRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Trash, Tray, WarningCircle, X } from '@phosphor-icons/react';
+import { AddressBook, Archive, ArrowRight, ArrowsLeftRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Trash, Tray, WarningCircle, X } from '@phosphor-icons/react';
 import type { Account } from '../../types';
 import type { AppView, ContextTarget, MessageStats, WorkspaceFolder } from '../../app-model';
 import { WorkspaceFolderItem, WorkspaceIcon } from '../organize';
 import { AccountProviderMark } from '../../components/provider-icons';
 
-export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, messageStats, draftsCount, view, accountFilter, groupFilter, activeLabel, activeMailbox, expandedWorkspaces, sidebarOpen, onClose, onCompose, onAddAccount, onSettings, onSelectScope, onSelectMailbox, onSelectLabel, onEditWorkspace, onToggleWorkspace, onContextTarget, onLogout }: {
+export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, messageStats, draftsCount, contactsCount, view, accountFilter, groupFilter, activeLabel, activeMailbox, expandedWorkspaces, sidebarOpen, onClose, onCompose, onAddAccount, onSettings, onSelectScope, onSelectMailbox, onSelectLabel, onEditWorkspace, onToggleWorkspace, onContextTarget, onLogout }: {
   user: { login: string; displayName: string }; accounts: Account[]; groups: string[]; workspaceFolders: Map<string, WorkspaceFolder[]>; labels: string[]; messageStats: MessageStats; draftsCount: number;
+  contactsCount: number;
   view: AppView; accountFilter: string; groupFilter: string | null; activeLabel: string | null; activeMailbox: WorkspaceFolder | null; expandedWorkspaces: Set<string>; sidebarOpen: boolean;
   onClose: () => void; onCompose: (accountId?: string) => void; onAddAccount: () => void; onSettings: () => void; onSelectScope: (view: AppView, accountId?: string, group?: string | null) => void;
   onSelectMailbox: (folder: WorkspaceFolder) => void; onSelectLabel: (label: string) => void; onEditWorkspace: (group: string | null) => void; onToggleWorkspace: (group: string) => void;
@@ -27,6 +28,7 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
       <button data-icon-tone="warning" className={view === 'starred' ? 'active' : ''} onClick={() => onSelectScope('starred')}><Star size={19} /><span>已加星标</span></button>
       <button data-icon-tone="info" className={view === 'sent' ? 'active' : ''} onClick={() => onSelectScope('sent')}><PaperPlaneTilt size={19} /><span>已发送</span></button>
       <button data-icon-tone="accent" className={view === 'drafts' ? 'active' : ''} onClick={() => onSelectScope('drafts')}><PencilSimple size={19} /><span>草稿</span><b>{draftsCount || ''}</b></button>
+      <button data-icon-tone="info" className={view === 'contacts' ? 'active' : ''} onClick={() => onSelectScope('contacts')}><AddressBook size={19} /><span>联系人</span><b>{contactsCount || ''}</b></button>
       <button data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => onSelectScope('snoozed')}><Clock size={19} /><span>稍后处理</span></button>
       <button data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => onSelectScope('archive')}><Archive size={19} /><span>归档</span></button>
       <button data-icon-tone="danger" className={view === 'trash' ? 'active' : ''} onClick={() => onSelectScope('trash')}><Trash size={19} /><span>已删除邮件</span></button>
