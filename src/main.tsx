@@ -8,7 +8,9 @@ import { AppThemeProvider } from './features/appearance';
 import { PlatformProvider } from './platform/runtime';
 import { registerWebServiceWorker } from './service-worker-registration';
 import { DesktopFrame } from './components/DesktopFrame';
+import { desktopLog, installDesktopLogging } from './desktop-logging';
 
+installDesktopLogging();
 registerWebServiceWorker();
 
 createRoot(document.getElementById('root')!).render(
@@ -20,3 +22,4 @@ createRoot(document.getElementById('root')!).render(
     </PlatformProvider>
   </StrictMode>,
 );
+void desktopLog('info', 'frontend.rendered', 'React root rendered');

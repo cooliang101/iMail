@@ -177,7 +177,13 @@ curl -fsS --cookie 'imail_session=<当前会话>' \
 - 持续出现 `[sync-idle]` 表示长连接无法稳定建立或被服务商/网络设备关闭；Worker 会按 0.5–30 秒退避重连，同时保留一分钟周期同步兜底。不支持 IDLE 的服务器会按 `IMAIL_SYNC_IDLE_REFRESH_MS` 执行 `STATUS`。
 - 前端 SSE 仅用于刷新界面；断开 SSE 不会影响 Worker。不要把网关订阅状态当成同步健康指标。
 
-本地模式可在“设置 → 服务连接 → 打开日志目录”查看轮转日志。`supervisor-status.json` 仅记录失败次数、固定原因代码、退出码和发生时间，可用于判断服务是否处于持续退避；它不包含邮箱凭据、会话或 Token。重新启用成功后旧诊断会自动清除。
+桌面端可在“设置 → 服务连接”分别打开两类轮转日志：
+
+- “应用日志”打开 `%LOCALAPPDATA%\com.cooliang.imail\logs`。`app.log` 记录桌面进程启动、Tauri 初始化、前端就绪、窗口/托盘操作、本地服务生命周期、正常退出、Rust panic，以及 WebView 的全局错误、未处理 Promise 和 `console.warn/error`。单文件上限 5 MB，最多保留 3 份。
+- “服务日志”打开 `%LOCALAPPDATA%\com.cooliang.imail\local-service\logs`。`service.log` 记录 API、同步 Worker、停机、致命异常和业务诊断；超过 5 MB 后轮转为 `service.log.1`。
+- `local-service\supervisor-status.json` 仅在守护服务持续失败时记录失败次数、固定原因代码、退出码和发生时间；服务恢复健康后自动清除。
+
+应用和服务对外部错误文本执行统一脱敏，邮箱地址、Authorization/Cookie、密码、OAuth code/state/Token、client secret 和加密字段不得进入日志。提交问题时优先提供相关时间段的日志，不要通过关闭脱敏或手工打印凭据补充信息。
 
 卸载桌面应用或点击“移除运行文件”默认保留 `local-service/data`。“设置 → 服务连接”只管理服务模式、端口和守护生命周期，不提供数据删除。登录用户若进入“设置 → 隐私与数据 → 清除我的邮箱数据”，必须先核对范围，再提交当前 iMail 密码和固定确认文字；服务只清除该用户的邮箱账户与授权、邮件缓存、草稿、联系人、开发者令牌和同步状态，不删除登录账号、服务程序、主密钥或其他用户的数据。该操作无法撤销：需要保留邮件等完整内容时应事先创建服务数据备份；“邮箱授权信息导出”只保留连接配置与凭据，不包含邮件、草稿或联系人。
 

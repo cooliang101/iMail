@@ -740,6 +740,7 @@ pub async fn local_service_enable(
     let selected_port = port
         .or_else(|| previous_config.as_ref().map(|value| value.port))
         .unwrap_or(DEFAULT_LOCAL_SERVICE_PORT);
+    log::info!(target: "desktop", "[service.enable] requested port={selected_port}");
     validate_local_service_port(selected_port)?;
     let runtime = root.join("runtime");
     let data_dir = root.join("data");
@@ -984,11 +985,13 @@ pub async fn local_service_enable(
             if let Some(deployment) = executable_deployment.take() {
                 let _ = deployment.commit();
             }
+            log::info!(target: "desktop", "[service.enabled] local service is healthy port={selected_port}");
             return Ok(status_from_config(&root, Some(config), None).await);
         }
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
     let error = "本地服务启动超时，请查看服务日志".to_string();
+    log::error!(target: "desktop", "[service.enable_failed] startup timed out port={selected_port}");
     let rollback = rollback_activation(
         &path,
         &config,
@@ -1178,6 +1181,7 @@ pub fn run_uninstall_cleanup_from_args() -> Option<Result<(), String>> {
 
 #[tauri::command]
 pub async fn local_service_pause(app: AppHandle) -> Result<LocalServiceStatus, String> {
+    log::info!(target: "desktop", "[service.pause] requested");
     let path = config_path(&app)?;
     let root = local_service_root(&app)?;
     let config = match read_managed_config(&root, &path) {
@@ -1221,11 +1225,13 @@ pub async fn local_service_pause(app: AppHandle) -> Result<LocalServiceStatus, S
         }
         return Err(format!("暂停本地服务超时：{}", details.join("；")));
     }
+    log::info!(target: "desktop", "[service.paused] local service stopped");
     Ok(status_from_config(&root, Some(config), None).await)
 }
 
 #[tauri::command]
 pub async fn local_service_remove(app: AppHandle) -> Result<LocalServiceStatus, String> {
+    log::info!(target: "desktop", "[service.remove] requested; user data will be preserved");
     let path = config_path(&app)?;
     let root = local_service_root(&app)?;
     let config = if path.exists() {
@@ -1284,6 +1290,7 @@ pub async fn local_service_remove(app: AppHandle) -> Result<LocalServiceStatus, 
                 .map_err(|error| format!("删除本地服务目录失败：{error}"))?;
         }
     }
+    log::info!(target: "desktop", "[service.removed] runtime and daemon registration removed");
     Ok(status_from_config(&root, None, None).await)
 }
 
@@ -1393,6 +1400,7 @@ fn wait_supervisor_backoff(config: &DaemonConfig, path: &Path, failures: u32) ->
 pub fn local_service_open_logs(app: AppHandle) -> Result<(), String> {
     let logs = local_service_root(&app)?.join("logs");
     fs::create_dir_all(&logs).map_err(|error| format!("创建服务日志目录失败：{error}"))?;
+    log::info!(target: "desktop", "[logs.open] service log directory requested");
     #[cfg(windows)]
     {
         return Command::new("explorer.exe")

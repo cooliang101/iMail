@@ -13,7 +13,8 @@ import {
   type ServiceMode,
 } from '../../service-config';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
-import { desktopEnableLocalService, desktopEnableLocalServiceAtPort, desktopLocalServiceStatus, desktopOpenLocalServiceLogs, desktopPauseLocalService, desktopRemoveLocalService, type LocalServiceStatus } from '../../local-service';
+import { desktopEnableLocalService, desktopEnableLocalServiceAtPort, desktopLocalServiceStatus, desktopOpenAppLogs, desktopOpenLocalServiceLogs, desktopPauseLocalService, desktopRemoveLocalService, type LocalServiceStatus } from '../../local-service';
+import { describeDesktopLogValue, desktopLog } from '../../desktop-logging';
 import { ServiceAddressEditor } from './ServiceAddressEditor';
 import { LocalPortRecovery, localPortConflictMessage, suggestedLocalServicePort } from './LocalPortRecovery';
 import { serviceErrorMessage, testServiceConnection } from './service-connection';
@@ -66,14 +67,17 @@ export function ServicePanel() {
   async function inspect(url = configuredServiceUrl()) {
     setError('');
     try { setInfo(await testServiceConnection(url)); }
-    catch (reason) { setInfo(undefined); setError(serviceErrorMessage(reason, '服务不可用')); }
+    catch (reason) {
+      setInfo(undefined); setError(serviceErrorMessage(reason, '服务不可用'));
+      void desktopLog('warn', 'service.inspect_failed', describeDesktopLogValue(reason));
+    }
     if (desktop) await desktopLocalServiceStatus().then((status) => {
       setLocalStatus(status);
       if (status.error && localPortConflictMessage(status.error)) {
         setLocalPort(String(suggestedLocalServicePort(configuredLocalServicePort())));
         setPortRecoveryOpen(true);
       }
-    }).catch(() => undefined);
+    }).catch((reason) => { void desktopLog('warn', 'service.status_failed', describeDesktopLogValue(reason)); });
   }
 
   useEffect(() => {
@@ -92,6 +96,7 @@ export function ServicePanel() {
       setRemoteEditorOpen(false);
       announceServiceChange();
     } catch (reason) {
+      void desktopLog('error', 'service.activate_failed', describeDesktopLogValue(reason));
       setError(`本地服务尚未就绪：${serviceErrorMessage(reason, '未知错误')}`);
       if (localPortConflictMessage(reason)) {
         if (!portRecoveryOpen) setLocalPort(String(suggestedLocalServicePort(configuredLocalServicePort())));
@@ -107,7 +112,10 @@ export function ServicePanel() {
       setPortRecoveryOpen(false);
       setInfo(undefined); announceServiceChange();
     }
-    catch (reason) { setError(serviceErrorMessage(reason, '暂停本地服务失败')); }
+    catch (reason) {
+      void desktopLog('error', 'service.pause_failed', describeDesktopLogValue(reason));
+      setError(serviceErrorMessage(reason, '暂停本地服务失败'));
+    }
     finally { setBusy(false); }
   }
 
@@ -119,7 +127,10 @@ export function ServicePanel() {
       setPortRecoveryOpen(false);
       setInfo(undefined); announceServiceChange();
     }
-    catch (reason) { setError(serviceErrorMessage(reason, '移除本地服务失败')); }
+    catch (reason) {
+      void desktopLog('error', 'service.remove_failed', describeDesktopLogValue(reason));
+      setError(serviceErrorMessage(reason, '移除本地服务失败'));
+    }
     finally { setBusy(false); }
   }
 
@@ -148,12 +159,15 @@ export function ServicePanel() {
     {desktop && portRecoveryOpen && <LocalPortRecovery port={localPort} busy={busy} onPortChange={setLocalPort} onRetry={() => void activateLocal(true)} />}
 
     {(!desktop || mode === 'remote' || remoteEditorOpen) && <ServiceAddressEditor onCancel={remoteEditorOpen && mode !== 'remote' ? () => setRemoteEditorOpen(false) : undefined} onSaved={() => { setMode('remote'); setPortRecoveryOpen(false); setRemoteEditorOpen(false); void inspect(); if (desktop) void desktopLocalServiceStatus().then(setLocalStatus).catch(() => undefined); }} />}
-    {desktop && (mode === 'local' || localStatus?.installed || localStatus?.dataPresent) && <div className="service-local-lifecycle"><p className="service-rollout-note">{localServiceNote(mode, localStatus)}</p>
-      {localStatus?.installed && <div className="service-lifecycle-actions">
-        <Button appearance="subtle" icon={<FolderOpen size={16} />} onClick={() => void desktopOpenLocalServiceLogs().catch((reason) => setError(serviceErrorMessage(reason, '打开日志目录失败')))} disabled={busy}>打开日志目录</Button>
+    {desktop && <div className="service-local-lifecycle">{(mode === 'local' || localStatus?.installed || localStatus?.dataPresent) && <p className="service-rollout-note">{localServiceNote(mode, localStatus)}</p>}
+      <div className="service-lifecycle-actions">
+        <Button appearance="subtle" icon={<FolderOpen size={16} />} onClick={() => void desktopOpenAppLogs().catch((reason) => setError(serviceErrorMessage(reason, '打开应用日志失败')))} disabled={busy}>应用日志</Button>
+        {localStatus?.installed && <Button appearance="subtle" icon={<FolderOpen size={16} />} onClick={() => void desktopOpenLocalServiceLogs().catch((reason) => setError(serviceErrorMessage(reason, '打开服务日志失败')))} disabled={busy}>服务日志</Button>}
+        {localStatus?.installed && <>
         {localStatus.enabled && <Button appearance="subtle" icon={<Pause size={16} />} onClick={() => void pauseLocal()} disabled={busy}>暂停本地服务</Button>}
         <Button appearance="subtle" icon={<Trash size={16} />} onClick={() => void removeLocal()} disabled={busy}>移除运行文件</Button>
-      </div>}
+        </>}
+      </div>
     </div>}
     </div>
   </section>;

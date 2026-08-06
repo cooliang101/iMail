@@ -2,6 +2,7 @@ import path from 'node:path';
 import { closeStore } from '../store.js';
 import { closeSyncStore } from './store.js';
 import { startSyncWorker } from './worker-runtime.js';
+import { installRuntimeErrorLogging, runtimeLog } from '../runtime-logging.js';
 
 export function parentProcessAlive(parentPid: number, signal: typeof process.kill = process.kill) {
   if (!Number.isSafeInteger(parentPid) || parentPid <= 0) return false;
@@ -10,6 +11,7 @@ export function parentProcessAlive(parentPid: number, signal: typeof process.kil
 }
 
 export function runSyncWorkerProcess() {
+  installRuntimeErrorLogging('sync-worker');
   const worker = startSyncWorker();
   let closing = false;
   let parentTimer: NodeJS.Timeout | undefined;
@@ -30,7 +32,7 @@ export function runSyncWorkerProcess() {
     }, 1_000);
     parentTimer.unref();
   }
-  console.log(`[sync-worker] running as ${worker.workerId}`);
+  runtimeLog('INFO', 'sync-worker.started', `worker=${worker.workerId}`);
   return worker;
 }
 

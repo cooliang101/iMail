@@ -47,3 +47,7 @@ export function desktopRemoveLocalService(invoker: DesktopHttpInvoker = tauriInv
 export function desktopOpenLocalServiceLogs(invoker: DesktopHttpInvoker = tauriInvoke) {
   return invoker<void>('local_service_open_logs');
 }
+
+export function desktopOpenAppLogs(invoker: DesktopHttpInvoker = tauriInvoke) {
+  return invoker<void>('desktop_open_app_logs');
+}

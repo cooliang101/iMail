@@ -10,6 +10,7 @@ import { createLatestServiceCheckRunner, runWithReadySelectedService, serviceErr
 import { configuredLocalServiceSuspended, configuredServiceMode, configuredServiceUrl } from '../../service-config';
 import { desktopEnableLocalService } from '../../local-service';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
+import { describeDesktopLogValue, desktopLog } from '../../desktop-logging';
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -37,7 +38,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setSetupRequired(status.setupRequired); setRegistrationOpen(status.registrationOpen); setMode(status.setupRequired ? 'register' : 'login'); setUser(status.user);
       if (status.user) rememberUser(status.user);
       },
-      onError(reason) { setUser(null); setError(serviceErrorMessage(reason, '无法连接 iMail 服务')); },
+      onError(reason) {
+        void desktopLog('error', 'startup.service_failed', describeDesktopLogValue(reason));
+        setUser(null); setError(serviceErrorMessage(reason, '无法连接 iMail 服务'));
+      },
       onSettled() { setChecking(false); },
     });
   }

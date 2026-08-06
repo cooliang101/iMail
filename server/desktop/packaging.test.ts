@@ -145,6 +145,8 @@ describe('desktop packaging configuration', () => {
     expect(runtime).toContain('TrayIconBuilder::with_id("main")');
     expect(runtime).toContain('MenuItem::with_id(app, "compose", "写邮件"');
     expect(runtime).toContain('app.emit("desktop-compose", ())');
-    expect(runtime).toContain('"quit" => app.exit(0)');
+    expect(runtime).toContain('"quit" => {');
+    expect(runtime).toContain('[process.quit] quit requested from tray menu');
+    expect(runtime).toContain('app.exit(0)');
   });
 });

@@ -4,6 +4,7 @@ import { createServer, type Server } from 'node:http';
 import { app } from './app.js';
 import { attachGatewayWebSocket } from './gateway/websocket.js';
 import { closeAuthStore } from './auth/http.js';
+import { runtimeLog } from './runtime-logging.js';
 
 export { app, createApp } from './app.js';
 
@@ -26,9 +27,10 @@ export function startServer() {
         : fork(workerEntry, [], {
           execArgv: configuredWorker ? [] : ['--import', 'tsx'], stdio: ['inherit', 'inherit', 'inherit', 'ipc'], env: environment,
         });
+      runtimeLog('INFO', 'sync-worker.spawned', `mode=${process.env.IMAIL_PACKAGED_SERVICE === 'true' ? 'packaged' : 'development'}`);
       syncWorker.once('exit', (code, signal) => {
         if (closing || !server.listening) return;
-        console.error(`[sync-worker] exited unexpectedly (${signal ?? code ?? 'unknown'}); restarting`);
+        runtimeLog('ERROR', 'sync-worker.exited', `status=${signal ?? code ?? 'unknown'} restart=true`);
         workerRestartTimer = setTimeout(spawnWorker, 1_000);
       });
     };
@@ -41,14 +43,15 @@ export function startServer() {
     else if (syncWorker && !syncWorker.killed) syncWorker.kill('SIGTERM');
     closeAuthStore();
   });
-  return server.listen(port, host, () => console.log(`iMail API running at http://${host}:${port}`));
+  return server.listen(port, host, () => runtimeLog('INFO', 'service.started', `host=${host} port=${port} pid=${process.pid}`));
 }
 
 export function installServerSignalHandlers(server: Server) {
   let stopping = false;
-  const shutdown = () => {
+  const shutdown = (reason: string) => {
     if (stopping) return;
     stopping = true;
+    runtimeLog('INFO', 'service.shutdown', `reason=${reason}`);
     const forced = setTimeout(() => process.exit(1), 10_000);
     forced.unref();
     server.close((error) => {
@@ -56,7 +59,7 @@ export function installServerSignalHandlers(server: Server) {
       process.exit(error ? 1 : 0);
     });
   };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
-  process.once('disconnect', shutdown);
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('disconnect', () => shutdown('disconnect'));
 }
