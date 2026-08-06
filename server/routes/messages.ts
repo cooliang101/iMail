@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { buildNotifications } from '../domain/notifications.js';
 import { notFound } from '../domain/errors.js';
 import { asyncRoute } from '../http/async-route.js';
-import { contactLogoKey, contactRootLogoKey } from '../contact-model.js';
+import { contactLogoKey, contactRootLogoKey, contactsNeedLogoUpdate } from '../contact-model.js';
 import { mailboxRoleSchema, sendSchema } from '../http/schemas.js';
 import { downloadAttachment, moveRemoteMessage, sendMessage, updateRemoteMessageFlags } from '../mail.js';
 import { senderLogo } from '../sender-logo.js';
@@ -17,11 +17,17 @@ function contactView<T extends { address: string; logo?: object }>(contact: T) {
   return { ...contact, logo: { ...contact.logo, url: logoUrl(contact.address) } };
 }
 
-async function rememberLogo(address: string, logo: Awaited<ReturnType<typeof senderLogo>>) {
+async function rememberLogo(
+  address: string,
+  logo: Awaited<ReturnType<typeof senderLogo>>,
+  currentContacts?: Awaited<ReturnType<typeof readStore>>['contacts'],
+) {
   if (!logo) return;
   const exactKey = contactLogoKey(address);
   const rootKey = contactRootLogoKey(address);
   if (!exactKey || !rootKey) return;
+  const storedContacts = currentContacts ?? (await readStore()).contacts ?? [];
+  if (!contactsNeedLogoUpdate(storedContacts, address, logo)) return;
   await updateStore((data) => {
     for (const contact of data.contacts ?? []) {
       const contactExactKey = contactLogoKey(contact.address);
@@ -69,7 +75,7 @@ messagesRouter.get('/contacts/logo', asyncRoute(async (req, res) => {
     .sort((left, right) => right.date.localeCompare(left.date))[0];
   const logo = await senderLogo(message ?? { from: { name: '', address }, text: '', html: '' });
   if (!logo) { res.setHeader('Cache-Control', 'private, max-age=3600'); res.status(404).end(); return; }
-  await rememberLogo(address, logo);
+  await rememberLogo(address, logo, data.contacts ?? []);
   res.setHeader('Content-Type', logo.contentType);
   res.setHeader('Content-Length', String(logo.content.length));
   res.setHeader('Cache-Control', 'private, max-age=86400');

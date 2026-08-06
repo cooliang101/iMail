@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileContacts } from './contact-model.js';
+import { contactsNeedLogoUpdate, reconcileContacts } from './contact-model.js';
 import type { CachedMessage, MailAccount } from './types.js';
 
 const account: MailAccount = {
@@ -28,5 +28,25 @@ describe('reconcileContacts', () => {
       { address: 'alice@example.net', messageCount: 2 },
       { address: 'bob@example.net', messageCount: 1 },
     ]);
+  });
+});
+
+describe('contactsNeedLogoUpdate', () => {
+  const logo = {
+    key: 'domain:example.net', contentType: 'image/png', sourceUrl: 'https://example.net/logo.png', fetchedAt: '2026-08-05T00:00:00.000Z',
+  };
+
+  it('skips a store write when every related contact already has the cached logo metadata', () => {
+    expect(contactsNeedLogoUpdate([
+      { address: 'alice@mail.example.net', name: 'Alice', messageCount: 1, lastContactAt: logo.fetchedAt, logo },
+      { address: 'bob@example.net', name: 'Bob', messageCount: 1, lastContactAt: logo.fetchedAt, logo },
+    ], 'alice@mail.example.net', logo)).toBe(false);
+  });
+
+  it('updates the store when a related contact is missing the shared logo metadata', () => {
+    expect(contactsNeedLogoUpdate([
+      { address: 'alice@mail.example.net', name: 'Alice', messageCount: 1, lastContactAt: logo.fetchedAt, logo },
+      { address: 'bob@example.net', name: 'Bob', messageCount: 1, lastContactAt: logo.fetchedAt },
+    ], 'alice@mail.example.net', logo)).toBe(true);
   });
 });

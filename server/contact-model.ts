@@ -23,6 +23,24 @@ export function contactLogoKeys(address: string) {
   return exact && root ? { exact, root } : null;
 }
 
+function sameContactLogo(left: ContactLogo | undefined, right: ContactLogo) {
+  return left?.key === right.key
+    && left.contentType === right.contentType
+    && left.sourceUrl === right.sourceUrl
+    && left.fetchedAt === right.fetchedAt;
+}
+
+export function contactsNeedLogoUpdate(contacts: MailContact[], address: string, logo: ContactLogo) {
+  const keys = contactLogoKeys(address);
+  if (!keys) return false;
+  const useRootKey = logo.key === keys.root;
+  return contacts.some((contact) => {
+    const contactKeys = contactLogoKeys(contact.address);
+    const matches = useRootKey ? contactKeys?.root === keys.root : contactKeys?.exact === keys.exact;
+    return Boolean(matches) && !sameContactLogo(contact.logo, logo);
+  });
+}
+
 export function reconcileContacts(data: Pick<StoreData, 'accounts' | 'messages' | 'contacts'>): MailContact[] {
   const ownAddresses = new Set(data.accounts.map((account) => account.email.trim().toLocaleLowerCase()));
   const previousByAddress = new Map((data.contacts ?? []).map((contact) => [contact.address.toLocaleLowerCase(), contact]));
