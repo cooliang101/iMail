@@ -51,6 +51,8 @@ beforeAll(async () => {
   otherAccount = { ...account, id: crypto.randomUUID(), email: 'other@example.com' };
   ({ withUserContext } = await import('../auth/context.js'));
   await withUserContext('websocket-test-user', () => updateStore((data) => { data.accounts = [account, otherAccount]; data.messages = []; data.tokens = []; }));
+  const { updateExternalAccessSettings } = await import('../external-access.js');
+  await withUserContext('websocket-test-user', () => updateExternalAccessSettings({ gatewayEnabled: true }));
   rawToken = (await withUserContext('websocket-test-user', () => tokens.issueToken({ name: 'WebSocket test', scopes: ['messages:read'], accountIds: [account.id], ttlSeconds: 3600 }))).raw;
   server = createServer(createApp());
   websocket.attachGatewayWebSocket(server, { eventPollIntervalMs: 10 });

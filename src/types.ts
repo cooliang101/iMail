@@ -15,6 +15,11 @@ export type ServiceInfo = {
   };
 };
 
+export type ExternalAccessSettings = {
+  gatewayEnabled: boolean;
+  mcpEnabled: boolean;
+};
+
 export type MailboxFolder = {
   path: string;
   name: string;

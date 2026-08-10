@@ -6,6 +6,7 @@ import { createMailMcpServer } from './server.js';
 import { authenticateToken } from '../tokens.js';
 import { enterUserContext } from '../auth/context.js';
 import { recordSecurityEvent } from '../auth/http.js';
+import { readExternalAccessSettings } from '../external-access.js';
 
 const handler = createMcpHandler(() => createMailMcpServer());
 const AUDITED_MCP_TOOLS = new Set([
@@ -72,6 +73,7 @@ mcpRouter.all('/mcp', async (req, res) => {
   }
   if (!token.ownerId || token.ownerId === '__legacy__') { res.status(401).json({ error: 'MCP 授权码缺少应用账号归属，请登录后重新创建' }); return; }
   enterUserContext(token.ownerId);
+  if (!(await readExternalAccessSettings()).mcpEnabled) { res.status(403).json({ error: 'MCP 尚未在 iMail 界面中启用' }); return; }
   const toolName = req.body?.method === 'tools/call' && typeof req.body?.params?.name === 'string'
     ? req.body.params.name
     : undefined;

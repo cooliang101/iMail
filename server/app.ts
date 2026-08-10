@@ -17,6 +17,7 @@ import { createServiceInfoRouter } from './routes/service-info.js';
 import { installWebClient, resolveWebClientRoot } from './web-client.js';
 import { configuredCorsOrigins, productionSecurity } from './http/production-security.js';
 import { securityRouter } from './routes/security.js';
+import { externalAccessRouter } from './routes/external-access.js';
 
 export function createApp(options: { webRoot?: string | false } = {}) {
   const app = express();
@@ -37,6 +38,7 @@ export function createApp(options: { webRoot?: string | false } = {}) {
   app.use('/api', preferencesRouter);
   app.use('/api', draftsRouter);
   app.use('/api', developerTokensRouter);
+  app.use('/api', externalAccessRouter);
   app.use('/api', securityRouter);
   app.use('/gateway', gatewayDocsRouter);
   app.use('/gateway/v1', gatewayRouter);

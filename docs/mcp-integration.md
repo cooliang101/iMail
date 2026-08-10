@@ -1,5 +1,7 @@
 # MCP 接入指南
 
+iMail 默认关闭 MCP 调用。先在“外部接入 → MCP”中手动启用；开关即时生效、按应用账号保存，且不会同时启用独立的 API Gateway。
+
 iMail 为可信 Agent 提供 Streamable HTTP MCP 接入，使用“外部接入”页面签发的短期 `mcp:full` 授权码。普通 API 网关 Token 不能调用 MCP。
 
 每个 MCP 授权码都归属于创建它的应用账号。`mcp:full` 表示管理该应用账号当前及未来接入的全部邮箱，不会越过应用账号边界读取其他用户的数据。
@@ -8,7 +10,7 @@ iMail 为可信 Agent 提供 Streamable HTTP MCP 接入，使用“外部接入�
 
 ## 1. 签发授权码
 
-1. 启动 iMail，进入“外部接入”，切换到“MCP”标签页。
+1. 启动 iMail，进入“外部接入”，切换到“MCP”标签页并启用 MCP 接入。
 2. 点击“创建 MCP 授权码”。
 3. 选择有效时间并创建，立即复制以 `imail_mcp_` 开头的授权码。
 4. 用完后在同一页面撤销。

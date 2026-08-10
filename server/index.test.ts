@@ -71,6 +71,7 @@ beforeEach(async () => {
   await withUserContext(appUserId, () => updateStore((data) => { data.accounts = [account]; data.messages = []; data.tokens = []; data.drafts = []; }));
   getSyncStore().deleteAccountData(account.id); getSyncStore().ensurePolicy(account.id);
   await request('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startupView: 'inbox', markReadOnOpen: true, defaultMessageView: 'source', notificationKinds: { unread: true, snooze: true, error: true } }) });
+  await request('/api/external-access', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gatewayEnabled: true, mcpEnabled: true }) });
 });
 
 async function request(route: string, init?: RequestInit) {
@@ -421,6 +422,39 @@ describe('iMail HTTP API', () => {
     ]));
     expect(JSON.stringify(afterAccountRemoval.body)).not.toContain(account.encryptedSecret);
     expect((await fetch(`${baseUrl}/api/security/audit-events`)).status).toBe(401);
+  });
+
+  it('keeps external access off until enabled in the application and applies changes immediately', async () => {
+    const gatewayToken = await request('/api/developer-tokens', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Local gateway', scopes: ['messages:read'], mailboxes: [account.email], ttlSeconds: 3600 }),
+    });
+    const mcpToken = await request('/api/developer-tokens', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Local MCP', scopes: ['mcp:full'], mailboxes: [], ttlSeconds: 3600 }),
+    });
+    const disabled = await request('/api/external-access', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gatewayEnabled: false, mcpEnabled: false }),
+    });
+    expect(disabled.body.settings).toEqual({ gatewayEnabled: false, mcpEnabled: false });
+    expect((await request('/api/external-access')).body.settings).toEqual(disabled.body.settings);
+
+    const gateway = await fetch(`${baseUrl}/gateway/v1/messages`, { headers: { Authorization: `Bearer ${gatewayToken.body.token}` } });
+    expect(gateway.status).toBe(403);
+    expect((await gateway.json()).error.code).toBe('GATEWAY_DISABLED');
+    const initialize = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'vitest', version: '1.0.0' } } };
+    const mcp = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${mcpToken.body.token}` },
+      body: JSON.stringify(initialize),
+    });
+    expect(mcp.status).toBe(403);
+
+    await request('/api/external-access', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gatewayEnabled: true }),
+    });
+    expect((await fetch(`${baseUrl}/gateway/v1/messages`, { headers: { Authorization: `Bearer ${gatewayToken.body.token}` } })).status).toBe(200);
   });
 
   it('serves a full mail-management MCP endpoint only to mcp:full authorization codes', async () => {

@@ -6,6 +6,8 @@ import type { DeveloperToken } from '../types.js';
 import { getSyncStore } from '../sync/store.js';
 import type { integrationMessageSummary } from '../domain/message-views.js';
 import { requestHostAllowed, requestOriginAllowed } from '../http/production-security.js';
+import { withUserContext } from '../auth/context.js';
+import { readExternalAccessSettings } from '../external-access.js';
 
 const EVENTS_PATH = '/gateway/v1/events';
 const AUTH_TIMEOUT_MS = 5_000;
@@ -50,6 +52,12 @@ export function attachGatewayWebSocket(server: Server, options: { eventPollInter
     if (!token || !token.ownerId || token.ownerId === '__legacy__') {
       send(session.socket, { type: 'error', error: { code: 'UNAUTHORIZED', message: 'Token 无效、已过期或缺少 messages:read 权限' } });
       session.socket.close(1008, 'Unauthorized');
+      return;
+    }
+    const enabled = await withUserContext(token.ownerId, () => readExternalAccessSettings());
+    if (!enabled.gatewayEnabled) {
+      send(session.socket, { type: 'error', error: { code: 'GATEWAY_DISABLED', message: '本地网关尚未在 iMail 界面中启用' } });
+      session.socket.close(1008, 'Gateway disabled');
       return;
     }
     clearTimeout(session.authTimer);
@@ -113,12 +121,15 @@ export function attachGatewayWebSocket(server: Server, options: { eventPollInter
       session.delivery = session.delivery.then(async () => {
         const active = await authenticateToken(session.rawToken, 'messages:read');
         if (!active || !active.ownerId || active.ownerId === '__legacy__') { session.socket.close(1008, 'Token expired or revoked'); return; }
+        const enabled = await withUserContext(active.ownerId, () => readExternalAccessSettings());
+        if (!enabled.gatewayEnabled) { session.socket.close(1008, 'Gateway disabled'); return; }
         send(session.socket, { id: event.id, type: event.type, occurredAt: event.occurredAt, data: event.data });
       }).catch(() => session.socket.close(1011, 'Event delivery failed'));
     }
   };
   let eventCursor = getSyncStore().latestEventId();
   const eventTimer = setInterval(() => {
+    if (sessions.size === 0) { eventCursor = getSyncStore().latestEventId(); return; }
     for (const event of getSyncStore().listEvents(eventCursor)) {
       eventCursor = event.id;
       if (event.type !== 'message.created') continue;

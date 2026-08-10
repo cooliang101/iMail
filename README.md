@@ -179,6 +179,8 @@ APP_MASTER_KEY=请替换为64位十六进制值
 
 ## 外部接入
 
+Gateway 与 MCP 默认关闭。进入“外部接入”后，可在各自标签页手动启用；两个开关彼此独立、即时生效且按应用账号保存。关闭后已有授权码继续保留，但对应外部请求会被拒绝，核心应用 `/api` 与后台同步不受影响。
+
 进入界面底部的“外部接入”。“API 网关”标签页用于选择邮箱、API 权限和有效时间；“MCP”标签页用于为可信 Agent 创建独立授权码、复制 Streamable HTTP 配置，并查看或复制仓库中的原始 MCP 接入文档。API Token 以 `imail_` 开头，MCP 授权码以 `imail_mcp_` 开头；完整凭据只在创建成功时显示一次，服务端只保存 SHA-256 哈希。
 
 基础地址：
@@ -286,7 +288,7 @@ iMail 内置基于官方 TypeScript SDK v2 的 Streamable HTTP MCP 服务。MCP 
 
 ### Streamable HTTP
 
-服务随 iMail API 一起启动，MCP 地址为：
+在“外部接入 → MCP”中启用后，MCP 地址为：
 
 ```text
 http://127.0.0.1:8787/mcp
