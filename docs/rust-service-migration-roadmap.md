@@ -186,9 +186,9 @@ interface MailService {
 cargo fmt --all --check --manifest-path rust/Cargo.toml
 cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings
 cargo test --workspace --all-features --manifest-path rust/Cargo.toml
-npm run typecheck
-npm test
-npm run build
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
 在 Rust workspace 尚未建立或某 feature 尚未存在的早期阶段，只运行当前阶段已有命令，但不得跳过现有 npm 门禁。
@@ -398,9 +398,9 @@ npm run build
 
 现有数据副本预检已完成：新 R5 snapshot 的 Node/Rust 字段与凭据摘要一致；最终写入副本完成 4 个历史 due job 和 1 个 rerun recovery，5 次执行全部成功、最终 queued 为 0，16 个既有 UIDVALIDITY/UID/MODSEQ 及领域数据计数全部保持。证据见 `docs/rust-migration-r5-data-copy-preflight.md`。
 
-专用邮箱验收驱动已实现为 `npm run rust:mail-acceptance`：默认拒绝运行，要求专用账户/远程写入双 guard，验证连接、自投递、MIME、附件、flags、真实取消、重连和归档，不删除邮件且只输出脱敏报告。配置见 `docs/rust-mail-acceptance.md`。
+专用邮箱验收驱动已实现为 `npm --prefix frontend run rust:mail-acceptance`：默认拒绝运行，要求专用账户/远程写入双 guard，验证连接、自投递、MIME、附件、flags、真实取消、重连和归档，不删除邮件且只输出脱敏报告。配置见 `docs/rust-mail-acceptance.md`。
 
-离线资源门禁已实现为 `npm run rust:runtime-soak`：只接受带备份清单、无 queued job 的数据副本，拒绝 `.data` 与覆盖报告；60 秒 release 基线的 RSS 峰值为 9,670,656 bytes，零任务且优雅关闭。证据及限制见 `docs/rust-migration-r5-resource-report.md`。
+离线资源门禁已实现为 `npm --prefix frontend run rust:runtime-soak`：只接受带备份清单、无 queued job 的数据副本，拒绝 `.data` 与覆盖报告；60 秒 release 基线的 RSS 峰值为 9,670,656 bytes，零任务且优雅关闭。证据及限制见 `docs/rust-migration-r5-resource-report.md`。
 
 下一批：准备专用邮箱的真实断网重连、取消、Node/Rust 网络增量快照和数小时以上资源验收。当前正式运行路径仍为 Node。
 

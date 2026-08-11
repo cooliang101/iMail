@@ -15,7 +15,7 @@ if (process.env.CI !== 'true' && process.env.IMAIL_ALLOW_INSTALLER_SMOKE !== 'tr
 const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(root, 'src-tauri', 'target');
 const bundleDir = path.join(cargoTargetDir, 'x86_64-pc-windows-msvc', 'release', 'bundle', 'nsis');
 const installerName = (await readdir(bundleDir)).find((name) => name.endsWith('-setup.exe'));
-if (!installerName) throw new Error('缺少 NSIS 安装包，请先执行 npm run build:desktop:windows');
+if (!installerName) throw new Error('缺少 NSIS 安装包，请先执行 npm --prefix frontend run build:desktop:windows');
 
 const installDir = path.join(process.env.LOCALAPPDATA || '', 'iMail');
 const localServiceRoot = path.join(process.env.LOCALAPPDATA || '', 'com.cooliang.imail', 'local-service');

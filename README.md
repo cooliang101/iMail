@@ -48,8 +48,8 @@ Outlook / Hotmail、Gmail、QQ、Yahoo、iCloud 与通用 IMAP 均按 MVP 接入
 前端开发需要 Node.js 22.5 或更新版本；服务核心和正式运行时使用 Rust。
 
 ```bash
-npm install
-npm run dev
+npm --prefix frontend install
+npm --prefix frontend run dev
 ```
 
 浏览器访问 `http://localhost:5173`。API 默认只监听 `127.0.0.1:8787`，不会暴露给局域网。
@@ -59,8 +59,8 @@ API 启动器默认同时拉起独立同步 Worker。Worker 的任务、租约�
 开发服务使用 `npm start` 启动。远程生产构建会把 Web、API 和同步 Worker 作为同一发布单元，浏览器默认同源连接：
 
 ```bash
-npm run build:remote
-npm run start:remote
+npm --prefix frontend run build:remote
+npm --prefix frontend run start:remote
 ```
 
 也可使用 Docker Compose：`compose.example.yml` 只向宿主机回环地址开放 8787，适合本机验证或接入已有代理；`compose.https.example.yml` 配合 `deploy/remote.env.example` 提供后端不暴露端口的 Caddy 自动 HTTPS 拓扑。远程部署必须持久化 `APP_MASTER_KEY` 或 `/data/master.key`，并把 `/data` 放在持久卷。完整步骤见[运维手册](docs/operator-runbook.md)。
@@ -69,9 +69,9 @@ npm run start:remote
 
 生产环境不会隐式允许 Vite 的 `localhost:5173` CORS 来源。同源 Web 无需设置 `CORS_ORIGIN`；只有拆分 Web/API 域名时才显式列出 HTTPS Origin，并且不得带路径、查询、片段或凭据。
 
-生产数据可用 `npm run backup -- <备份目录>` 在线取得一致快照；恢复前用 `npm run restore:prepare -- <备份目录> <新目录>` 校验数据库、密钥并生成不覆盖当前数据卷的恢复目录。远程镜像也内置 `imail-backup.mjs` 和 `imail-restore.mjs`，Compose 使用独立 `/backups` 卷。完整切换步骤见[运维手册](docs/operator-runbook.md)。
+生产数据可用 `npm --prefix frontend run backup -- <备份目录>` 在线取得一致快照；恢复前用 `npm --prefix frontend run restore:prepare -- <备份目录> <新目录>` 校验数据库、密钥并生成不覆盖当前数据卷的恢复目录。Compose 使用独立 `/backups` 卷。完整切换步骤见[运维手册](docs/operator-runbook.md)。
 
-远程升级前运行 `npm run upgrade:preflight -- <新备份目录> <新预检目录>`。它使用将要发布的版本对一致性副本执行数据库迁移和完整性检查，不修改在线数据；远程镜像同时内置 `imail-upgrade-preflight.mjs`。
+远程升级前运行 `npm --prefix frontend run upgrade:preflight -- <新备份目录> <新预检目录>`。它使用将要发布的版本对一致性副本执行数据库迁移和完整性检查，不修改在线数据。
 
 ## 桌面应用
 
@@ -82,15 +82,15 @@ npm run start:remote
 远程服务地址必须使用 HTTPS；仅 `localhost`、`127.0.0.0/8` 和 `::1` 这类本机回环开发地址可使用 HTTP。前端在身份握手之前拒绝不安全地址，Rust 网络桥会再次校验并禁止自动跟随 HTTP 重定向，避免登录请求被降级传输。
 
 ```bash
-npm run dev:web
-npm run build:web
+npm --prefix frontend run dev:web
+npm --prefix frontend run build:web
 ```
 
 Windows 开发和 NSIS 安装包构建需要 Node.js 22.5+、Rust stable、Microsoft C++ Build Tools 与 WebView2。当前桌面交付只支持 Windows x64，统一入口生成内部测试 NSIS：
 
 ```bash
-npm run dev:desktop
-npm run build:desktop:internal
+npm --prefix frontend run dev:desktop
+npm --prefix frontend run build:desktop:internal
 ```
 
 当前交付范围只有 Windows 桌面端和服务端 Docker 镜像；不提供原生 Linux 或 macOS 桌面安装包。Linux 侧只需运行 Docker 镜像，不维护额外的原生部署脚本。普通分支推送与 pull request 不触发 GitHub Actions；手动运行时必须选择 `docker` 或 `windows`，两条任务不会互相连带执行。三段式版本标签只发布 Docker，Windows 日常仍优先本机构建。
@@ -104,7 +104,7 @@ npm run build:desktop:internal
 安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 桌面包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到测试机器。交付本地产物前可用 `Get-FileHash <安装包路径> -Algorithm SHA256` 生成并记录校验值。内测前验证真实桌面宿主：
 
 ```bash
-npm run test:desktop-release
+npm --prefix frontend run test:desktop-release
 ```
 
 服务端镜像由 GitHub Actions 推送到 `ghcr.io/cooliang101/imail`。一次手动发布生成 `edge` 与完整 `sha-<提交>` 标签；三段式版本标签生成完整版本号与提交 SHA，不生成含义模糊的 `latest`。Compose 默认使用 `edge`，固定部署应把 `IMAIL_IMAGE` 改为版本标签或 digest。首次发布后的 GHCR 可见性由包设置决定，工作流不会自动将其公开。
@@ -114,7 +114,7 @@ docker pull ghcr.io/cooliang101/imail:edge
 docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull always
 ```
 
-仓库根目录的 `Dockerfile` 构建 Rust 正式镜像，最终 runtime 不包含 Node；执行 `npm run test:container-release` 验证 `linux/amd64`、非 root、只读根文件系统、健康检查、Web/API 同源访问、持久卷重启及备份恢复。内部验收口径见[内部测试构建说明](docs/internal-testing.md)。
+仓库根目录的 `Dockerfile` 构建 Rust 正式镜像，最终 runtime 不包含 Node；跨平台容器验收后续另立计划。内部验收口径见[内部测试构建说明](docs/internal-testing.md)。
 
 桌面本地模式通过类型化 Tauri command/event 直连 Rust；远程模式才使用 Rust 网络桥并按服务地址隔离 Cookie、事件流与附件下载。Web 客户端同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。
 
@@ -351,16 +351,17 @@ MCP_ALLOWED_HOSTS=mail.example.com
 ## 工程结构
 
 ```text
-src/App.tsx          客户端顶层状态与页面编排，不放业务组件实现
-src/components/      跨业务复用的基础 UI、服务商标识与展示工具
-src/features/mail/   邮件列表虚拟化与阅读器
-src/features/accounts/ 邮箱接入、授权与账户设置
-src/features/compose/  写信与草稿工作区
-src/features/organize/ 标签、稍后处理、通知和工作空间
-src/features/developer/ 外部接入、API Token 与 MCP 授权码 UI
-src/features/appearance/ 主题元数据、根主题 Provider 与本地回退
-src/features/settings/ 设置窗口与各偏好面板
-src/app-model.ts     跨 feature 的客户端类型
+frontend/            React/Vite/npm 前端工程根目录，详见 frontend/README.md
+frontend/src/App.tsx          客户端顶层状态与页面编排，不放业务组件实现
+frontend/src/components/      跨业务复用的基础 UI、服务商标识与展示工具
+frontend/src/features/mail/   邮件列表虚拟化与阅读器
+frontend/src/features/accounts/ 邮箱接入、授权与账户设置
+frontend/src/features/compose/  写信与草稿工作区
+frontend/src/features/organize/ 标签、稍后处理、通知和工作空间
+frontend/src/features/developer/ 外部接入、API Token 与 MCP 授权码 UI
+frontend/src/features/appearance/ 主题元数据、根主题 Provider 与本地回退
+frontend/src/features/settings/ 设置窗口与各偏好面板
+frontend/src/app-model.ts     跨 feature 的客户端类型
 rust/crates/imail-http/            可选 HTTP、Gateway、MCP 与 Web 适配器
 rust/crates/imail-core/            Tauri、HTTP 与 MCP 共用的应用服务
 rust/crates/imail-mail-network/    IMAP/SMTP、代理与 MIME 网络实现
@@ -374,27 +375,27 @@ src-tauri/src/embedded_service.rs  Windows 桌面类型化直调适配器
 
 ## 品牌素材
 
-- `public/brand/imail-logo.png`：1024×1024 透明 Logo 母版
-- `public/brand/imail-app-icon.png`：1024×1024 应用图标
-- `public/favicon.svg`：跟随系统明暗模式的现代浏览器图标
-- `public/favicon.ico`：包含 16 至 256 像素的 Windows / 浏览器图标
-- `public/favicon-16.png`、`favicon-32.png`、`favicon-48.png`：浏览器图标
-- `public/apple-touch-icon.png`：180×180 Apple Touch Icon
-- `public/pwa-192.png`、`public/pwa-512.png`：PWA 安装图标
-- `public/manifest.webmanifest`：iMail Web App Manifest
-- `public/sw.js`：仅 Web 生产环境注册的 Service Worker；缓存版本化静态资源与离线页面外壳，明确绕过 API、SSE、MCP 和 Gateway
+- `frontend/public/brand/imail-logo.png`：1024×1024 透明 Logo 母版
+- `frontend/public/brand/imail-app-icon.png`：1024×1024 应用图标
+- `frontend/public/favicon.svg`：跟随系统明暗模式的现代浏览器图标
+- `frontend/public/favicon.ico`：包含 16 至 256 像素的 Windows / 浏览器图标
+- `frontend/public/favicon-16.png`、`favicon-32.png`、`favicon-48.png`：浏览器图标
+- `frontend/public/apple-touch-icon.png`：180×180 Apple Touch Icon
+- `frontend/public/pwa-192.png`、`frontend/public/pwa-512.png`：PWA 安装图标
+- `frontend/public/manifest.webmanifest`：iMail Web App Manifest
+- `frontend/public/sw.js`：仅 Web 生产环境注册的 Service Worker；缓存版本化静态资源与离线页面外壳，明确绕过 API、SSE、MCP 和 Gateway
 
 ## 验证
 
 ```bash
-npm run typecheck
-npm test
-npm run build
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 # Windows 内部测试完整冒烟
-npm run test:internal-release
+npm --prefix frontend run test:internal-release
 ```
 
-Docker 测试机额外运行 `npm run test:container-release`。平台人工验收和证据要求见 [`docs/deployment-verification.md`](docs/deployment-verification.md)。
+平台人工验收和证据要求见 [`docs/deployment-verification.md`](docs/deployment-verification.md)。
 
 ## 后续增强方向
 

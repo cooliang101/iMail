@@ -5,7 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import packageMetadata from '../package.json' with { type: 'json' };
+import packageMetadata from '../frontend/package.json' with { type: 'json' };
 import { assertSafeMigrationOutput, migrationOutputRoot, normalizeMigrationRunId } from './migration-path-safety.mjs';
 
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

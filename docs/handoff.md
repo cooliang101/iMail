@@ -29,17 +29,17 @@
 - 本地与远程实例是独立数据源；模式切换不得复制、合并、静默回退或串用会话。
 - 清除用户邮箱数据必须保持当前用户作用域并保留 `app_users`、服务文件、主密钥和其他用户数据；不得重新引入“服务连接”内的整实例删除按钮。
 - 不得绕过 `logo_fetch_attempts` 对已记录域名自动重试，也不得为联系人建议和邮件发件人建立第二套头像缓存。
-- 新增内置主题必须同时维护 `src/features/appearance/theme-model.ts`、`src/theme.ts` 和 `src/theme.css`；自定义主题字段必须同时维护客户端模型、`theme-runtime.ts`、`rust/crates/imail-core/src/theme.rs`、`rust/crates/imail-http/src/mcp.rs` 与 `docs/custom-theme.md`，并且不能接受任意 CSS。
+- 新增内置主题必须同时维护 `frontend/src/features/appearance/theme-model.ts`、`frontend/src/theme.ts` 和 `frontend/src/theme.css`；自定义主题字段必须同时维护客户端模型、`theme-runtime.ts`、`rust/crates/imail-core/src/theme.rs`、`rust/crates/imail-http/src/mcp.rs` 与 `docs/custom-theme.md`，并且不能接受任意 CSS。
 
 ## 验证基线
 
 提交前运行：
 
 ```bash
-npm run typecheck
-npm test
-npm run build
-npm audit --omit=dev
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix frontend audit --omit=dev
 ```
 
 当前测试包含 MCP 认证隔离、初始化、工具发现、账户读取和凭据不泄漏，以及联系人持久化、主域共享、升级回填、候选过滤和访问验证页识别。真实邮箱的网络操作仍按 README 的平台验收口径执行，不在自动化测试中连接生产邮箱。

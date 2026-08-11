@@ -1,9 +1,9 @@
 FROM node:24-bookworm-slim AS web-build
 ENV NODE_OPTIONS=--max-old-space-size=768
-WORKDIR /app
-COPY package.json package-lock.json ./
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
-COPY . .
+COPY frontend/ ./
 RUN npm run build:web
 
 FROM rust:1.77.2-bookworm AS rust-build
@@ -28,7 +28,7 @@ RUN apt-get update \
     && useradd --system --uid 10001 --gid 10001 --no-create-home imail \
     && mkdir -p /data /backups \
     && chown 10001:10001 /data /backups
-COPY --from=web-build /app/dist ./dist
+COPY --from=web-build /app/frontend/dist ./dist
 COPY --from=rust-build /app/rust/target/release/imail-server ./imail-server
 COPY --from=rust-build /app/rust/target/release/imail-maintenance ./imail-maintenance
 USER 10001:10001

@@ -3,7 +3,7 @@ import { Check, ClipboardText, Code, WarningCircle } from '@phosphor-icons/react
 import type { AppPreferences, CustomThemeDefinition } from '../../app-model';
 import { AppColorInput, AppInput, AppSelect, AppTextarea } from '../../components/form-controls';
 import { parseCustomThemeJson } from '../appearance';
-import customThemeGuide from '../../../docs/custom-theme.md?raw';
+import customThemeGuide from '../../../../docs/custom-theme.md?raw';
 
 const colorFields: Array<{ key: keyof Pick<CustomThemeDefinition, 'canvas' | 'surface' | 'surfaceSubtle' | 'rail' | 'text' | 'textSecondary' | 'border' | 'accent' | 'accentSubtle'>; label: string }> = [
   { key: 'canvas', label: '画布' }, { key: 'surface', label: '主面板' }, { key: 'surfaceSubtle', label: '次级面板' },

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BookOpen, Code, Copy, Terminal, WarningCircle } from '@phosphor-icons/react';
 import type { Notice } from '../../app-model';
-import mcpGuideMarkdown from '../../../docs/mcp-integration.md?raw';
+import mcpGuideMarkdown from '../../../../docs/mcp-integration.md?raw';
 import { absoluteServiceUrl } from '../../service-config';
 
 const toolGroups = [

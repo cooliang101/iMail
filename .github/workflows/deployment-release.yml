@@ -36,7 +36,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
-          version="$(node -p "require('./package.json').version")"
+          version="$(node -p "require('./frontend/package.json').version")"
           if [[ "$GITHUB_REF_NAME" != "$version" ]]; then
             echo "标签 ${GITHUB_REF_NAME} 与应用版本 ${version} 不一致" >&2
             exit 1
@@ -61,7 +61,7 @@ jobs:
         with:
           node-version: 24
       - name: Validate Rust Docker image before publishing it
-        run: npm run test:rust-container
+        run: npm --prefix frontend run test:rust-container
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
@@ -92,15 +92,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
-      - run: npm ci
+      - run: npm ci --prefix frontend
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc
-      - run: npm run build:desktop:internal
-      - run: npm run test:windows-installer
-      - run: npm run test:desktop-release
+      - run: npm --prefix frontend run build:desktop:internal
+      - run: npm --prefix frontend run test:windows-installer
+      - run: npm --prefix frontend run test:desktop-release
       - uses: actions/upload-artifact@v4
         with:
           name: imail-windows-x64-internal-test

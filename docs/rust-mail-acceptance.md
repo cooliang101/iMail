@@ -61,7 +61,7 @@ Google 与 Yahoo 还必须设置 `IMAIL_ACCEPTANCE_OAUTH_CLIENT_SECRET`。Micros
 ## 执行
 
 ```powershell
-npm run rust:mail-acceptance
+npm --prefix frontend run rust:mail-acceptance
 ```
 
 驱动按顺序验证：
@@ -85,13 +85,13 @@ npm run rust:mail-acceptance
 公共邮箱验收之外，可先用隔离 loopback TLS fixture 持续运行正式 Rust worker、scheduler 与 IDLE watcher：
 
 ```powershell
-npm run rust:tls-soak -- 3600 32 output/rust-migration-tests/r6-real-tls-soak-1h-v1.json
+npm --prefix frontend run rust:tls-soak -- 3600 32 output/rust-migration-tests/r6-real-tls-soak-1h-v1.json
 ```
 
 三个位置参数依次为持续秒数、允许的首尾 RSS 增长 MiB 和新报告路径。持续时间只接受 30–86400 秒；报告必须位于 `output/rust-migration-tests`、父目录已存在且目标不存在。入口不读取 `.data`，也不访问公共邮箱；它验证真实本地 TLS socket、首次 IDLE 断线恢复、`EXISTS`→recovery→worker FETCH、周期 scheduler 校准、队列/heartbeat 收敛、资源采样和优雅停机。loopback 长稳只能作为公共邮箱门禁前的协议栈回归，不能替代服务商限流、NAT/代理超时或 OAuth 策略。
 
 ## 现有四账户闭环
 
-迁移阶段使用当前四账户完成的闭环报告继续保留在 `output/rust-migration-tests`，但依赖旧 Node 凭据读取器的矩阵包装脚本已随 Node 服务源码删除。后续如需再次发送，只能通过 `npm run rust:mail-acceptance` 逐边调用纯 Rust 验收二进制，并显式提供 `IMAIL_ACCEPTANCE_ALLOWED_RECIPIENTS_JSON`。Rust 入口强制该数组恰好包含四个唯一邮箱，发送方和收件方都必须属于闭集且不能相同，否则在连接和发送前失败；不得使用其他收件人。
+迁移阶段使用当前四账户完成的闭环报告继续保留在 `output/rust-migration-tests`，但依赖旧 Node 凭据读取器的矩阵包装脚本已随 Node 服务源码删除。后续如需再次发送，只能通过 `npm --prefix frontend run rust:mail-acceptance` 逐边调用纯 Rust 验收二进制，并显式提供 `IMAIL_ACCEPTANCE_ALLOWED_RECIPIENTS_JSON`。Rust 入口强制该数组恰好包含四个唯一邮箱，发送方和收件方都必须属于闭集且不能相同，否则在连接和发送前失败；不得使用其他收件人。
 
 使用当前桌面账户配置准备验收环境时，必须先显式退出 Tauri 桌面进程并确认嵌入式 worker/IDLE 已停止，同时确认没有 8787 listener。验收结束或失败后再启动桌面应用；禁止两个 Rust host 同时对四个账户保持同步连接。

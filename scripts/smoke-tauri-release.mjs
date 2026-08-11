@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 
 if (process.platform !== 'win32') throw new Error('This release smoke test currently targets the Windows artifact');
-const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.resolve('src-tauri', 'target');
+const root = path.resolve(import.meta.dirname, '..');
+const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(root, 'src-tauri', 'target');
 const executable = path.join(cargoTargetDir, 'x86_64-pc-windows-msvc', 'release', 'imail.exe');
 const child = spawn(executable, [], {
   stdio: ['ignore', 'pipe', 'pipe'],

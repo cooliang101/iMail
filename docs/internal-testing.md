@@ -9,8 +9,8 @@
 Windows 构建机先安装 Node.js 22.5+、npm、Rust stable、Microsoft C++ Build Tools 与 WebView2，然后执行：
 
 ```bash
-npm ci
-npm run build:desktop:internal
+npm ci --prefix frontend
+npm --prefix frontend run build:desktop:internal
 ```
 
 命令只接受 Windows，并生成 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe`。Linux 只需要 Docker 引擎来构建服务端镜像，不维护额外的原生部署流程。
@@ -18,21 +18,21 @@ npm run build:desktop:internal
 提交测试包前还应执行项目门禁：
 
 ```bash
-npm run typecheck
-npm test
-npm run build
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
 Windows 构建机可运行完整内部发布检查：
 
 ```bash
-npm run test:internal-release
+npm --prefix frontend run test:internal-release
 ```
 
 服务端 Docker 验证：
 
 ```bash
-npm run test:container-release
+npm --prefix frontend run test:container-release
 ```
 
 授权执行手动工作流后，镜像发布到 `ghcr.io/cooliang101/imail`，标签为 `edge` 与完整 `sha-<提交>`。未来三段式版本标签只发布对应完整版本和提交 SHA，不移动已有 `0.0.1` 标签，也不生成 `latest`。Compose 默认读取 `IMAIL_IMAGE`；内测可用 `edge`，可复现部署应使用版本标签或工作流输出的 digest。GHCR 首次发布后的可见性由包设置决定，不在工作流中自动改为公开。

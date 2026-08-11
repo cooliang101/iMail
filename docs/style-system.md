@@ -1,6 +1,6 @@
 # iMail 样式系统与维护规范
 
-本文是 iMail 客户端样式的维护契约，适用于 `src/` 下的所有界面。目标不是追求一套抽象的“设计系统”，而是让邮件客户端在高信息密度、长时间阅读、不同屏幕尺寸和多账户身份并存时，仍保持稳定、清楚且可演进。
+本文是 iMail 客户端样式的维护契约，适用于 `frontend/src/` 下的所有界面。目标不是追求一套抽象的“设计系统”，而是让邮件客户端在高信息密度、长时间阅读、不同屏幕尺寸和多账户身份并存时，仍保持稳定、清楚且可演进。
 
 ## 1. 现状审计与设计方向
 
@@ -33,10 +33,10 @@
 
 样式入口顺序如下：
 
-1. `src/theme.ts`：生成 Fluent UI 的 `Theme`，只维护 Fluent 品牌色阶和基础字体。
-2. `src/theme.css`：产品主题 token，是颜色、排版、间距、形状、阴影、动效、层级和布局尺寸的唯一入口。
-3. `src/styles.css`：组件和响应式规则，只消费语义 token，不定义主题。
-4. `src/features/appearance/theme-runtime.ts`：仅为经过校验的 `custom` 主题派生 Fluent 色阶与语义 CSS token。
+1. `frontend/src/theme.ts`：生成 Fluent UI 的 `Theme`，只维护 Fluent 品牌色阶和基础字体。
+2. `frontend/src/theme.css`：产品主题 token，是颜色、排版、间距、形状、阴影、动效、层级和布局尺寸的唯一入口。
+3. `frontend/src/styles.css`：组件和响应式规则，只消费语义 token，不定义主题。
+4. `frontend/src/features/appearance/theme-runtime.ts`：仅为经过校验的 `custom` 主题派生 Fluent 色阶与语义 CSS token。
 
 `main.tsx` 必须先导入 `theme.css`，再导入 `styles.css`。`AppThemeProvider` 同时切换根 `FluentProvider` 品牌色和 `data-theme` 语义 token；不要在业务组件中判断主题并切换 class。
 
@@ -50,7 +50,7 @@
 | `soft-neubrutalism` | 柔和撞色 | 奶油底、粉彩、深色描边和轻微错位阴影 |
 | `custom` | 自定义主题 | 用户提供安全颜色令牌和受限形态枚举，运行时派生完整视觉变量 |
 
-主题元数据与安全归一化放在 `src/features/appearance/theme-model.ts`，内置 Fluent 色阶放在 `src/theme.ts`，完整 CSS token 契约放在 `src/theme.css`。新增内置主题必须同时补齐这三处，并为无效或已移除的主题 ID 保留安全回退。
+主题元数据与安全归一化放在 `frontend/src/features/appearance/theme-model.ts`，内置 Fluent 色阶放在 `frontend/src/theme.ts`，完整 CSS token 契约放在 `frontend/src/theme.css`。新增内置主题必须同时补齐这三处，并为无效或已移除的主题 ID 保留安全回退。
 
 自定义主题是受限数据协议，不是 CSS 编辑器。输入只允许 `docs/custom-theme.md` 定义的九个 `#RRGGBB` 颜色和三个形态枚举；客户端与 MCP 分别校验，`theme-runtime.ts` 再派生中性色、品牌色、圆角和阴影。禁止把任意 CSS、渐变、URL、透明色或脚本加入这一协议。
 
@@ -182,7 +182,7 @@ z-index 必须从 `--z-sticky/dropdown/sidebar/overlay/modal/toast` 中选择。
 - 动效使用 `--duration-*` 与 `--ease-standard`，只动画 `transform`、`opacity`、颜色和阴影。新增长动效前先验证 reduced-motion。
 - 加载态应匹配真实内容形状；空状态说明下一步；错误提示直接说明失败原因和恢复方式。
 - 图标默认使用 Phosphor，常规 UI 统一相近视觉尺寸和描边重量。图标颜色服从文本或 `data-icon-tone`，不逐个写色值。
-- 业务组件保持语义 HTML；完整 feature 仍放在 `src/features/<domain>/`，跨领域展示组件放在 `src/components/`。
+- 业务组件保持语义 HTML；完整 feature 仍放在 `frontend/src/features/<domain>/`，跨领域展示组件放在 `frontend/src/components/`。
 
 ## 7. 新增或修改样式的流程
 
@@ -191,7 +191,7 @@ z-index 必须从 `--z-sticky/dropdown/sidebar/overlay/modal/toast` 中选择。
 3. 同时实现默认、hover、pressed、focus-visible、disabled，以及适用的 loading/empty/error 状态。
 4. 检查 1050px、820px、650px 和窄于 390px 的布局，不允许横向溢出遮住主任务。
 5. 使用键盘完成关键路径，并检查焦点是否可见。
-6. 运行 `npm run typecheck`、`npm test`、`npm run build`。
+6. 从仓库根目录运行 `npm --prefix frontend run typecheck`、`npm --prefix frontend test`、`npm --prefix frontend run build`。
 
 建议审查命令：
 
@@ -205,6 +205,6 @@ rg -n "font-size:|z-index:|<(input|select|textarea)" src
 
 ## 8. 后续拆分策略
 
-主题层已经独立，组件规则目前按领域拆在 `src/styles/*.css`，由 `styles.css` 统一导入。后续修改某个 feature 时，可把对应规则原样迁到 `src/features/<domain>/<domain>.css`，由该 feature 的入口导入；跨领域基础样式继续留在共享样式目录。拆分只改变归属，不应同时重命名全部 class 或改变 API/交互。
+主题层已经独立，组件规则目前按领域拆在 `frontend/src/styles/*.css`，由 `styles.css` 统一导入。后续修改某个 feature 时，可把对应规则原样迁到 `frontend/src/features/<domain>/<domain>.css`，由该 feature 的入口导入；跨领域基础样式继续留在共享样式目录。拆分只改变归属，不应同时重命名全部 class 或改变 API/交互。
 
 每次迁移旧规则时应完成三件事：删除兼容别名使用、把残留裸值替换成语义 token、合并重复的后置覆盖。完成全部领域迁移后，再删除 `theme.css` 中的 compatibility aliases。

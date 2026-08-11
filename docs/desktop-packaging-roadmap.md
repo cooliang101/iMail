@@ -33,4 +33,4 @@ Windows 桌面版复用 React 前端并把 Rust 领域服务静态链接进 Taur
 
 ## 验收
 
-构建前运行 `npm run typecheck`、`npm test`、`npm run build`、Rust/Tauri tests、严格 Clippy 与 rustfmt。随后构建 NSIS，执行 release 冒烟、归档扫描、进程/端口检查及数据哈希/快照复核。当前结果见 [`rust-migration-r9-report.md`](./rust-migration-r9-report.md)。
+构建前从仓库根目录运行 `npm --prefix frontend run typecheck`、`npm --prefix frontend test`、`npm --prefix frontend run build`、Rust/Tauri tests、严格 Clippy 与 rustfmt。随后构建 NSIS，执行 release 冒烟、归档扫描、进程/端口检查及数据哈希/快照复核。当前结果见 [`rust-migration-r9-report.md`](./rust-migration-r9-report.md)。

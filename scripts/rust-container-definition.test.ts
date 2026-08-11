@@ -52,7 +52,7 @@ describe('Rust container definition', () => {
 
   it('runs the Rust container gate before publishing the official Rust image', async () => {
     const workflow = await readFile(new URL('../.github/workflows/deployment-release.yml', import.meta.url), 'utf8');
-    const candidateGate = workflow.indexOf('npm run test:rust-container');
+    const candidateGate = workflow.indexOf('npm --prefix frontend run test:rust-container');
     const productionPublish = workflow.indexOf('docker/build-push-action@');
     expect(candidateGate).toBeGreaterThan(0);
     expect(productionPublish).toBeGreaterThan(candidateGate);

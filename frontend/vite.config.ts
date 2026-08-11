@@ -1,9 +1,12 @@
-import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vitest/config';
 
 const apiTarget = `http://localhost:${process.env.VITE_API_PORT ?? '8787'}`;
+const frontendRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
+  root: frontendRoot,
   plugins: [react()],
   build: {
     rollupOptions: {
@@ -25,5 +28,11 @@ export default defineConfig({
       '/api': apiTarget,
       '/gateway': { target: apiTarget, ws: true },
     },
+  },
+  test: {
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      '../scripts/**/*.{test,spec}.{ts,mts,mjs}',
+    ],
   },
 });

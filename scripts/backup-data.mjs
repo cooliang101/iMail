@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from
 import path from 'node:path';
 import process from 'node:process';
 import { DatabaseSync, backup } from 'node:sqlite';
-import packageMetadata from '../package.json' with { type: 'json' };
+import packageMetadata from '../frontend/package.json' with { type: 'json' };
 import { backupFileHashes } from './backup-integrity.mjs';
 import { assertNonOverlappingDirectories } from './migration-path-safety.mjs';
 

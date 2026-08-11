@@ -265,9 +265,9 @@ MCP：
 5. 每阶段发布前执行：
 
 ```bash
-npm run typecheck
-npm test
-npm run build
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
 ## 总体验收标准

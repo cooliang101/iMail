@@ -35,14 +35,14 @@ Windows 桌面本地模式不启动 HTTP 宿主；`--daemon-control-file` 仅为
 Streamable HTTP：
 
 ```bash
-npm run dev
+npm --prefix frontend run dev
 ```
 
-`npm run dev` 同时启动 Vite 与 Rust `imail-server --http`。Rust 服务在同一进程装配 worker、scheduler 与 IDLE watcher；不再运行独立 Node Worker。
+`npm --prefix frontend run dev` 同时启动 Vite 与 Rust `imail-server --http`。Rust 服务在同一进程装配 worker、scheduler 与 IDLE watcher；不再运行独立 Node Worker。
 
 ## 远程生产部署
 
-`npm run build:remote` 生成同版本 Web 资源、Rust HTTP 服务和 Rust 维护工具；`npm run start:remote` 显式以 `--http` 监听 `0.0.0.0:8787` 并托管 `dist`。正式容器 runtime 不包含 Node，以非 root 用户运行并把所有可变数据写入 `/data`。`compose.example.yml` 只把端口绑定到宿主机回环地址。
+`npm --prefix frontend run build:remote` 生成 `frontend/dist`、Rust HTTP 服务和 Rust 维护工具；`npm --prefix frontend run start:remote` 显式以 `--http` 监听 `0.0.0.0:8787`。正式容器把 `frontend/dist` 复制为镜像内 `/app/dist`，runtime 不包含 Node，以非 root 用户运行并把所有可变数据写入 `/data`。`compose.example.yml` 只把端口绑定到宿主机回环地址。
 
 仓库同时提供带 Caddy 自动 HTTPS 的 `compose.https.example.yml`。服务镜像由受控 GitHub Actions 发布到 `ghcr.io/cooliang101/imail`；复制环境变量模板，填写已解析到部署主机的域名，并将 `IMAIL_IMAGE` 固定到所需版本标签或 digest 后启动。若 GHCR 包保持私有，先使用具有 `read:packages` 权限的 Token 执行 `docker login ghcr.io`：
 
@@ -65,7 +65,7 @@ docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull 
 在线备份使用 SQLite backup API 取得一致数据库快照，并同时复制自动生成的主密钥、持久实例身份与发件人 Logo。备份先写入同目录暂存项，全部成功后再原子提交，并生成包含 iMail 版本、数据库 schema 版本和逐文件 SHA-256 的 v2 完整性清单；恢复仍兼容已有 v1 清单。当前 schema v5 在 `accounts.proxy_json` 中保存每邮箱的非密码代理字段，代理密码仍位于加密凭据载荷，二者都会随数据库快照一起备份：
 
 ```bash
-npm run backup -- /safe/backups/imail-2026-08-03
+npm --prefix frontend run backup -- /safe/backups/imail-2026-08-03
 ```
 
 Compose 将独立的 `imail-backups` 卷挂载到 `/backups`，容器使用 Rust 维护 CLI 在线备份：
@@ -82,7 +82,7 @@ docker compose --env-file .env.remote -f compose.https.example.yml cp \
 先在服务外准备一个全新的恢复目录。命令会验证 SHA-256 清单、执行 SQLite `quick_check`、校验 iMail 核心表与本地 `master.key` 格式，并拒绝覆盖已有目录；它不会改写正在使用的数据卷：
 
 ```bash
-npm run restore:prepare -- /safe/backups/imail-2026-08-03 /safe/restore/imail-2026-08-03
+npm --prefix frontend run restore:prepare -- /safe/backups/imail-2026-08-03 /safe/restore/imail-2026-08-03
 ```
 
 容器内使用 `/app/imail-maintenance restore <备份目录> <全新恢复目录>` 执行相同校验。恢复目标必须是新目录或新数据卷，工具不会覆盖 `/data`。恢复工具和服务启动迁移都会拒绝高于当前发布版本支持上限的未来 schema。
@@ -104,7 +104,7 @@ docker exec imail /app/imail-maintenance upgrade-preflight /backups/imail-before
 替换远程服务前，使用将要发布的新版本执行预检。命令会在线创建一致性回滚备份，恢复到全新目录，只在副本上执行当前版本迁移，再运行 SQLite `quick_check` 和外键检查。在线数据目录不会被改写：
 
 ```bash
-npm run upgrade:preflight -- \
+npm --prefix frontend run upgrade:preflight -- \
   /safe/backups/imail-before-upgrade \
   /safe/preflight/imail-new-version
 ```
@@ -142,20 +142,20 @@ docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no
 仓库级自动验证：
 
 ```bash
-npm run typecheck
-npm test
-npm run build
-npm audit --omit=dev
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix frontend audit --omit=dev
 ```
 
 部署模式内部测试验证：
 
 ```bash
-npm run test:internal-release
+npm --prefix frontend run test:internal-release
 # 正式 Rust worker/scheduler/IDLE 的隔离真实 TLS 长稳；参数为秒、增长 MiB、新报告
-npm run rust:tls-soak -- 3600 32 output/rust-migration-tests/r6-real-tls-soak-1h-v1.json
+npm --prefix frontend run rust:tls-soak -- 3600 32 output/rust-migration-tests/r6-real-tls-soak-1h-v1.json
 # 仅限明确允许改写当前用户安装状态的 Windows 测试机
-IMAIL_ALLOW_INSTALLER_SMOKE=true npm run test:windows-installer
+IMAIL_ALLOW_INSTALLER_SMOKE=true npm --prefix frontend run test:windows-installer
 ```
 
 资源报告使用不可覆盖写入；目标已存在时必须换用新的版本化文件名，不能删除或覆盖旧证据。Node/Rust 对照报告已经作为迁移验收证据保留，但旧 Node 基准实现和生成入口已删除。新的持续资源门禁只测当前 Rust 实现，并继续使用系统临时目录或迁移数据副本，不得挂载或修改活动 `.data`。
