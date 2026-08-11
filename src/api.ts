@@ -1,6 +1,6 @@
 import { serviceUrl } from './service-config';
-import { desktopHttpRequest } from './desktop-http';
 import { isTauriRuntime } from './platform/tauri-runtime';
+import { createMailService } from './mail-service';
 
 export type ApiTransport = {
   request<T>(path: string, options?: RequestInit): Promise<T>;
@@ -29,7 +29,7 @@ export function createApiTransport({ baseUrl = '', fetcher = fetch }: { baseUrl?
 const defaultTransport = createApiTransport({ baseUrl: () => serviceUrl('') });
 
 async function desktopApi<T>(path: string, options?: RequestInit) {
-  const response = await desktopHttpRequest(path, options);
+  const response = await createMailService().request(path, options);
   if (response.status < 200 || response.status >= 300) {
     let message = `请求失败（${response.status}）`;
     try { message = JSON.parse(response.body).error ?? message; } catch { /* Keep the status message for a non-JSON error. */ }

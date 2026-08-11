@@ -52,7 +52,7 @@ fn sensitive_query_pattern() -> &'static Regex {
 }
 
 pub fn sanitize_log_message(value: &str) -> String {
-    let normalized = value.replace('\0', "").replace('\r', "");
+    let normalized = value.replace(['\0', '\r'], "");
     let redacted = email_pattern().replace_all(&normalized, "<email>");
     let redacted = sensitive_header_pattern().replace_all(&redacted, "${1}${2}<redacted>");
     let redacted = bearer_pattern().replace_all(&redacted, "Bearer <redacted>");
@@ -71,9 +71,9 @@ pub fn sanitize_log_message(value: &str) -> String {
 fn emergency_log_path() -> Option<PathBuf> {
     #[cfg(windows)]
     {
-        return std::env::var_os("LOCALAPPDATA")
+        std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
-            .map(|root| root.join("com.cooliang.imail").join("logs").join("app.log"));
+            .map(|root| root.join("com.cooliang.imail").join("logs").join("app.log"))
     }
     #[cfg(not(windows))]
     {

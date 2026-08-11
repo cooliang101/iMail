@@ -4,6 +4,7 @@ import process from 'node:process';
 import { DatabaseSync, backup } from 'node:sqlite';
 import packageMetadata from '../package.json' with { type: 'json' };
 import { backupFileHashes } from './backup-integrity.mjs';
+import { assertNonOverlappingDirectories } from './migration-path-safety.mjs';
 
 const dataDir = path.resolve(process.env.IMAIL_DATA_DIR ?? '.data');
 const sourceDatabase = path.join(dataDir, 'imail.sqlite');
@@ -11,6 +12,7 @@ if (!existsSync(sourceDatabase)) throw new Error(`找不到 iMail 数据库：${
 
 const safeTimestamp = new Date().toISOString().replaceAll(':', '-');
 const backupRoot = path.resolve(process.argv[2] || path.join(process.env.IMAIL_BACKUP_DIR ?? 'backups', safeTimestamp));
+assertNonOverlappingDirectories(dataDir, backupRoot, '备份目标');
 if (existsSync(backupRoot)) throw new Error(`备份目标已存在：${backupRoot}`);
 const stagingRoot = `${backupRoot}.partial-${process.pid}`;
 if (existsSync(stagingRoot)) throw new Error(`备份暂存目标已存在：${stagingRoot}`);

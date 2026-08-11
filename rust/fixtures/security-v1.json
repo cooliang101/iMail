@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "masterKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "ivHex": "202122232425262728292a2b",
+  "plaintext": "{\"authType\":\"oauth2\",\"accessToken\":\"access-secret\",\"refreshToken\":\"refresh-secret\",\"scopes\":[\"mail.read\",\"mail.send\"]}",
+  "encryptedPayload": "ICEiIyQlJicoKSor.SsnCegnxb4dZlyIiUIkS7A.qRjHBRjwTndqGWD043eVjKQh3r6rogKND5MfYR3lNWwbrN8m70ZWv2eOQ-E9am2tlgjArOhZSxOrERdJI9lvs_oc73nz8Zfz-ALEVN4-SwShtR8mxJjpbqo84BBBPvO9azgAJK0l-tHlvslmyprjYBX_62DMow",
+  "password": "iMail 密码兼容 Test 123!",
+  "passwordSaltHex": "30313233343536373839616263646566",
+  "passwordEncoded": "scrypt:MDEyMzQ1Njc4OWFiY2RlZg:PVNZTNjz6pIC4oA-9xfCpL5S0qjNH7O97oQgiws12YQFK2wTtvOK5VTfeQoQHRuEBX4Me-tQo3jm-wbiNfZ9gA",
+  "rawToken": "imail_mcp_contract-token_1234567890",
+  "tokenSha256": "b06d260de7b81e6205d49ab280f66546d83a57460937a367beb8c6543acab7d6",
+  "auditSalt": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "auditActor": "login-ip:192.0.2.42",
+  "auditActorHmacSha256": "138850cd551305ff3595b0b74ffb3e3dbcc0e14ae0599f7073ce7a2b1ae45a7d"
+}

@@ -27,4 +27,13 @@ describe('desktop HTTP bridge', () => {
       baseUrl: expect.any(String), path: '/api/contacts/logo?address=sender%40example.com',
     });
   });
+
+  it('keeps local binary reads and downloads inside the embedded Rust service', async () => {
+    const invokeMock = vi.fn(async (command: string) => command === 'desktop_read_embedded_binary' ? [4, 5, 6] : undefined);
+    const invoke = invokeMock as DesktopHttpInvoker;
+    await expect(desktopReadBinary('/api/contacts/logo?address=local%40example.com', invoke, true)).resolves.toEqual(Uint8Array.from([4, 5, 6]));
+    await desktopDownload('/api/messages/local/attachments/0', 'C:\\Temp\\local.bin', invoke, true);
+    expect(invokeMock).toHaveBeenNthCalledWith(1, 'desktop_read_embedded_binary', { path: '/api/contacts/logo?address=local%40example.com' });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'desktop_download_embedded', { path: '/api/messages/local/attachments/0', target: 'C:\\Temp\\local.bin' });
+  });
 });

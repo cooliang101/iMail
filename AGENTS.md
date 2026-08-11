@@ -6,9 +6,9 @@
 - 表单统一使用 `src/components/form-controls.tsx` 的 `AppInput`、`AppSelect`、`AppTextarea` 和 `AppCheckbox`；不要在业务组件中直接新增原生表单控件。
 - 跨 feature 的客户端类型放入 `src/app-model.ts`；邮件领域和服务端共享的数据结构继续使用 `src/types.ts`。
 - feature 可以依赖 `api.ts`、`types.ts` 和 `components/`，不要反向依赖 `App.tsx`。
-- 主题 ID 与回退由 `src/features/appearance/` 维护；新增内置主题必须同步 `src/theme.ts` 和 `src/theme.css`。自定义主题只接受安全令牌，字段变更须同步 `theme-runtime.ts`、`server/mcp/custom-theme.ts` 与 `docs/custom-theme.md`，不得扩展为任意 CSS，也不得加入 HTTP 网关。
+- 主题 ID 与回退由 `src/features/appearance/` 维护；新增内置主题必须同步 `src/theme.ts` 和 `src/theme.css`。自定义主题只接受安全令牌，字段变更须同步 `theme-runtime.ts`、`rust/crates/imail-core/src/theme.rs`、`rust/crates/imail-http/src/mcp.rs` 与 `docs/custom-theme.md`，不得扩展为任意 CSS，也不得加入 HTTP 网关。
 - 保持现有本地优先、安全边界和响应式行为；结构重构不得改变 API 协议。
-- MCP 能力统一放在 `server/mcp/`，账户管理只允许 `mcp:full` 授权码；任何响应都不得暴露邮箱凭据、OAuth Token 或加密字段。
+- MCP 能力统一放在 `rust/crates/imail-http/src/mcp.rs`，账户管理只允许 `mcp:full` 授权码；任何响应都不得暴露邮箱凭据、OAuth Token 或加密字段。
 - 新增邮件或账户管理行为时，同步评估 HTTP API、MCP 工具与 `docs/mcp-integration.md`，避免两个控制面能力漂移。
 - 联系人与邮件发件人必须复用 `contacts` 数据和其中的 Logo 字段；Logo 使用子域键与可注册主域兜底键，已有成功或失败采集记录的域名不得自动重试。
 - 当前交付平台仅包含 Windows 桌面端和服务端 Docker 镜像；不维护原生 Linux 或 macOS 桌面构建、安装与发布流程。

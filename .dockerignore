@@ -1,9 +1,10 @@
 node_modules
 dist
-desktop-runtime
-server-runtime
 src-tauri/target
+rust/target
 src-tauri/binaries
+src-tauri
+.playwright-cli
 .git
 .data
 output

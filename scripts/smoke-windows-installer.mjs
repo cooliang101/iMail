@@ -12,7 +12,8 @@ if (process.env.CI !== 'true' && process.env.IMAIL_ALLOW_INSTALLER_SMOKE !== 'tr
   throw new Error('为避免改写现有用户安装，此脚本只在 CI 或显式设置 IMAIL_ALLOW_INSTALLER_SMOKE=true 时运行');
 }
 
-const bundleDir = path.join(root, 'src-tauri', 'target', 'x86_64-pc-windows-msvc', 'release', 'bundle', 'nsis');
+const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(root, 'src-tauri', 'target');
+const bundleDir = path.join(cargoTargetDir, 'x86_64-pc-windows-msvc', 'release', 'bundle', 'nsis');
 const installerName = (await readdir(bundleDir)).find((name) => name.endsWith('-setup.exe'));
 if (!installerName) throw new Error('缺少 NSIS 安装包，请先执行 npm run build:desktop:windows');
 
@@ -67,7 +68,7 @@ async function waitForInstalledFiles(timeoutMs = 120_000) {
   while (Date.now() < deadline) {
     try {
       const names = await readdir(installDir);
-      const required = ['imail.exe', 'imail-service.exe', 'imail-service-manager.exe'];
+      const required = ['imail.exe'];
       const sizes = await Promise.all(required.map(async (requiredName) => {
         const actual = names.find((name) => name.toLowerCase() === requiredName);
         return actual ? (await stat(path.join(installDir, actual))).size : 0;
@@ -94,11 +95,12 @@ try {
 
   const installedFiles = await waitForInstalledFiles();
   const desktopName = installedFiles.find((name) => name.toLowerCase() === 'imail.exe');
-  const sidecarName = installedFiles.find((name) => name.toLowerCase() === 'imail-service.exe');
-  const cleanupName = installedFiles.find((name) => name.toLowerCase() === 'imail-service-manager.exe');
   const uninstallerName = installedFiles.find((name) => /^uninstall.*\.exe$/i.test(name));
-  if (!desktopName || !sidecarName || !cleanupName || !uninstallerName) {
-    throw new Error(`安装目录缺少桌面程序、服务 sidecar、服务管理程序或卸载程序：${installedFiles.join(', ')}`);
+  if (!desktopName || !uninstallerName) {
+    throw new Error(`安装目录缺少桌面程序或卸载程序：${installedFiles.join(', ')}`);
+  }
+  if (installedFiles.some((name) => /^imail-service(?:-manager)?\.exe$/i.test(name))) {
+    throw new Error(`Rust-only 安装包不应包含 Node 服务或旧管理程序：${installedFiles.join(', ')}`);
   }
   uninstaller = path.join(installDir, uninstallerName);
 
@@ -118,7 +120,7 @@ try {
     writeFile(dataMarker, 'preserve\n'),
     writeFile(runtimeMarker, 'remove\n'),
   ]);
-  const startupCommand = `"${path.join(installDir, cleanupName)}" --imail-daemon "${path.join(localServiceRoot, 'daemon.json')}"`;
+  const startupCommand = `"${path.join(installDir, 'retained-legacy-manager.exe')}" --imail-daemon "${path.join(localServiceRoot, 'daemon.json')}"`;
   await execFileAsync('reg.exe', ['add', startupRegistryKey, '/v', startupRegistryValue, '/t', 'REG_SZ', '/d', startupCommand, '/f'], {
     windowsHide: true,
   });
@@ -142,8 +144,9 @@ try {
   console.log(JSON.stringify({
     ok: true,
     silentInstall: true,
-    bundledSidecar: true,
-    bundledServiceManager: true,
+    rustOnlyDesktop: true,
+    bundledSidecar: false,
+    bundledServiceManager: false,
     installedAppLaunch: true,
     uninstallHookRan: true,
     uninstallRemovedUserStartup: true,

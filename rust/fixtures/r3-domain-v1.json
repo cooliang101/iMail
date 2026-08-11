@@ -1,0 +1,99 @@
+{
+  "now": "2026-08-10T04:00:00.000Z",
+  "accounts": [
+    {
+      "id": "a-first",
+      "email": "First@Example.com",
+      "displayName": "Primary",
+      "status": "error",
+      "lastError": "Authentication failed",
+      "createdAt": "2026-08-10T00:00:00.000Z",
+      "lastSyncAt": "2026-08-10T03:00:00.000Z"
+    },
+    {
+      "id": "a-second",
+      "email": "second@example.net",
+      "displayName": "Secondary",
+      "status": "connected",
+      "createdAt": "2026-08-10T00:00:00.000Z",
+      "lastSyncAt": null
+    }
+  ],
+  "messages": [
+    {
+      "id": "m-older",
+      "accountId": "a-first",
+      "mailbox": "INBOX",
+      "mailboxRole": "inbox",
+      "uid": 10,
+      "messageId": null,
+      "from": { "name": "Support Old", "address": "support@mail.example.com" },
+      "to": [
+        { "name": "Duplicate", "address": "SUPPORT@mail.example.com" },
+        { "name": "Owner", "address": "first@example.com" }
+      ],
+      "subject": "Older",
+      "preview": "Older preview",
+      "text": "Older body",
+      "html": null,
+      "date": "2026-08-10T01:00:00.000Z",
+      "unread": true,
+      "flagged": false,
+      "hasAttachments": false,
+      "attachments": [],
+      "labels": ["zeta", "客户"],
+      "snoozedUntil": null
+    },
+    {
+      "id": "m-newer",
+      "accountId": "a-first",
+      "mailbox": "INBOX",
+      "mailboxRole": "inbox",
+      "uid": 11,
+      "messageId": null,
+      "from": { "name": "Support New", "address": "Support@mail.example.com" },
+      "to": [],
+      "subject": "Latest",
+      "preview": "Latest preview",
+      "text": "Latest body",
+      "html": null,
+      "date": "2026-08-10T02:00:00.000Z",
+      "unread": true,
+      "flagged": false,
+      "hasAttachments": false,
+      "attachments": [],
+      "labels": ["alpha", "客户"],
+      "snoozedUntil": "2026-08-10T01:30:00.000Z"
+    }
+  ],
+  "previousContacts": [
+    {
+      "address": "logo@example.com",
+      "name": "Logo source",
+      "messageCount": 1,
+      "lastContactAt": "2026-01-01T00:00:00.000Z",
+      "logo": {
+        "key": "domain:example.com",
+        "contentType": "image/png",
+        "sourceUrl": "https://example.com/favicon.png",
+        "fetchedAt": "2026-01-01T00:00:00.000Z"
+      }
+    }
+  ],
+  "expected": {
+    "contact": {
+      "address": "Support@mail.example.com",
+      "name": "Support New",
+      "messageCount": 2,
+      "lastContactAt": "2026-08-10T02:00:00.000Z",
+      "logoKey": "domain:example.com"
+    },
+    "labels": ["客户", "alpha", "zeta"],
+    "notificationIds": [
+      "account-a-first",
+      "unread-m-newer",
+      "snooze-m-newer",
+      "unread-m-older"
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-import { configuredServiceUrl } from './service-config';
+import { configuredServiceMode, configuredServiceUrl, embeddedTauriServiceEnabled } from './service-config';
 
 export type DesktopHttpResponse = { status: number; body: string };
 export type DesktopHttpInvoker = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -27,14 +27,19 @@ export async function desktopTestService(baseUrl: string, invoker: DesktopHttpIn
   });
 }
 
-export async function desktopDownload(path: string, target: string, invoker: DesktopHttpInvoker = tauriInvoke) {
+export async function desktopDownload(path: string, target: string, invoker: DesktopHttpInvoker = tauriInvoke, embedded = configuredServiceMode() === 'local' && embeddedTauriServiceEnabled()) {
+  if (embedded) {
+    await invoker('desktop_download_embedded', { path, target });
+    return;
+  }
   await invoker('desktop_download', { baseUrl: configuredServiceUrl(), path, target });
 }
 
-export async function desktopReadBinary(path: string, invoker: DesktopHttpInvoker = tauriInvoke) {
-  const bytes = await invoker<ArrayBuffer | Uint8Array | number[]>('desktop_read_binary', {
-    baseUrl: configuredServiceUrl(), path,
-  });
+export async function desktopReadBinary(path: string, invoker: DesktopHttpInvoker = tauriInvoke, embedded = configuredServiceMode() === 'local' && embeddedTauriServiceEnabled()) {
+  const bytes = await invoker<ArrayBuffer | Uint8Array | number[]>(
+    embedded ? 'desktop_read_embedded_binary' : 'desktop_read_binary',
+    embedded ? { path } : { baseUrl: configuredServiceUrl(), path },
+  );
   if (bytes instanceof ArrayBuffer) return new Uint8Array(bytes);
   if (bytes instanceof Uint8Array) return bytes;
   return Uint8Array.from(bytes);

@@ -1,5 +1,12 @@
 use fs2::FileExt;
+use imail_core::ReadOnlyRepository;
+use imail_http::{EmbeddedServiceHost, HttpAdapterConfig};
+use imail_security::MasterKey;
+#[cfg(test)]
+use imail_storage_sqlite::migrate_database;
+use imail_storage_sqlite::{create_data_backup, SqliteReadOnlyStore};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     fs::{self, OpenOptions},
     io::{Read, Write},
@@ -11,11 +18,12 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
-#[cfg(not(windows))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const LOCAL_SERVICE_HOST: &str = "127.0.0.1";
+#[cfg(any(test, feature = "legacy-daemon-admin"))]
 const DEFAULT_LOCAL_SERVICE_PORT: u16 = 8787;
+#[cfg(any(test, feature = "legacy-daemon-admin"))]
 const MIN_LOCAL_SERVICE_PORT: u16 = 1024;
 const WINDOWS_RUN_VALUE: &str = "iMailService";
 #[cfg(any(target_os = "macos", test))]
@@ -40,6 +48,7 @@ struct DaemonConfig {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(feature = "legacy-daemon-admin")]
 pub struct LocalServiceStatus {
     installed: bool,
     data_present: bool,
@@ -67,8 +76,23 @@ struct SupervisorDiagnostic {
 struct ServiceIdentity {
     service: String,
     instance_id: String,
+    #[cfg(feature = "legacy-daemon-admin")]
     version: String,
     protocol_version: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EmbeddedSwitchRecord {
+    format_version: u32,
+    state: &'static str,
+    created_at: String,
+    backup_root: PathBuf,
+    database_sha256: String,
+    schema_version: u32,
+    account_count: u64,
+    decrypted_credential_count: u64,
+    legacy_runtime_retained: bool,
 }
 
 fn local_service_root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -82,6 +106,8 @@ fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(local_service_root(app)?.join("daemon.json"))
 }
 
+#[allow(dead_code)]
+#[cfg(feature = "legacy-daemon-admin")]
 fn sidecar_source() -> Result<PathBuf, String> {
     let directory = std::env::current_exe()
         .map_err(|error| format!("无法确定桌面程序位置：{error}"))?
@@ -99,20 +125,7 @@ fn sidecar_source() -> Result<PathBuf, String> {
 }
 
 fn supervisor_source() -> Result<PathBuf, String> {
-    let desktop =
-        std::env::current_exe().map_err(|error| format!("无法确定桌面程序位置：{error}"))?;
-    #[cfg(windows)]
-    {
-        let manager = desktop.with_file_name("imail-service-manager.exe");
-        if !manager.is_file() {
-            return Err(format!("安装包缺少本地服务管理程序：{}", manager.display()));
-        }
-        Ok(manager)
-    }
-    #[cfg(not(windows))]
-    {
-        Ok(desktop)
-    }
+    std::env::current_exe().map_err(|error| format!("无法确定桌面程序位置：{error}"))
 }
 
 fn read_config(path: &Path) -> Result<DaemonConfig, String> {
@@ -121,6 +134,7 @@ fn read_config(path: &Path) -> Result<DaemonConfig, String> {
     serde_json::from_str(&content).map_err(|error| format!("本地服务配置无效：{error}"))
 }
 
+#[cfg(any(test, feature = "legacy-daemon-admin"))]
 fn validate_local_service_port(port: u16) -> Result<(), String> {
     if port < MIN_LOCAL_SERVICE_PORT {
         return Err(format!(
@@ -140,7 +154,7 @@ fn validate_managed_config(root: &Path, config: &DaemonConfig) -> Result<(), Str
             .is_some_and(|value| value.starts_with("imail-service-"));
     let lock_file_valid = config.supervisor_lock_file.as_os_str().is_empty()
         || config.supervisor_lock_file == root.join("supervisor.lock");
-    let port_valid = config.port >= MIN_LOCAL_SERVICE_PORT;
+    let port_valid = config.port >= 1024;
     if !executable_in_runtime
         || config.data_dir != root.join("data")
         || config.control_file != root.join("control-token")
@@ -380,6 +394,8 @@ async fn fetch_identity(config: &DaemonConfig) -> Result<ServiceIdentity, String
     Ok(identity)
 }
 
+#[allow(dead_code)]
+#[cfg(feature = "legacy-daemon-admin")]
 fn service_port_listening(config: &DaemonConfig) -> bool {
     let Ok(address) = format!("{}:{}", config.host, config.port).parse::<SocketAddr>() else {
         return false;
@@ -387,6 +403,7 @@ fn service_port_listening(config: &DaemonConfig) -> bool {
     TcpStream::connect_timeout(&address, Duration::from_millis(500)).is_ok()
 }
 
+#[cfg(feature = "legacy-daemon-admin")]
 async fn status_from_config(
     root: &Path,
     config: Option<DaemonConfig>,
@@ -470,6 +487,8 @@ async fn status_from_config(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
+#[cfg(feature = "legacy-daemon-admin")]
 pub async fn local_service_status(app: AppHandle) -> LocalServiceStatus {
     let root = match local_service_root(&app) {
         Ok(root) => root,
@@ -495,6 +514,8 @@ pub async fn local_service_status(app: AppHandle) -> LocalServiceStatus {
     }
 }
 
+#[allow(dead_code)]
+#[cfg(feature = "legacy-daemon-admin")]
 async fn rollback_activation(
     path: &Path,
     attempted: &DaemonConfig,
@@ -565,6 +586,7 @@ async fn rollback_activation(
     problems.join("；")
 }
 
+#[cfg(feature = "legacy-daemon-admin")]
 struct ExecutableDeployment {
     target: PathBuf,
     staged: PathBuf,
@@ -573,6 +595,7 @@ struct ExecutableDeployment {
     had_target: bool,
 }
 
+#[cfg(feature = "legacy-daemon-admin")]
 fn files_equal(left: &Path, right: &Path) -> Result<bool, String> {
     let left_metadata =
         fs::metadata(left).map_err(|error| format!("读取服务程序信息失败：{error}"))?;
@@ -603,6 +626,7 @@ fn files_equal(left: &Path, right: &Path) -> Result<bool, String> {
     }
 }
 
+#[cfg(feature = "legacy-daemon-admin")]
 fn service_binary_requires_refresh(source: &Path, target: &Path) -> Result<bool, String> {
     if !target.is_file() {
         return Ok(true);
@@ -610,6 +634,7 @@ fn service_binary_requires_refresh(source: &Path, target: &Path) -> Result<bool,
     files_equal(source, target).map(|equal| !equal)
 }
 
+#[cfg(feature = "legacy-daemon-admin")]
 fn sibling_with_suffix(path: &Path, suffix: &str) -> Result<PathBuf, String> {
     let file_name = path
         .file_name()
@@ -618,6 +643,7 @@ fn sibling_with_suffix(path: &Path, suffix: &str) -> Result<PathBuf, String> {
     Ok(path.with_file_name(format!("{file_name}.{suffix}")))
 }
 
+#[cfg(feature = "legacy-daemon-admin")]
 fn stage_executable(source: &Path, target: &Path) -> Result<Option<ExecutableDeployment>, String> {
     let staged = sibling_with_suffix(target, "stage")?;
     let backup = sibling_with_suffix(target, "rollback")?;
@@ -669,6 +695,7 @@ fn stage_executable(source: &Path, target: &Path) -> Result<Option<ExecutableDep
     }
 }
 
+#[cfg(feature = "legacy-daemon-admin")]
 impl ExecutableDeployment {
     fn activate(&mut self) -> Result<(), String> {
         if self.backup.exists() {
@@ -723,6 +750,8 @@ impl ExecutableDeployment {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
+#[cfg(feature = "legacy-daemon-admin")]
 pub async fn local_service_enable(
     app: AppHandle,
     port: Option<u16>,
@@ -1004,6 +1033,8 @@ pub async fn local_service_enable(
     Err(activation_error(error, rollback))
 }
 
+#[allow(dead_code)]
+#[cfg(feature = "legacy-daemon-admin")]
 fn activation_error(primary: String, rollback: String) -> String {
     if rollback.is_empty() {
         primary
@@ -1120,12 +1151,9 @@ fn cleanup_local_service_root(root: &Path) -> Result<(), String> {
             fs::remove_file(&target).map_err(|error| format!("删除本地服务文件失败：{error}"))?;
         }
     }
-    for directory in ["runtime", "logs"] {
-        let target = root.join(directory);
-        if target.is_dir() {
-            fs::remove_dir_all(&target)
-                .map_err(|error| format!("删除本地服务目录失败：{error}"))?;
-        }
+    let runtime = root.join("runtime");
+    if runtime.is_dir() {
+        fs::remove_dir_all(&runtime).map_err(|error| format!("删除本地服务目录失败：{error}"))?;
     }
     let _ = fs::remove_file(&cleanup_state);
     if root
@@ -1179,14 +1207,209 @@ pub fn run_uninstall_cleanup_from_args() -> Option<Result<(), String>> {
     Some(environment_local_service_root().and_then(|root| cleanup_local_service_root(&root)))
 }
 
-#[tauri::command]
-pub async fn local_service_pause(app: AppHandle) -> Result<LocalServiceStatus, String> {
+fn file_sha256(path: &Path) -> Result<String, String> {
+    let mut file =
+        fs::File::open(path).map_err(|error| format!("读取切换保护文件失败：{error}"))?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|error| format!("读取切换保护文件失败：{error}"))?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok(format!("{:X}", digest.finalize()))
+}
+
+fn completed_embedded_switch(path: &Path) -> bool {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|value| serde_json::from_str::<serde_json::Value>(&value).ok())
+        .and_then(|value| {
+            value
+                .get("state")
+                .and_then(|state| state.as_str())
+                .map(str::to_owned)
+        })
+        .as_deref()
+        == Some("complete")
+}
+
+fn validate_embedded_switch_data(data_dir: &Path) -> Result<(u32, u64, u64), String> {
+    let store = SqliteReadOnlyStore::open_data_dir(data_dir)
+        .map_err(|error| format!("Rust 数据兼容检查失败：{error}"))?;
+    let inventory = store
+        .inventory()
+        .map_err(|error| format!("Rust 数据完整性检查失败：{error}"))?;
+    let key = MasterKey::from_file(data_dir.join("master.key"))
+        .map_err(|error| format!("Rust 主密钥检查失败：{error}"))?;
+    let credentials = store
+        .credential_compatibility_summary(&key)
+        .map_err(|error| format!("Rust 凭据解密检查失败：{error}"))?;
+    if credentials.account_count != credentials.decrypted_count {
+        return Err("Rust 凭据解密检查未覆盖全部账户".into());
+    }
+    let host = EmbeddedServiceHost::start(
+        HttpAdapterConfig::production(data_dir.to_path_buf()).with_sync_worker(false),
+    )
+    .map_err(|error| format!("Rust 无网络首启检查失败：{error}"))?;
+    let info = host.service_info();
+    if info.get("service").and_then(serde_json::Value::as_str) != Some("imail")
+        || info
+            .get("capabilities")
+            .and_then(|value| value.get("syncWorker"))
+            .and_then(serde_json::Value::as_bool)
+            != Some(false)
+    {
+        return Err("Rust 无网络首启返回了不兼容的服务身份".into());
+    }
+    host.shutdown(Duration::from_secs(10))
+        .map_err(|error| format!("Rust 无网络首启关闭失败：{error}"))?;
+    Ok((
+        inventory.schema_version,
+        credentials.account_count,
+        credentials.decrypted_count,
+    ))
+}
+
+async fn restore_legacy_after_switch_failure(
+    config: &DaemonConfig,
+    path: &Path,
+) -> Result<(), String> {
+    write_private(&config.enabled_file, "enabled\n")?;
+    let supervisor = supervisor_source()?;
+    register_startup(&supervisor, path)?;
+    if fetch_identity(config).await.is_err() {
+        spawn_supervisor(&supervisor, path)?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if fetch_identity(config).await.is_ok() {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    Err("旧本地服务恢复启动超时".into())
+}
+
+/// Performs the one-writer transition from the retained Node daemon to the
+/// embedded Rust host. This intentionally retains all legacy runtime files and
+/// creates a new, non-overwriting snapshot after the old writer has stopped.
+pub(crate) async fn prepare_embedded_switch(app: &AppHandle) -> Result<PathBuf, String> {
+    let root = local_service_root(app)?;
+    let path = root.join("daemon.json");
+    let record_path = root.join("embedded-switch.json");
+    if completed_embedded_switch(&record_path) || !path.is_file() {
+        return Ok(root);
+    }
+    let config = read_managed_config(&root, &path)?;
+    let previous_enabled = config.enabled_file.is_file();
+    let database = config.data_dir.join("imail.sqlite");
+    let before_hash = file_sha256(&database)?;
+    write_private(
+        &record_path,
+        &format!(
+            "{{\n  \"formatVersion\": 1,\n  \"state\": \"stoppingLegacy\",\n  \"createdAt\": \"{}\",\n  \"legacyRuntimeRetained\": true\n}}\n",
+            chrono::Utc::now().to_rfc3339()
+        ),
+    )?;
+
+    let attempt = async {
+        if previous_enabled {
+            stop_legacy_service(app.clone()).await?;
+        } else {
+            for _ in 0..20 {
+                if fetch_identity(&config).await.is_err() && supervisor_stopped(&config, &path) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+            if fetch_identity(&config).await.is_ok() || !supervisor_stopped(&config, &path) {
+                return Err("旧本地服务仍在运行，拒绝打开同一数据目录".to_string());
+            }
+        }
+
+        let snapshots = root.join("migration-snapshots");
+        fs::create_dir_all(&snapshots).map_err(|error| format!("创建切换快照目录失败：{error}"))?;
+        let run_id = format!(
+            "rust-switch-{}-{}",
+            chrono::Utc::now().format("%Y%m%dT%H%M%SZ"),
+            uuid::Uuid::new_v4().simple()
+        );
+        let backup_root = snapshots.join(run_id);
+        let report = create_data_backup(
+            &config.data_dir,
+            &backup_root,
+            env!("CARGO_PKG_VERSION"),
+            &chrono::Utc::now().to_rfc3339(),
+        )
+        .map_err(|error| format!("创建切换前快照失败：{error}"))?;
+        let (schema_version, account_count, decrypted_credential_count) =
+            validate_embedded_switch_data(&config.data_dir)?;
+        let after_hash = file_sha256(&database)?;
+        if after_hash != before_hash {
+            return Err("Rust 首启预检改变了数据库，旧服务保持停止并保留失败现场".into());
+        }
+        let record = EmbeddedSwitchRecord {
+            format_version: 1,
+            state: "complete",
+            created_at: chrono::Utc::now().to_rfc3339(),
+            backup_root: report.backup_root,
+            database_sha256: after_hash,
+            schema_version,
+            account_count,
+            decrypted_credential_count,
+            legacy_runtime_retained: true,
+        };
+        let serialized = serde_json::to_string_pretty(&record)
+            .map_err(|error| format!("编码切换记录失败：{error}"))?;
+        write_private(&record_path, &format!("{serialized}\n"))?;
+        Ok(root.clone())
+    }
+    .await;
+
+    match attempt {
+        Ok(root) => Ok(root),
+        Err(primary) => {
+            let unchanged = file_sha256(&database).is_ok_and(|hash| hash == before_hash);
+            let rollback = if previous_enabled && unchanged {
+                restore_legacy_after_switch_failure(&config, &path)
+                    .await
+                    .err()
+            } else {
+                None
+            };
+            let state = if rollback.is_none() && previous_enabled && unchanged {
+                "rolledBack"
+            } else {
+                "failed"
+            };
+            let _ = write_private(
+                &record_path,
+                &format!(
+                    "{{\n  \"formatVersion\": 1,\n  \"state\": \"{state}\",\n  \"createdAt\": \"{}\",\n  \"databaseUnchanged\": {unchanged},\n  \"legacyRuntimeRetained\": true\n}}\n",
+                    chrono::Utc::now().to_rfc3339()
+                ),
+            );
+            if let Some(rollback) = rollback {
+                Err(format!("{primary}；恢复旧服务也失败：{rollback}"))
+            } else {
+                Err(primary)
+            }
+        }
+    }
+}
+
+async fn stop_legacy_service(app: AppHandle) -> Result<(), String> {
     log::info!(target: "desktop", "[service.pause] requested");
     let path = config_path(&app)?;
     let root = local_service_root(&app)?;
     let config = match read_managed_config(&root, &path) {
         Ok(config) => config,
-        Err(_) => return Ok(status_from_config(&root, None, None).await),
+        Err(_) => return Ok(()),
     };
     if config.enabled_file.exists() {
         fs::remove_file(&config.enabled_file)
@@ -1226,10 +1449,12 @@ pub async fn local_service_pause(app: AppHandle) -> Result<LocalServiceStatus, S
         return Err(format!("暂停本地服务超时：{}", details.join("；")));
     }
     log::info!(target: "desktop", "[service.paused] local service stopped");
-    Ok(status_from_config(&root, Some(config), None).await)
+    Ok(())
 }
 
 #[tauri::command]
+#[allow(dead_code)]
+#[cfg(feature = "legacy-daemon-admin")]
 pub async fn local_service_remove(app: AppHandle) -> Result<LocalServiceStatus, String> {
     log::info!(target: "desktop", "[service.remove] requested; user data will be preserved");
     let path = config_path(&app)?;
@@ -1294,7 +1519,6 @@ pub async fn local_service_remove(app: AppHandle) -> Result<LocalServiceStatus, 
     Ok(status_from_config(&root, None, None).await)
 }
 
-#[cfg(any(not(windows), test))]
 fn supervisor_service_args(config: &DaemonConfig) -> Vec<String> {
     vec![
         "--data-dir".into(),
@@ -1308,7 +1532,6 @@ fn supervisor_service_args(config: &DaemonConfig) -> Vec<String> {
     ]
 }
 
-#[cfg(not(windows))]
 fn supervisor_config_current(path: &Path, expected: &DaemonConfig) -> bool {
     read_config(path).is_ok_and(|current| {
         !expected.supervisor_id.is_empty() && current.supervisor_id == expected.supervisor_id
@@ -1327,6 +1550,7 @@ fn supervisor_stopped(config: &DaemonConfig, config_path: &Path) -> bool {
     let lock_path = supervisor_lock_path(config, config_path);
     let Ok(file) = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(lock_path)
@@ -1336,11 +1560,10 @@ fn supervisor_stopped(config: &DaemonConfig, config_path: &Path) -> bool {
     if file.try_lock_exclusive().is_err() {
         return false;
     }
-    let _ = file.unlock();
+    let _ = fs2::FileExt::unlock(&file);
     true
 }
 
-#[cfg(not(windows))]
 fn rotate_service_log(path: &Path) -> Result<(), String> {
     const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
     if fs::metadata(path).map(|value| value.len()).unwrap_or(0) < MAX_LOG_BYTES {
@@ -1357,12 +1580,12 @@ fn supervisor_diagnostic_path(config: &DaemonConfig) -> PathBuf {
     config.control_file.with_file_name("supervisor-status.json")
 }
 
+#[cfg(feature = "legacy-daemon-admin")]
 fn read_supervisor_diagnostic(config: &DaemonConfig) -> Option<SupervisorDiagnostic> {
     let content = fs::read_to_string(supervisor_diagnostic_path(config)).ok()?;
     serde_json::from_str(&content).ok()
 }
 
-#[cfg(not(windows))]
 fn write_supervisor_diagnostic(
     config: &DaemonConfig,
     failures: u32,
@@ -1383,7 +1606,6 @@ fn write_supervisor_diagnostic(
     }
 }
 
-#[cfg(not(windows))]
 fn wait_supervisor_backoff(config: &DaemonConfig, path: &Path, failures: u32) -> bool {
     let seconds = (1u64 << failures.min(5)).min(30);
     let deadline = Instant::now() + Duration::from_secs(seconds);
@@ -1397,6 +1619,8 @@ fn wait_supervisor_backoff(config: &DaemonConfig, path: &Path, failures: u32) ->
 }
 
 #[tauri::command]
+#[allow(dead_code)]
+#[cfg(feature = "legacy-daemon-admin")]
 pub fn local_service_open_logs(app: AppHandle) -> Result<(), String> {
     let logs = local_service_root(&app)?.join("logs");
     fs::create_dir_all(&logs).map_err(|error| format!("创建服务日志目录失败：{error}"))?;
@@ -1421,29 +1645,6 @@ pub fn local_service_open_logs(app: AppHandle) -> Result<(), String> {
     Err("当前平台不支持打开服务日志目录".into())
 }
 
-#[cfg(windows)]
-pub fn run_daemon_from_args() -> bool {
-    let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
-    if arguments.first().map(|value| value.as_os_str())
-        != Some(std::ffi::OsStr::new("--imail-daemon"))
-    {
-        return false;
-    }
-    if let Ok(manager) = supervisor_source() {
-        let mut command = Command::new(manager);
-        command
-            .args(arguments)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-        let _ = command.spawn();
-    }
-    true
-}
-
-#[cfg(not(windows))]
 pub fn run_daemon_from_args() -> bool {
     let mut args = std::env::args_os();
     let _ = args.next();
@@ -1466,6 +1667,7 @@ pub fn run_daemon_from_args() -> bool {
     let lock_path = supervisor_lock_path(&config, &path);
     let Ok(supervisor_lock) = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(lock_path)
@@ -1589,6 +1791,58 @@ pub fn run_daemon_from_args() -> bool {
 mod tests {
     use super::*;
 
+    fn embedded_switch_fixture(label: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "imail-embedded-switch-{label}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let data = root.join("data");
+        fs::create_dir_all(&data).unwrap();
+        fs::write(data.join("imail.sqlite"), []).unwrap();
+        migrate_database(data.join("imail.sqlite")).unwrap();
+        fs::write(data.join("master.key"), MasterKey::generate_hex()).unwrap();
+        fs::write(data.join("instance-id"), uuid::Uuid::new_v4().to_string()).unwrap();
+        root
+    }
+
+    #[test]
+    fn validates_embedded_switch_without_http_or_data_mutation() {
+        let root = embedded_switch_fixture("valid");
+        let database = root.join("data/imail.sqlite");
+        let before = file_sha256(&database).unwrap();
+        let (schema, accounts, decrypted) =
+            validate_embedded_switch_data(&root.join("data")).unwrap();
+        assert_eq!(schema, imail_protocol::CURRENT_SCHEMA_VERSION);
+        assert_eq!((accounts, decrypted), (0, 0));
+        assert_eq!(file_sha256(&database).unwrap(), before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn invalid_master_key_fails_before_embedded_host_start() {
+        let root = embedded_switch_fixture("bad-key");
+        let database = root.join("data/imail.sqlite");
+        let before = file_sha256(&database).unwrap();
+        fs::write(root.join("data/master.key"), "not-a-key").unwrap();
+        let error = validate_embedded_switch_data(&root.join("data")).unwrap_err();
+        assert!(error.contains("master.key") || error.contains("主密钥"));
+        assert_eq!(file_sha256(&database).unwrap(), before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn switch_snapshot_refuses_overwrite_and_preserves_source() {
+        let root = embedded_switch_fixture("backup-overwrite");
+        let database = root.join("data/imail.sqlite");
+        let before = file_sha256(&database).unwrap();
+        let target = root.join("existing-backup");
+        fs::create_dir(&target).unwrap();
+        let error = create_data_backup(root.join("data"), &target, "test", "now").unwrap_err();
+        assert!(error.to_string().contains("拒绝覆盖"));
+        assert_eq!(file_sha256(&database).unwrap(), before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn quotes_the_supervisor_command_without_shell_expansion() {
         let value = command_value(
@@ -1652,6 +1906,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "legacy-daemon-admin")]
     fn executable_deployment_is_atomic_and_rollback_restores_previous_binary() {
         let directory = std::env::temp_dir().join(format!(
             "imail-executable-deployment-{}",
@@ -1706,6 +1961,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "legacy-daemon-admin")]
     fn refreshes_a_changed_service_binary_even_when_the_app_version_is_unchanged() {
         let directory =
             std::env::temp_dir().join(format!("imail-service-refresh-{}", uuid::Uuid::new_v4()));

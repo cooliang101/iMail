@@ -57,6 +57,11 @@ jobs:
             type=sha,format=long,prefix=sha-
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Validate Rust Docker image before publishing it
+        run: npm run test:rust-container
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
@@ -92,13 +97,10 @@ jobs:
         with:
           workspaces: src-tauri -> target
       - run: npm ci
-      - run: npm run build:service-runtime
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc
-      - run: cargo test --manifest-path src-tauri/cleanup-helper/Cargo.toml --locked
       - run: npm run build:desktop:internal
       - run: npm run test:windows-installer
       - run: npm run test:desktop-release
-      - run: npm run test:local-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: imail-windows-x64-internal-test

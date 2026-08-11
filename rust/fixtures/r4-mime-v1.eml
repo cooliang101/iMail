@@ -1,0 +1,30 @@
+From: =?UTF-8?B?5Y+R5Lu25Lq6?= <sender@example.com>
+To: Alice <alice@example.com>, Bob <bob@example.com>
+Subject: =?UTF-8?B?5L2g5aW9IOKAkyBTdGF0dXM=?=
+Date: Mon, 10 Aug 2026 12:34:56 +0800
+Message-ID: <fixture@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-boundary"
+
+--mixed-boundary
+Content-Type: multipart/alternative; boundary="alternative-boundary"
+
+--alternative-boundary
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Hello world.
+=E7=AC=AC=E4=BA=8C=E8=A1=8C=E3=80=82
+--alternative-boundary
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<p>Hello <strong>world</strong>.</p><p>=E7=AC=AC=E4=BA=8C=E8=A1=8C=E3=80=82</p>
+--alternative-boundary--
+--mixed-boundary
+Content-Type: text/plain; name*=UTF-8''%E6%8A%A5%E5%91%8A.txt
+Content-Disposition: attachment; filename*=UTF-8''%E6%8A%A5%E5%91%8A.txt
+Content-Transfer-Encoding: base64
+
+aGVsbG8=
+--mixed-boundary--

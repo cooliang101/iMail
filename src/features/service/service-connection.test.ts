@@ -34,6 +34,14 @@ describe('service connection contract', () => {
     } });
   });
 
+  it('tests embedded local identity through the typed command without a base URL', async () => {
+    const invoker = vi.fn(async () => ({ status: 200, body: JSON.stringify(info) }));
+    await expect(testServiceConnection('http://127.0.0.1:8787', {
+      desktop: true, embeddedLocal: true, invoker: invoker as DesktopHttpInvoker,
+    })).resolves.toEqual(info);
+    expect(invoker).toHaveBeenCalledWith('desktop_mail_service_call', { call: { operation: 'systemInfo' } });
+  });
+
   it('does not accept an arbitrary healthy HTTP endpoint', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     await expect(testServiceConnection('https://example.com', { desktop: false, fetcher })).rejects.toThrow('不是 iMail');

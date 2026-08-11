@@ -12,6 +12,7 @@
 | `IMAIL_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | 远程生产 API 与 Web 允许的请求主机名，不含端口 |
 | `CORS_ORIGIN` | 开发模式内置回环前端，生产未设置 | 仅在 Web 与 API 不同源时列出完整 Origin，逗号分隔；非回环来源必须 HTTPS |
 | `IMAIL_REGISTRATION_MODE` | 开发为 `open`，生产为 `initial-only` | 生产初始化后是否继续允许创建应用用户 |
+| `IMAIL_SYNC_WORKER` | `true` | Rust `imail-server --http` 是否在同一进程装配 worker、scheduler 与 IDLE watcher；`false` 仅用于诊断或契约隔离 |
 | `IMAIL_SYNC_WORKER_MODE` | `child` | `child` 由 API 启动器监管；`external` 由外部管理器运行；`disabled` 仅用于诊断 |
 | `IMAIL_SYNC_CONCURRENCY` | `3` | Worker 最大并发同步任务数，范围 1–10 |
 | `IMAIL_SYNC_WORKER_POLL_MS` | `1000` | Worker 领取任务间隔，最小 250ms |
@@ -23,6 +24,12 @@
 | `IMAIL_SYNC_IDLE_RECONCILE_MS` | `5000` | IDLE 连接期望状态检查与断线重建间隔，最小 5 秒 |
 | `IMAIL_SYNC_IDLE_REFRESH_MS` | `60000` | IDLE 保活刷新周期；不支持 IDLE 的服务商以此间隔执行 STATUS 兜底，最小 15 秒 |
 
+Rust 宿主读取 `IMAIL_SYNC_WORKER` 并复用其余 `IMAIL_SYNC_*` 调优项。对外报告 `syncWorker=true` 之前必须已成功启动运行时，启动失败会让整个服务失败，而不是只启动 HTTP 空壳。旧 `IMAIL_SYNC_WORKER_MODE` 仅用于迁移对照测试。
+
+Rust HTTP 宿主继续接受现有远程部署变量 `HOST`、`PORT`、`CORS_ORIGIN`、`IMAIL_TRUST_PROXY` 和 `IMAIL_REGISTRATION_MODE`。`--host`/`--port` 命令行值优先；`IMAIL_CORS_ORIGINS`、`IMAIL_TRUST_PROXY_ONE_HOP` 与 `IMAIL_REGISTRATION_OPEN` 是迁移期显式覆盖别名，不要求现有部署改名。
+
+Windows 桌面本地模式不启动 HTTP 宿主；`--daemon-control-file` 仅为迁移期兼容参数。Docker/远程部署不要配置该参数，应由容器 SIGTERM 或进程管理器停止。
+
 ## 本地启动
 
 Streamable HTTP：
@@ -31,17 +38,11 @@ Streamable HTTP：
 npm run dev
 ```
 
-默认模式会由 API 启动器拉起并监管 Worker。Docker Compose 需要分别管理进程时：
-
-```powershell
-$env:IMAIL_SYNC_WORKER_MODE='external'
-npm start
-npm run worker
-```
+`npm run dev` 同时启动 Vite 与 Rust `imail-server --http`。Rust 服务在同一进程装配 worker、scheduler 与 IDLE watcher；不再运行独立 Node Worker。
 
 ## 远程生产部署
 
-`npm run build:remote` 生成同版本 Web、API 与 Worker 运行包，`npm run start:remote` 默认监听 `0.0.0.0:8787` 并托管 `dist`。容器以非 root 用户运行并把所有可变数据写入 `/data`。`compose.example.yml` 只把端口绑定到宿主机回环地址，适合本机验证或接入宿主机已有的反向代理，不应改成直接监听所有网卡。
+`npm run build:remote` 生成同版本 Web 资源、Rust HTTP 服务和 Rust 维护工具；`npm run start:remote` 显式以 `--http` 监听 `0.0.0.0:8787` 并托管 `dist`。正式容器 runtime 不包含 Node，以非 root 用户运行并把所有可变数据写入 `/data`。`compose.example.yml` 只把端口绑定到宿主机回环地址。
 
 仓库同时提供带 Caddy 自动 HTTPS 的 `compose.https.example.yml`。服务镜像由受控 GitHub Actions 发布到 `ghcr.io/cooliang101/imail`；复制环境变量模板，填写已解析到部署主机的域名，并将 `IMAIL_IMAGE` 固定到所需版本标签或 digest 后启动。若 GHCR 包保持私有，先使用具有 `read:packages` 权限的 Token 执行 `docker login ghcr.io`：
 
@@ -67,11 +68,11 @@ docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull 
 npm run backup -- /safe/backups/imail-2026-08-03
 ```
 
-远程运行包同时生成 `server-runtime/imail-backup.mjs` 和 `server-runtime/imail-restore.mjs`。Compose 将独立的 `imail-backups` 卷挂载到 `/backups`，因此容器部署可在线执行：
+Compose 将独立的 `imail-backups` 卷挂载到 `/backups`，容器使用 Rust 维护 CLI 在线备份：
 
 ```bash
 docker compose --env-file .env.remote -f compose.https.example.yml exec imail \
-  node server-runtime/imail-backup.mjs /backups/imail-2026-08-03
+  /app/imail-maintenance backup /backups/imail-2026-08-03
 docker compose --env-file .env.remote -f compose.https.example.yml cp \
   imail:/backups/imail-2026-08-03 ./imail-2026-08-03
 ```
@@ -84,7 +85,17 @@ docker compose --env-file .env.remote -f compose.https.example.yml cp \
 npm run restore:prepare -- /safe/backups/imail-2026-08-03 /safe/restore/imail-2026-08-03
 ```
 
-容器内也可以用 `node server-runtime/imail-restore.mjs <备份目录> <全新恢复目录>` 执行相同校验。恢复目标必须是新目录或新数据卷，工具不会覆盖 `/data`。恢复工具和服务启动迁移都会拒绝高于当前发布版本支持上限的未来 schema；遇到此错误必须升级服务或选择兼容快照，不能强行启动旧版本。
+容器内使用 `/app/imail-maintenance restore <备份目录> <全新恢复目录>` 执行相同校验。恢复目标必须是新目录或新数据卷，工具不会覆盖 `/data`。恢复工具和服务启动迁移都会拒绝高于当前发布版本支持上限的未来 schema。
+
+正式 Rust 镜像不包含 Node，并内置 `/app/imail-maintenance`。该工具默认读取 `IMAIL_DATA_DIR`（镜像中为 `/data`），所有目标必须是不存在的新目录，绝不覆盖数据卷：
+
+```bash
+docker exec imail /app/imail-maintenance backup /backups/imail-2026-08-10
+docker exec imail /app/imail-maintenance restore /backups/imail-2026-08-10 /backups/imail-restore-2026-08-10
+docker exec imail /app/imail-maintenance upgrade-preflight /backups/imail-before-upgrade /backups/imail-upgrade-preflight
+```
+
+三条命令均输出机器可读 JSON。`upgrade-preflight` 先在线备份，再只在新恢复副本上执行当前 Rust schema 迁移、`quick_check` 和外键检查；失败不会修改 `/data`，已成功生成的备份继续保留用于诊断和恢复。
 
 使用环境变量提供 `APP_MASTER_KEY` 时，密钥不在数据目录中，必须由密钥管理系统另行备份。没有原主密钥，即使数据库恢复成功也无法解密邮箱凭据。
 
@@ -103,7 +114,7 @@ Compose 部署应先拉取新镜像，但保持旧容器运行；然后用新镜
 ```bash
 docker compose --env-file .env.remote -f compose.https.example.yml pull imail
 docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no-deps imail \
-  node server-runtime/imail-upgrade-preflight.mjs \
+  /app/imail-maintenance upgrade-preflight \
   /backups/imail-before-upgrade /backups/imail-new-version-preflight
 ```
 
@@ -115,10 +126,10 @@ docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no
 
 ## 冒烟检查
 
-当前交付范围只有 Windows 桌面端与服务端 Docker；Linux 侧只运行 Docker，不维护原生部署单元。Actions 月度额度接近上限，普通分支推送与 pull request 不触发工作流；未经用户明确授权，不要创建版本 tag 或手动运行。手动工作流必须选择 `docker` 或 `windows`：前者只发布 `linux/amd64` GHCR 镜像，后者只生成 Windows Artifact。Windows 日常仍使用本机 `npm run test:internal-release`，有 Docker 的测试机可执行 `npm run test:container-release`。
+当前交付范围只有 Windows 桌面端与服务端 Docker；Linux 侧只运行 Docker。普通分支推送与 pull request 不触发工作流；未经用户明确授权，不创建版本 tag 或手动运行。手动工作流必须选择 `docker` 或 `windows`：前者只验证并发布 Rust `linux/amd64` 镜像，后者只生成 Rust-only Windows Artifact。发布前验证 Rust 持久卷重启、healthcheck、备份、非覆盖恢复、升级预检和优雅停机。
 
 1. 在“外部接入”的“MCP”标签页签发 `mcp:full` 授权码。
-2. 用 MCP Inspector 或任意标准客户端连接 `http://127.0.0.1:8787/mcp`；桌面本地服务改过端口时使用设置页显示的当前地址。
+2. 用 MCP Inspector 或任意标准客户端连接远程 Rust 服务的 `https://mail.example.com/mcp`。桌面本地嵌入模式没有 MCP HTTP 地址。
 3. 确认 `tools/list` 包含 `accounts_list`、`messages_list`、`message_send`、`account_remove`、`theme_custom_get` 和 `theme_custom_update`。
 4. 调用 `imail_status` 与 `accounts_list`，确认响应不含 `encryptedSecret`、密码或 OAuth Token。
 5. 使用普通 `messages:read` Token 连接，预期得到 HTTP 401。
@@ -141,17 +152,21 @@ npm audit --omit=dev
 
 ```bash
 npm run test:internal-release
-# 安装并启动 Docker 的测试机额外执行
-npm run test:container-release
+# 正式 Rust worker/scheduler/IDLE 的隔离真实 TLS 长稳；参数为秒、增长 MiB、新报告
+npm run rust:tls-soak -- 3600 32 output/rust-migration-tests/r6-real-tls-soak-1h-v1.json
 # 仅限明确允许改写当前用户安装状态的 Windows 测试机
 IMAIL_ALLOW_INSTALLER_SMOKE=true npm run test:windows-installer
 ```
+
+资源报告使用不可覆盖写入；目标已存在时必须换用新的版本化文件名，不能删除或覆盖旧证据。Node/Rust 对照报告已经作为迁移验收证据保留，但旧 Node 基准实现和生成入口已删除。新的持续资源门禁只测当前 Rust 实现，并继续使用系统临时目录或迁移数据副本，不得挂载或修改活动 `.data`。
+
+真实 TLS 长稳同样拒绝覆盖报告，并且只使用系统临时数据目录。日常回归可运行 60 秒；进入切换评审前应至少运行一份数小时报告。该本地 fixture 不含真实服务商、OAuth 或公网设备行为，不能替代专用公共邮箱验收。
 
 逐项证据和需要在真实平台执行的检查见 [`deployment-verification.md`](./deployment-verification.md)。
 
 不要为了生成 Windows 内部测试包创建标签或触发 GitHub Actions。Windows 交付直接使用本机 `build:desktop:internal` 产物并记录版本、构建提交、平台/架构与 SHA-256；三段式版本标签只负责把已确认版本的服务端镜像发布到 GHCR。
 
-`server/index.test.ts` 覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`server/tokens.test.ts` 覆盖 `imail_mcp_` 格式和 scope 隔离。
+`rust/crates/imail-http/src/mcp.rs` 的测试覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`scripts/mcp-rust-sdk-interop.test.ts` 使用官方 TypeScript 客户端与 Rust 服务进行互操作验证。
 
 ## 故障排查
 
@@ -171,21 +186,20 @@ curl -fsS --cookie 'imail_session=<当前会话>' \
 ### 邮件没有自动同步
 
 - 请求 `GET /api/sync-status`；先检查账户策略的 `enabled`、邮箱状态的 `nextSyncAt`，以及 `worker.workers[].heartbeatAt`。
-- `queuedJobs` 持续增加但没有新心跳，说明 Worker 未运行。默认 `child` 模式查看 API 控制台中的 `[sync-worker]` 日志；外部模式确认 `npm run worker` 或对应服务单元已启动。
+- `queuedJobs` 持续增加但没有新心跳，说明 Rust 同步运行时未正常工作；检查应用日志或远程服务日志中的 worker/scheduler 启动与 panic 记录。
 - `connectionStatus=authRequired` 时自动重试会暂停，应在邮箱设置中重新授权或更新凭据；验证成功后调度器会恢复该账户。
 - `syncState=backoff` 表示网络或服务商错误，按 1、5、15、30、60 分钟退避。不要通过频繁点击手动同步绕过服务商限流。
 - 持续出现 `[sync-idle]` 表示长连接无法稳定建立或被服务商/网络设备关闭；Worker 会按 0.5–30 秒退避重连，同时保留一分钟周期同步兜底。不支持 IDLE 的服务器会按 `IMAIL_SYNC_IDLE_REFRESH_MS` 执行 `STATUS`。
 - 前端 SSE 仅用于刷新界面；断开 SSE 不会影响 Worker。不要把网关订阅状态当成同步健康指标。
 
-桌面端可在“设置 → 服务连接”分别打开两类轮转日志：
+桌面端可在“设置 → 服务连接”打开应用轮转日志：
 
 - “应用日志”打开 `%LOCALAPPDATA%\com.cooliang.imail\logs`。`app.log` 记录桌面进程启动、Tauri 初始化、前端就绪、窗口/托盘操作、本地服务生命周期、正常退出、Rust panic，以及 WebView 的全局错误、未处理 Promise 和 `console.warn/error`。单文件上限 5 MB，最多保留 3 份。
-- “服务日志”打开 `%LOCALAPPDATA%\com.cooliang.imail\local-service\logs`。`service.log` 记录 API、同步 Worker、停机、致命异常和业务诊断；超过 5 MB 后轮转为 `service.log.1`。
-- `local-service\supervisor-status.json` 仅在守护服务持续失败时记录失败次数、固定原因代码、退出码和发生时间；服务恢复健康后自动清除。
+- 旧 `local-service\logs` 与 `supervisor-status.json` 只作为迁移证据保留，不再由当前桌面运行时写入。
 
 应用和服务对外部错误文本执行统一脱敏，邮箱地址、Authorization/Cookie、密码、OAuth code/state/Token、client secret 和加密字段不得进入日志。提交问题时优先提供相关时间段的日志，不要通过关闭脱敏或手工打印凭据补充信息。
 
-卸载桌面应用或点击“移除运行文件”默认保留 `local-service/data`。“设置 → 服务连接”只管理服务模式、端口和守护生命周期，不提供数据删除。登录用户若进入“设置 → 隐私与数据 → 清除我的邮箱数据”，必须先核对范围，再提交当前 iMail 密码和固定确认文字；服务只清除该用户的邮箱账户与授权、邮件缓存、草稿、联系人、开发者令牌和同步状态，不删除登录账号、服务程序、主密钥或其他用户的数据。该操作无法撤销：需要保留邮件等完整内容时应事先创建服务数据备份；“邮箱授权信息导出”只保留连接配置与凭据，不包含邮件、草稿或联系人。
+卸载桌面应用默认保留 `local-service/data`。“设置 → 服务连接”只选择嵌入式本地或远程 Rust 服务，不提供数据删除。登录用户若进入“设置 → 隐私与数据 → 清除我的邮箱数据”，必须先核对范围，再提交当前 iMail 密码和固定确认文字；服务只清除该用户的数据，不删除登录账号、主密钥或其他用户的数据。
 
 同一页面的“邮箱授权信息导出”会把当前用户全部邮箱的连接配置、应用专用密码/OAuth Token 与代理凭据写入独立密码保护的 `.imailauth` 文件；邮件、附件、草稿、联系人和 iMail 登录密码不在其中。创建前必须重新验证当前密码，导出密码至少 12 个字符；下载地址与当前用户绑定、只允许下载一次且两分钟后过期。该能力只属于登录会话 HTTP UI，运维人员不得通过 MCP、API Gateway、日志或数据库查询替代它来交付凭据。
 

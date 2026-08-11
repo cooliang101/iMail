@@ -1,11 +1,18 @@
 export type SyncEventType = 'connected' | 'sync.status' | 'sync.started' | 'sync.completed' | 'sync.failed' | 'message.created';
 
-import { configuredServiceUrl, serviceUrl } from './service-config';
+import { configuredServiceMode, configuredServiceUrl, serviceUrl, type ServiceMode } from './service-config';
 import { isTauriRuntime } from './platform/tauri-runtime';
+import { embeddedTauriServiceEnabled } from './mail-service';
 
 const eventTypes: SyncEventType[] = ['connected', 'sync.status', 'sync.started', 'sync.completed', 'sync.failed', 'message.created'];
 
 type EventConnection = { close(): void };
+
+export function desktopEventCommandNames(mode: ServiceMode, embedded: boolean) {
+  return mode === 'local' && embedded
+    ? { start: 'desktop_start_embedded_events', stop: 'desktop_stop_embedded_events' }
+    : { start: 'desktop_start_events', stop: 'desktop_stop_events' };
+}
 
 let eventConnection: EventConnection | undefined;
 let subscriptionCount = 0;
@@ -33,12 +40,17 @@ function desktopEventConnection(): EventConnection {
       if (!closed && eventTypes.includes(payload.event)) dispatch(payload.event, payload.data);
     });
     if (closed) { unlisten(); return; }
-    await invoke('desktop_start_events', { baseUrl: configuredServiceUrl() });
+    const mode = configuredServiceMode();
+    const embedded = mode === 'local' && embeddedTauriServiceEnabled();
+    const commands = desktopEventCommandNames(mode, embedded);
+    await invoke(commands.start, embedded ? undefined : { baseUrl: configuredServiceUrl() });
   })().catch(() => undefined);
   return { close() {
     closed = true;
     unlisten?.();
-    void import('@tauri-apps/api/core').then(({ invoke }) => invoke('desktop_stop_events')).catch(() => undefined);
+    const mode = configuredServiceMode();
+    const commands = desktopEventCommandNames(mode, mode === 'local' && embeddedTauriServiceEnabled());
+    void import('@tauri-apps/api/core').then(({ invoke }) => invoke(commands.stop)).catch(() => undefined);
   } };
 }
 

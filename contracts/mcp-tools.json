@@ -1,0 +1,1354 @@
+{
+  "protocolVersion": "2026-07-28",
+  "tools": [
+    {
+      "name": "imail_status",
+      "title": "查看 iMail 状态",
+      "description": "查看账户、邮件、未读、草稿数量与最近同步状态。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "settings_get",
+      "title": "读取 iMail 设置",
+      "description": "读取主题、启动页面、阅读、通知、邮件展示和快捷键偏好。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "settings_update",
+      "title": "更新 iMail 设置",
+      "description": "更新主题、启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "theme": {
+            "type": "string",
+            "enum": [
+              "mint-fresh",
+              "tech",
+              "business-blue",
+              "soft-neubrutalism"
+            ]
+          },
+          "startupView": {
+            "type": "string",
+            "enum": [
+              "inbox",
+              "starred"
+            ]
+          },
+          "markReadOnOpen": {
+            "type": "boolean"
+          },
+          "defaultMessageView": {
+            "type": "string",
+            "enum": [
+              "source",
+              "rendered"
+            ]
+          },
+          "notificationKinds": {
+            "type": "object",
+            "properties": {
+              "unread": {
+                "type": "boolean"
+              },
+              "snooze": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": "boolean"
+              }
+            }
+          },
+          "shortcutBindings": {
+            "type": "object",
+            "properties": {
+              "focusSearch": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "compose": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "sync": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "nextMessage": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "previousMessage": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "reply": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "forward": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "toggleStar": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "markUnread": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "archive": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "delete": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "openShortcutSettings": {
+                "type": "string",
+                "maxLength": 60
+              }
+            }
+          }
+        }
+      },
+      "annotations": {
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "theme_custom_get",
+      "title": "读取自定义主题",
+      "description": "读取当前应用账号由 MCP 保存的安全自定义主题令牌，可复制到 iMail 自定义主题编辑器中。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "theme_custom_update",
+      "title": "保存自定义主题",
+      "description": "校验并保存颜色、圆角、阴影和字体令牌；不接受 CSS、URL 或可执行内容，也不经过 HTTP 网关。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "canvas": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "surface": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "surfaceSubtle": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "rail": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "text": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "textSecondary": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "border": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "accent": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "accentSubtle": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "radius": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "balanced",
+              "rounded"
+            ]
+          },
+          "shadow": {
+            "type": "string",
+            "enum": [
+              "none",
+              "soft",
+              "offset"
+            ]
+          },
+          "typography": {
+            "type": "string",
+            "enum": [
+              "system",
+              "technical",
+              "rounded"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "canvas",
+          "surface",
+          "surfaceSubtle",
+          "rail",
+          "text",
+          "textSecondary",
+          "border",
+          "accent",
+          "accentSubtle",
+          "radius",
+          "shadow",
+          "typography"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "accounts_list",
+      "title": "列出邮箱账户",
+      "description": "列出所有邮箱账户、连接状态和文件夹，不返回任何凭据。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "account_add_with_code",
+      "title": "用邮箱授权码添加账户",
+      "description": "使用服务商生成的授权码或应用专用密码添加并验证 IMAP/SMTP 邮箱。凭据加密保存且不会返回。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "outlook",
+              "gmail",
+              "qq",
+              "yahoo",
+              "hotmail",
+              "icloud",
+              "custom"
+            ]
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "authorizationCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "group": {
+            "default": "个人",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "groupIcon": {
+            "default": "folder",
+            "type": "string",
+            "enum": [
+              "folder",
+              "briefcase",
+              "building",
+              "home",
+              "users",
+              "code",
+              "heart",
+              "star"
+            ]
+          },
+          "color": {
+            "default": "#168f78",
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "settings": {
+            "description": "provider=custom 时必须提供完整 IMAP/SMTP 设置",
+            "type": "object",
+            "properties": {
+              "imapHost": {
+                "type": "string",
+                "minLength": 1
+              },
+              "imapPort": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "imapSecure": {
+                "type": "boolean"
+              },
+              "smtpHost": {
+                "type": "string",
+                "minLength": 1
+              },
+              "smtpPort": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "smtpSecure": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "imapHost",
+              "imapPort",
+              "imapSecure",
+              "smtpHost",
+              "smtpPort",
+              "smtpSecure"
+            ]
+          },
+          "proxy": {
+            "description": "可选的 HTTP、HTTPS 或 SOCKS5 代理；密码只会加密保存",
+            "type": "object",
+            "properties": {
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "https",
+                  "socks5"
+                ]
+              },
+              "host": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "username": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "password": {
+                "type": "string",
+                "maxLength": 512
+              }
+            },
+            "required": [
+              "protocol",
+              "host",
+              "port"
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "email",
+          "displayName",
+          "authorizationCode"
+        ]
+      },
+      "annotations": {
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "account_start_oauth",
+      "title": "开始邮箱 OAuth 授权",
+      "description": "为 Gmail、Outlook、Hotmail 或已获准的 Yahoo 生成官方 OAuth 授权网址。用户需在浏览器完成登录。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "outlook",
+              "gmail",
+              "yahoo",
+              "hotmail"
+            ]
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "group": {
+            "default": "个人",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "color": {
+            "default": "#168f78",
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "proxy": {
+            "description": "可选的 HTTP、HTTPS 或 SOCKS5 邮件代理",
+            "type": "object",
+            "properties": {
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "https",
+                  "socks5"
+                ]
+              },
+              "host": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "username": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "password": {
+                "type": "string",
+                "maxLength": 512
+              }
+            },
+            "required": [
+              "protocol",
+              "host",
+              "port"
+            ]
+          }
+        },
+        "required": [
+          "provider"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "account_reconnect_oauth",
+      "title": "重新授权 OAuth 邮箱",
+      "description": "为已有 OAuth 邮箱生成重新授权网址。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "account_update",
+      "title": "更新邮箱账户",
+      "description": "更新邮箱显示名称、工作空间、图标或颜色。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "group": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "groupIcon": {
+            "type": "string",
+            "enum": [
+              "folder",
+              "briefcase",
+              "building",
+              "home",
+              "users",
+              "code",
+              "heart",
+              "star"
+            ]
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "annotations": {
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "account_update_authorization_code",
+      "title": "更新邮箱授权码",
+      "description": "验证并替换非 OAuth 邮箱的授权码或应用专用密码。新凭据加密保存且不会返回。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "authorizationCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "email",
+          "authorizationCode"
+        ]
+      },
+      "annotations": {
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "account_test_connection",
+      "title": "测试邮箱连接",
+      "description": "使用已保存凭据测试邮箱的 IMAP 与 SMTP 连接。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "account_proxy_update",
+      "title": "更新邮箱代理",
+      "description": "启用、修改、关闭账户级代理，或复用另一邮箱的代理。代理密码加密保存且不会返回。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "const": false
+                      }
+                    },
+                    "required": [
+                      "enabled"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "sourceAccountId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "sourceAccountId"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "protocol": {
+                        "type": "string",
+                        "enum": [
+                          "http",
+                          "https",
+                          "socks5"
+                        ]
+                      },
+                      "host": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 253
+                      },
+                      "port": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 65535
+                      },
+                      "username": {
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "password": {
+                        "type": "string",
+                        "maxLength": 512
+                      },
+                      "enabled": {
+                        "type": "boolean",
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "protocol",
+                      "host",
+                      "port",
+                      "enabled"
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  }
+                },
+                "required": [
+                  "email"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email",
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              "enabled": {
+                "type": "boolean",
+                "const": true
+              },
+              "sourceEmail": {
+                "type": "string",
+                "format": "email",
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              }
+            },
+            "required": [
+              "email",
+              "enabled",
+              "sourceEmail"
+            ]
+          }
+        ]
+      },
+      "annotations": {
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "account_remove",
+      "title": "移除邮箱账户",
+      "description": "从 iMail 移除账户，并删除该账户的本地邮件缓存。不会删除服务商服务器上的账户。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "mailbox_sync",
+      "title": "同步邮箱",
+      "description": "从源 IMAP 同步一个或全部邮箱的收件箱、已发送、归档、垃圾箱或指定自定义文件夹。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "description": "不填时同步全部账户",
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "mailboxRole": {
+            "default": "inbox",
+            "type": "string",
+            "enum": [
+              "inbox",
+              "sent",
+              "archive",
+              "drafts",
+              "trash",
+              "junk",
+              "custom"
+            ]
+          },
+          "mailboxPath": {
+            "description": "指定自定义 IMAP 文件夹路径",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "annotations": {
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "sync_policy_get",
+      "title": "读取自动同步设置",
+      "description": "读取默认及账户级自动同步设置、邮箱校准状态和最近任务。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "sync_policy_update",
+      "title": "更新自动同步设置",
+      "description": "更新全局默认设置或指定邮箱的自动同步开关、文件夹范围和失败通知。变化唤醒与后台校准不依赖任何前端连接。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "description": "不填时修改新账户使用的默认策略",
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "folderMode": {
+            "type": "string",
+            "enum": [
+              "inbox",
+              "standard",
+              "selected"
+            ]
+          },
+          "selectedMailboxes": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "notifyOnError": {
+            "type": "boolean"
+          }
+        }
+      },
+      "annotations": {
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "messages_list",
+      "title": "查询邮件",
+      "description": "分页查询本地邮件缓存，可按邮箱、文件夹、搜索词、未读、星标、附件、标签和稍后处理过滤。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "group": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "mailboxRole": {
+            "type": "string",
+            "enum": [
+              "inbox",
+              "sent",
+              "archive",
+              "drafts",
+              "trash",
+              "junk",
+              "custom"
+            ]
+          },
+          "mailboxPath": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "unread": {
+            "type": "boolean"
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "hasAttachments": {
+            "type": "boolean"
+          },
+          "snoozed": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "limit": {
+            "default": 25,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "message_get",
+      "title": "读取邮件",
+      "description": "读取一封邮件的完整正文、HTML、标签和附件元数据。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "messageId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "message_update",
+      "title": "更新邮件状态",
+      "description": "更新源邮箱的已读/星标状态，以及 iMail 本地标签或稍后处理时间。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unread": {
+            "type": "boolean"
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "labels": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          },
+          "snoozedUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "messageId"
+        ]
+      },
+      "annotations": {
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "message_move",
+      "title": "移动邮件",
+      "description": "将邮件在源邮箱中归档或移至垃圾箱，并更新本地缓存。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "destination": {
+            "type": "string",
+            "enum": [
+              "archive",
+              "trash"
+            ]
+          }
+        },
+        "required": [
+          "messageId",
+          "destination"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "message_send",
+      "title": "发送邮件",
+      "description": "通过指定邮箱发送文本或 HTML 邮件，可携带 Base64 附件。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "accountEmail": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "to": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            }
+          },
+          "cc": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            }
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000000
+          },
+          "html": {
+            "type": "string",
+            "maxLength": 8000000
+          },
+          "attachments": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "filename": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "contentType": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 150
+                },
+                "data": {
+                  "type": "string",
+                  "maxLength": 21000000
+                }
+              },
+              "required": [
+                "filename",
+                "contentType",
+                "data"
+              ]
+            }
+          }
+        },
+        "required": [
+          "accountEmail",
+          "to",
+          "subject",
+          "text"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "attachment_download",
+      "title": "下载邮件附件",
+      "description": "从源邮箱按需下载附件，返回文件名、MIME 类型和 Base64 内容。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "messageId",
+          "index"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "drafts_list",
+      "title": "列出草稿",
+      "description": "列出本地草稿摘要，不返回附件 Base64 内容。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "accountEmail": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "draft_get",
+      "title": "读取草稿",
+      "description": "读取一份本地草稿的完整正文和附件内容。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "draftId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "draftId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "draft_save",
+      "title": "保存草稿",
+      "description": "新建或覆盖本地草稿。传 draftId 时更新，否则新建。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "draftId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accountEmail": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "to": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            }
+          },
+          "cc": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            }
+          },
+          "subject": {
+            "default": "",
+            "type": "string",
+            "maxLength": 500
+          },
+          "text": {
+            "default": "",
+            "type": "string",
+            "maxLength": 2000000
+          },
+          "html": {
+            "default": "",
+            "type": "string",
+            "maxLength": 8000000
+          },
+          "attachments": {
+            "default": [],
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "filename": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "contentType": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 150
+                },
+                "data": {
+                  "type": "string",
+                  "maxLength": 21000000
+                }
+              },
+              "required": [
+                "filename",
+                "contentType",
+                "data"
+              ]
+            }
+          }
+        },
+        "required": [
+          "accountEmail"
+        ]
+      },
+      "annotations": {
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "draft_delete",
+      "title": "删除草稿",
+      "description": "永久删除一份本地草稿。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "draftId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "draftId"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "labels_list",
+      "title": "列出邮件标签",
+      "description": "列出 iMail 本地使用过的全部邮件标签。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "notifications_list",
+      "title": "列出邮箱通知",
+      "description": "列出连接异常、到期稍后邮件和最近未读邮件。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "default": 30,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    }
+  ]
+}

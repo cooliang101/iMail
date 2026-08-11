@@ -7,8 +7,7 @@ import { BrandLogo } from '../../components/brand-logo';
 import { AuthContext, type AppUser } from './auth-context';
 import { loadRememberedUsers, rememberUser } from './remembered-users';
 import { createLatestServiceCheckRunner, runWithReadySelectedService, serviceErrorMessage, ServiceAddressEditor, testServiceConnection } from '../service';
-import { configuredLocalServiceSuspended, configuredServiceMode, configuredServiceUrl } from '../../service-config';
-import { desktopEnableLocalService } from '../../local-service';
+import { configuredServiceMode, configuredServiceUrl } from '../../service-config';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
 import { describeDesktopLogValue, desktopLog } from '../../desktop-logging';
 
@@ -27,11 +26,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   async function checkSession() {
     await serviceCheckRunner.run(() => runWithReadySelectedService({
-        desktop: isTauriRuntime(),
         mode: configuredServiceMode(),
         serviceUrl: configuredServiceUrl(),
-        localSuspended: configuredLocalServiceSuspended(),
-        enableLocal: desktopEnableLocalService,
         testConnection: testServiceConnection,
       }, () => api<{ setupRequired: boolean; registrationOpen: boolean; user: AppUser | null }>('/api/auth/status')), {
       onSuccess(status) {

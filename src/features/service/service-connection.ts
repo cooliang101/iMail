@@ -1,6 +1,8 @@
 import type { ServiceInfo } from '../../types';
 import { desktopTestService, type DesktopHttpInvoker } from '../../desktop-http';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
+import { configuredServiceMode, embeddedTauriServiceEnabled } from '../../service-config';
+import { createMailService } from '../../mail-service';
 
 export const SUPPORTED_SERVICE_PROTOCOL_VERSION = 1;
 
@@ -25,10 +27,18 @@ export function parseServiceInfo(value: unknown): ServiceInfo {
 
 export async function testServiceConnection(baseUrl: string, options: {
   desktop?: boolean;
+  embeddedLocal?: boolean;
   invoker?: DesktopHttpInvoker;
   fetcher?: typeof fetch;
 } = {}) {
-  if (options.desktop ?? isTauriRuntime()) {
+  const desktop = options.desktop ?? isTauriRuntime();
+  const embeddedLocal = options.embeddedLocal ?? (desktop && configuredServiceMode() === 'local' && embeddedTauriServiceEnabled());
+  if (embeddedLocal) {
+    const response = await createMailService({ tauri: true, mode: 'local', embedded: true, invoker: options.invoker }).request('/api/system/info');
+    if (response.status < 200 || response.status >= 300) throw new Error(`服务返回 ${response.status}`);
+    return parseServiceInfo(JSON.parse(response.body));
+  }
+  if (desktop) {
     const response = await desktopTestService(baseUrl, options.invoker);
     if (response.status < 200 || response.status >= 300) throw new Error(`服务返回 ${response.status}`);
     try { return parseServiceInfo(JSON.parse(response.body)); }

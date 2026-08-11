@@ -1,7 +1,6 @@
 {
   "bundle": {
     "targets": ["nsis"],
-    "externalBin": ["binaries/imail-service", "binaries/imail-service-manager"],
     "windows": {
       "nsis": {
         "installMode": "currentUser",

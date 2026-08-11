@@ -1,0 +1,40 @@
+[package]
+name = "imail-http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+axum.workspace = true
+base64.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+imail-core = { path = "../imail-core" }
+imail-mail = { path = "../imail-mail" }
+imail-mail-network = { path = "../imail-mail-network" }
+imail-oauth = { path = "../imail-oauth" }
+imail-oauth-http = { path = "../imail-oauth-http" }
+imail-protocol = { path = "../imail-protocol" }
+imail-runtime = { path = "../imail-runtime" }
+imail-security = { path = "../imail-security" }
+imail-storage-sqlite = { path = "../imail-storage-sqlite" }
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+ureq.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+rcgen = "=0.12.1"
+rustls.workspace = true
+rustls-pki-types.workspace = true
+sysinfo.workspace = true
+time = "=0.3.36"
+tokio-rustls.workspace = true
+tokio-tungstenite.workspace = true
+tower.workspace = true
