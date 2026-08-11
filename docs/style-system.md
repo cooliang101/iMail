@@ -197,10 +197,10 @@ z-index 必须从 `--z-sticky/dropdown/sidebar/overlay/modal/toast` 中选择。
 
 ```powershell
 # 新业务样式中不应继续增加裸色值；主题文件和隔离邮件 HTML 是例外。
-rg -n "#[0-9a-fA-F]{3,8}|rgb\(|hsl\(" src --glob "*.css" --glob "*.tsx"
+rg -n "#[0-9a-fA-F]{3,8}|rgb\(|hsl\(" frontend/src --glob "*.css" --glob "*.tsx"
 
 # 检查任意字号、z-index 和原生表单控件。
-rg -n "font-size:|z-index:|<(input|select|textarea)" src
+rg -n "font-size:|z-index:|<(input|select|textarea)" frontend/src
 ```
 
 ## 8. 后续拆分策略
