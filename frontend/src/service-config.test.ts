@@ -5,7 +5,6 @@ import {
   configuredLocalServiceUrl,
   configuredServiceMode,
   configuredServiceUrl,
-  externalHttpAccessAvailable,
   LOCAL_SERVICE_URL,
   normalizeServiceUrl,
   secureRemoteServiceUrl,
@@ -40,8 +39,6 @@ describe('service configuration', () => {
       __TAURI_INTERNALS__: {},
     });
     expect(embeddedTauriServiceEnabled()).toBe(true);
-    expect(externalHttpAccessAvailable(memoryStorage())).toBe(false);
-    expect(externalHttpAccessAvailable(memoryStorage({ [SERVICE_MODE_STORAGE_KEY]: 'remote' }))).toBe(true);
   });
 
   it('migrates an existing non-loopback endpoint to remote mode', () => {

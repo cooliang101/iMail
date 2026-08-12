@@ -114,6 +114,7 @@ pub fn run() {
             embedded_service::desktop_stop_embedded_events,
             embedded_service::desktop_read_embedded_binary,
             embedded_service::desktop_download_embedded,
+            embedded_service::desktop_start_external_http,
             app_logging::desktop_log,
             app_logging::desktop_open_app_logs,
             http_bridge::desktop_http_request,

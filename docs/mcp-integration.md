@@ -2,7 +2,7 @@
 
 iMail 默认关闭 MCP 调用。先在“外部接入 → MCP”中手动启用；开关即时生效、按应用账号保存，且不会同时启用独立的 API Gateway。
 
-iMail 的远程 Rust 服务可选提供 Streamable HTTP MCP，使用“外部接入”页面签发的短期 `mcp:full` 授权码。桌面本地嵌入模式不开放常驻 HTTP/MCP 地址；普通 API 网关 Token 不能调用 MCP。
+iMail 的 Rust 服务可选提供 Streamable HTTP MCP，使用“外部接入”页面签发的短期 `mcp:full` 授权码。Windows 桌面本地模式进入该页面后会启动仅监听 `127.0.0.1` 随机端口的进程内 HTTP Adapter，页面会显示本次应用运行期的实际地址；普通 API 网关 Token 不能调用 MCP。
 
 每个 MCP 授权码都归属于创建它的应用账号。`mcp:full` 表示管理该应用账号当前及未来接入的全部邮箱，不会越过应用账号边界读取其他用户的数据。
 
@@ -19,7 +19,7 @@ iMail 的远程 Rust 服务可选提供 Streamable HTTP MCP，使用“外部接
 
 ## 2. Streamable HTTP
 
-连接显式启用 MCP 的 Rust HTTP 服务：
+连接页面显示的本机地址，或显式启用 MCP 的远程 Rust HTTP 服务：
 
 ```text
 URL: https://mail.example.com/mcp

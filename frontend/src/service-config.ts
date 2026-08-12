@@ -78,10 +78,6 @@ export function configuredServiceUrl(storage?: ReadStorage) {
   return configuredRemoteServiceUrl(storage) || LOCAL_SERVICE_URL;
 }
 
-export function externalHttpAccessAvailable(storage?: ReadStorage) {
-  return configuredServiceMode(storage) === 'remote' || !embeddedTauriServiceEnabled();
-}
-
 export function saveServiceSelection(selection: ServiceSelection, storage?: WriteStorage) {
   const selected = storage ?? localStorage;
   if (selection.mode === 'remote') {

@@ -27,7 +27,7 @@ Rust 宿主读取 `IMAIL_SYNC_WORKER` 并复用其余 `IMAIL_SYNC_*` 调优项�
 
 Rust HTTP 宿主继续接受现有远程部署变量 `HOST`、`PORT`、`CORS_ORIGIN`、`IMAIL_TRUST_PROXY` 和 `IMAIL_REGISTRATION_MODE`。`--host`/`--port` 命令行值优先；`IMAIL_CORS_ORIGINS`、`IMAIL_TRUST_PROXY_ONE_HOP` 与 `IMAIL_REGISTRATION_OPEN` 是迁移期显式覆盖别名，不要求现有部署改名。
 
-Windows 桌面本地模式不启动 HTTP 宿主；`--daemon-control-file` 仅为迁移期兼容参数。Docker/远程部署不要配置该参数，应由容器 SIGTERM 或进程管理器停止。
+Windows 桌面本地模式平时只使用进程内领域调用；进入“外部接入”后，同一 Rust 宿主会按需增加一个仅监听 `127.0.0.1` 随机端口的 HTTP Adapter，供本机 MCP 与 Gateway 客户端使用。它不是旧版固定 8787 守护进程，并随桌面进程退出。`--daemon-control-file` 仅为迁移期兼容参数。Docker/远程部署不要配置该参数，应由容器 SIGTERM 或进程管理器停止。
 
 ## 本地启动
 
@@ -128,7 +128,7 @@ docker compose --env-file .env.remote -f http-service/compose.https.example.yml 
 当前交付范围只有 Windows 桌面端与服务端 Docker；Linux 侧只运行 Docker。普通分支推送与 pull request 不触发工作流；未经用户明确授权，不创建版本 tag 或手动运行。手动工作流必须选择 `docker` 或 `windows`：前者只验证并发布 Rust `linux/amd64` 镜像，后者只生成 Rust-only Windows Artifact。发布前验证 Rust 持久卷重启、healthcheck、备份、非覆盖恢复、升级预检和优雅停机。
 
 1. 在“外部接入”的“MCP”标签页签发 `mcp:full` 授权码。
-2. 用 MCP Inspector 或任意标准客户端连接远程 Rust 服务的 `https://mail.example.com/mcp`。桌面本地嵌入模式没有 MCP HTTP 地址。
+2. 用 MCP Inspector 或任意标准客户端连接页面显示的桌面回环地址，或远程 Rust 服务的 `https://mail.example.com/mcp`。
 3. 确认 `tools/list` 包含 `accounts_list`、`messages_list`、`message_send`、`account_remove`、`theme_custom_get` 和 `theme_custom_update`。
 4. 调用 `imail_status` 与 `accounts_list`，确认响应不含 `encryptedSecret`、密码或 OAuth Token。
 5. 使用普通 `messages:read` Token 连接，预期得到 HTTP 401。

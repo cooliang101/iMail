@@ -29,6 +29,7 @@ use std::{
     fs,
     fs::OpenOptions,
     io::Write,
+    net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
     sync::Mutex,
     time::{Duration, Instant},
@@ -432,6 +433,13 @@ pub struct EmbeddedMailServiceState {
     session: Mutex<Option<HeaderValue>>,
     user_id: Mutex<Option<String>>,
     event_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    external_http: Mutex<Option<EmbeddedHttpAdapter>>,
+}
+
+struct EmbeddedHttpAdapter {
+    base_url: String,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+    task: tokio::task::JoinHandle<()>,
 }
 
 impl Default for EmbeddedMailServiceState {
@@ -444,6 +452,7 @@ impl Default for EmbeddedMailServiceState {
             session: Mutex::new(None),
             user_id: Mutex::new(None),
             event_task: Mutex::new(None),
+            external_http: Mutex::new(None),
         }
     }
 }
@@ -529,13 +538,69 @@ impl EmbeddedMailServiceState {
         self.host
             .get_or_try_init(|| async move {
                 prepare_empty_data_dir(&host_data_dir)?;
-                EmbeddedServiceHost::start(
-                    HttpAdapterConfig::production(host_data_dir).with_sync_worker(true),
-                )
-                .map_err(|error| format!("初始化嵌入式 Rust 服务失败：{error}"))
+                let mut config =
+                    HttpAdapterConfig::production(host_data_dir).with_sync_worker(true);
+                config.gateway = true;
+                config.mcp = true;
+                EmbeddedServiceHost::start(config)
+                    .map_err(|error| format!("初始化嵌入式 Rust 服务失败：{error}"))
             })
             .await?;
         Ok(data_dir)
+    }
+
+    async fn start_external_http(&self) -> Result<EmbeddedHttpEndpoint, String> {
+        if let Some(adapter) = self
+            .external_http
+            .lock()
+            .map_err(|_| "嵌入式 HTTP Adapter 状态锁已损坏")?
+            .as_ref()
+        {
+            return Ok(EmbeddedHttpEndpoint {
+                base_url: adapter.base_url.clone(),
+            });
+        }
+
+        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .map_err(|error| format!("启动嵌入式 HTTP Adapter 失败：{error}"))?;
+        let address = listener
+            .local_addr()
+            .map_err(|error| format!("读取嵌入式 HTTP Adapter 地址失败：{error}"))?;
+        let base_url = format!(
+            "http://{}:{}",
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            address.port()
+        );
+        let router = self
+            .host
+            .get()
+            .ok_or_else(|| "嵌入式服务尚未初始化".to_string())?
+            .router();
+        let (shutdown, receiver) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            let result = axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            )
+            .with_graceful_shutdown(async move {
+                let _ = receiver.await;
+            })
+            .await;
+            if let Err(error) = result {
+                log::error!(target: "desktop", "[embedded.http.failed] {error}");
+            }
+        });
+        log::info!(target: "desktop", "[embedded.http.started] address={base_url}");
+        *self
+            .external_http
+            .lock()
+            .map_err(|_| "嵌入式 HTTP Adapter 状态锁已损坏")? = Some(EmbeddedHttpAdapter {
+            base_url: base_url.clone(),
+            shutdown: Some(shutdown),
+            task,
+        });
+        Ok(EmbeddedHttpEndpoint { base_url })
     }
 
     async fn direct_call(
@@ -1698,12 +1763,39 @@ impl EmbeddedMailServiceState {
 
     pub fn shutdown(&self) -> Result<(), String> {
         self.replace_event_task(None)?;
+        if let Some(mut adapter) = self
+            .external_http
+            .lock()
+            .map_err(|_| "嵌入式 HTTP Adapter 状态锁已损坏")?
+            .take()
+        {
+            if let Some(shutdown) = adapter.shutdown.take() {
+                let _ = shutdown.send(());
+            }
+            adapter.task.abort();
+        }
         if let Some(host) = self.host.get() {
             host.shutdown(Duration::from_secs(10))
                 .map_err(|error| format!("关闭嵌入式 Rust 服务失败：{error}"))?;
         }
         Ok(())
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddedHttpEndpoint {
+    base_url: String,
+}
+
+#[tauri::command]
+pub async fn desktop_start_external_http(
+    app: AppHandle,
+    state: State<'_, EmbeddedMailServiceState>,
+) -> Result<EmbeddedHttpEndpoint, String> {
+    let root = ensure_runtime_allowed(&app, &state).await?;
+    state.initialize(root.join("data")).await?;
+    state.start_external_http().await
 }
 
 #[derive(Clone, Serialize)]
@@ -2039,6 +2131,8 @@ mod tests {
         assert_eq!(response.status, 200);
         let value: serde_json::Value = serde_json::from_str(&response.body).unwrap();
         assert_eq!(value["service"], "imail");
+        assert_eq!(value["capabilities"]["gateway"], true);
+        assert_eq!(value["capabilities"]["mcp"], true);
         assert_eq!(value["capabilities"]["syncWorker"], true);
         let auth = state
             .direct_call(&EmbeddedDomainCall::AuthStatus)
@@ -2049,6 +2143,42 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&auth.body).unwrap()["setupRequired"],
             true
         );
+        state.shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn starts_one_loopback_http_adapter_for_mcp_and_gateway() {
+        let root = std::env::temp_dir().join(format!(
+            "imail-tauri-external-http-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let state = EmbeddedMailServiceState::default();
+        state.initialize(root.join("data")).await.unwrap();
+
+        let first = state.start_external_http().await.unwrap();
+        let second = state.start_external_http().await.unwrap();
+        assert_eq!(first.base_url, second.base_url);
+        assert!(first.base_url.starts_with("http://127.0.0.1:"));
+        assert!(!first.base_url.ends_with(":8787"));
+
+        let response = reqwest::get(format!("{}/api/system/info", first.base_url))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let info: serde_json::Value =
+            serde_json::from_str(&response.text().await.unwrap()).unwrap();
+        assert_eq!(info["capabilities"]["gateway"], true);
+        assert_eq!(info["capabilities"]["mcp"], true);
+        let gateway = reqwest::get(format!("{}/gateway/v1/health", first.base_url))
+            .await
+            .unwrap();
+        assert_eq!(gateway.status(), reqwest::StatusCode::OK);
+        let mcp = reqwest::get(format!("{}/mcp", first.base_url))
+            .await
+            .unwrap();
+        assert_eq!(mcp.status(), reqwest::StatusCode::METHOD_NOT_ALLOWED);
+
         state.shutdown().unwrap();
         let _ = std::fs::remove_dir_all(root);
     }
