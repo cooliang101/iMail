@@ -16,7 +16,7 @@ iMail 的 Node 服务迁移与 Windows Rust-only 桌面升级已经完成。当�
 | 交付形态 | 架构 | 当前状态 |
 | --- | --- | --- |
 | Windows x64 桌面 | Tauri + 进程内 Rust 服务 | 已支持并完成本地验收 |
-| 服务端 Docker `linux/amd64` | Rust HTTP 服务，Node 仅用于镜像构建前端 | 已有正式定义和发布工作流；需在当前根 workspace 布局下重跑真实容器门禁 |
+| 服务端 Docker `linux/amd64` | Rust HTTP 服务，Node 仅用于镜像构建前端 | 已发布到 GHCR；核心镜像生命周期门禁已通过，CP2 加固项进行中 |
 | Linux 原生桌面 | Tauri + 进程内 Rust 服务 | 尚未支持 |
 | macOS Apple Silicon / Intel 桌面 | Tauri + 进程内 Rust 服务 | 未来支持；当前不进入实施、CI 或发布门禁 |
 | 服务端 Docker `linux/arm64` | Rust HTTP 服务 | 尚未支持 |
@@ -69,7 +69,7 @@ iMail 的 Node 服务迁移与 Windows Rust-only 桌面升级已经完成。当�
 
 | 优先级 | 目标 | 建议产物 | 构建环境 |
 | --- | --- | --- | --- |
-| P0 | Docker `linux/amd64` | OCI 镜像 | Ubuntu + Buildx |
+| P0 | Docker `linux/amd64` | OCI 镜像 | 已发布；继续完成 CP2 的 HTTPS、完整协议和资源门禁 |
 | P1 | Linux x64 桌面 | `.deb`，必要时追加 AppImage | Ubuntu x64 原生 runner |
 | P2 | Docker `linux/arm64` | 多架构 OCI 镜像 | Buildx + arm64 原生运行门禁 |
 
@@ -119,7 +119,22 @@ Linux 桌面首期只承诺一个经过验证的发行版基线。其他发行�
 - TLS/代理/OAuth loopback 的隔离网络测试通过，错误信息不泄露凭据。
 - 本阶段不要求 Linux Tauri 安装包；macOS 不在当前阶段范围内。
 
-## 阶段 CP2：Docker Linux 运行门禁与多架构准备
+## 阶段 CP2：Docker Linux 运行门禁与多架构准备（进行中）
+
+当前进度（2026-08-12）：
+
+- GitHub Actions 已从提交 `58a0c4ddae908ac6a4c79dc3c72d91dfd798212b` 成功发布 `ghcr.io/cooliang101/imail:edge` 与对应完整 `sha-*` 标签；两者指向 manifest digest `sha256:30854d249022ec9bf32525760056994e1d51274f43b45e165f1d05b7c259a8c9`。
+- 发布工作流只运行 Docker job，Windows job 保持跳过；候选镜像必须先通过完整 lifecycle smoke，成功后才能使用 `packages: write` 的 `GITHUB_TOKEN` 推送 GHCR。
+- `linux/amd64` Buildx 构建、非 root UID 10001、只读根文件系统、healthcheck、持久卷重启、实例身份与用户偏好保留、备份、非覆盖恢复、升级预检和 SIGTERM 优雅退出均已通过。
+- 最终 Debian runtime 已自动验证不包含 Node、npm、Cargo 或 rustc；发布 manifest 附带 SBOM 与 provenance。
+- 本次发布证据见 [GitHub Actions run 31561301344](https://github.com/cooliang101/iMail/actions/runs/31561301344)。GHCR 包当前需要认证拉取；是否公开由包设置管理，不由发布工作流自动修改。
+
+尚未完成：
+
+- 在候选容器内跑完 REST、SSE、WebSocket、Gateway 与 MCP 的完整协议验收，而不只检查能力装配和持久设置。
+- 使用 Caddy 示例完成真实 HTTPS、Host/Origin、可信代理、SSE 禁用缓冲和 WebSocket Upgrade 验收。
+- 记录镜像大小、空闲 RSS、同步峰值与漏洞扫描结果，并在升级数据副本上保存可复现摘要。
+- `linux/arm64` 构建和原生或受控仿真运行门禁。
 
 目的：在当前根 Rust workspace 与 `http-service/` 布局下重新确认服务端容器交付。
 
@@ -235,6 +250,6 @@ cargo test --workspace --all-features --target <target>
 
 ## 推荐执行顺序
 
-近期严格按 `CP0 → CP1 → CP2 → CP3 → CP5` 推进；macOS 不在当前关键路径中。
+CP0 已完成。近期并行推进 CP1 的共享 Linux 核心门禁与 CP2 的 Docker 加固项；CP3 必须在 CP1 完成后进入原生 Linux 桌面实施，随后再进入 CP5。macOS 不在当前关键路径中。
 
-CP0/CP1 是近期平台工作的共同前置门禁；CP2 先稳定服务端 Linux 基线，CP3 在原生 Linux 环境实施。Docker arm64 属于后续扩展；macOS 作为未来支持单独启动，不阻塞已经验收的平台发布。
+Docker `linux/amd64` 已具备可追溯的 GHCR 候选发布和核心生命周期证据，但在上述 CP2 剩余项完成前不把整个阶段标记为完成。Docker arm64 属于后续扩展；macOS 作为未来支持单独启动，不阻塞已经验收的平台发布。
