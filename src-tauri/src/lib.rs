@@ -6,6 +6,7 @@ use tauri::{
 };
 
 mod app_logging;
+mod desktop_platform;
 mod embedded_service;
 mod http_bridge;
 mod local_service;

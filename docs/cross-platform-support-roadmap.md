@@ -18,7 +18,7 @@ iMail 的 Node 服务迁移与 Windows Rust-only 桌面升级已经完成。当�
 | Windows x64 桌面 | Tauri + 进程内 Rust 服务 | 已支持并完成本地验收 |
 | 服务端 Docker `linux/amd64` | Rust HTTP 服务，Node 仅用于镜像构建前端 | 已有正式定义和发布工作流；需在当前根 workspace 布局下重跑真实容器门禁 |
 | Linux 原生桌面 | Tauri + 进程内 Rust 服务 | 尚未支持 |
-| macOS Apple Silicon / Intel 桌面 | Tauri + 进程内 Rust 服务 | 尚未支持 |
+| macOS Apple Silicon / Intel 桌面 | Tauri + 进程内 Rust 服务 | 未来支持；当前不进入实施、CI 或发布门禁 |
 | 服务端 Docker `linux/arm64` | Rust HTTP 服务 | 尚未支持 |
 
 已经完成的服务迁移过程通过 Git 历史追溯，运行证据仍保留在 `output/rust-migration-tests/`；本文只维护后续跨平台开发计划。
@@ -71,13 +71,15 @@ iMail 的 Node 服务迁移与 Windows Rust-only 桌面升级已经完成。当�
 | --- | --- | --- | --- |
 | P0 | Docker `linux/amd64` | OCI 镜像 | Ubuntu + Buildx |
 | P1 | Linux x64 桌面 | `.deb`，必要时追加 AppImage | Ubuntu x64 原生 runner |
-| P2 | macOS Apple Silicon | 签名、公证的 `.dmg`/`.app` | macOS arm64 原生 runner |
-| P3 | macOS Intel | 签名、公证的 `.dmg`/`.app` | macOS x64 runner；是否合并 Universal Binary 另行决定 |
-| P4 | Docker `linux/arm64` | 多架构 OCI 镜像 | Buildx + arm64 原生运行门禁 |
+| P2 | Docker `linux/arm64` | 多架构 OCI 镜像 | Buildx + arm64 原生运行门禁 |
+
+macOS 桌面属于未来支持，不参与上述近期优先级。需要启动时另行确认 Apple Silicon/Intel 范围、原生 runner、Developer ID、签名、公证和长期维护资源。
 
 Linux 桌面首期只承诺一个经过验证的发行版基线。其他发行版只有在 WebKit、托盘、通知和系统库兼容矩阵通过后才能列入支持范围。
 
-## 阶段 CP0：冻结 Windows 基线并建立平台审计
+## 阶段 CP0：冻结 Windows 基线并建立平台审计（已完成）
+
+完成日期：2026-08-12。审计清单、Owner、目标阶段、CI 命名和 Windows 基线见 [CP0 平台审计](platform-audit.md)。
 
 目的：保证跨平台修改不会回退当前 Windows 成果，并找出所有操作系统耦合点。
 
@@ -97,13 +99,13 @@ Linux 桌面首期只承诺一个经过验证的发行版基线。其他发行�
 - 活动测试数据库和迁移证据哈希不变。
 - 完成平台耦合清单，每一项都有 owner、目标阶段和测试方式。
 
-## 阶段 CP1：共享 Rust 核心的 Unix 可移植性
+## 阶段 CP1：共享 Rust 核心的 Linux 可移植性
 
-目的：先证明服务核心与 HTTP 部署在 Linux/macOS 上成立，再构建桌面 UI。
+目的：先证明服务核心与 HTTP 部署在 Linux 上成立，再构建桌面 UI。
 
 工作项：
 
-- 在 Ubuntu 与 macOS 原生 runner 上编译和测试 `crates/*`、`http-service`。
+- 在 Ubuntu 原生 runner 或受控 WSL2 环境编译和测试 `crates/*`、`http-service`；最终 Linux 门禁在 Ubuntu runner 复验。
 - 清理路径分隔符、文件权限、原子替换、文件锁、SQLite busy/backup、信号与时钟差异。
 - 验证 IPv4/IPv6 loopback、IMAP/SMTP TLS、HTTP/SOCKS5 代理、OAuth callback 和证书根存储。
 - 为 Unix 文件权限增加断言：主密钥、会话和授权材料不得被其他用户读取。
@@ -112,10 +114,10 @@ Linux 桌面首期只承诺一个经过验证的发行版基线。其他发行�
 
 测试与完成标准：
 
-- Ubuntu、macOS、Windows 上共享 Rust 单元测试、文档测试、Clippy 和格式检查通过。
-- 三个平台使用同一 fixture 得到一致的公开模型、安全向量和 SQLite 摘要。
+- Ubuntu、Windows 上共享 Rust 单元测试、文档测试、Clippy 和格式检查通过。
+- 两个平台使用同一 fixture 得到一致的公开模型、安全向量和 SQLite 摘要。
 - TLS/代理/OAuth loopback 的隔离网络测试通过，错误信息不泄露凭据。
-- 本阶段不要求 Linux/macOS Tauri 安装包。
+- 本阶段不要求 Linux Tauri 安装包；macOS 不在当前阶段范围内。
 
 ## 阶段 CP2：Docker Linux 运行门禁与多架构准备
 
@@ -160,7 +162,9 @@ Linux 桌面首期只承诺一个经过验证的发行版基线。其他发行�
 - 远程模式 Cookie 隔离、SSE 恢复、附件下载和失败不回退通过。
 - 至少一台实体或稳定虚拟桌面环境完成真实 UI、通知、OAuth 和四邮箱闭环验收。
 
-## 阶段 CP4：macOS 桌面
+## 未来阶段：macOS 桌面
+
+状态：未来支持，不进入当前 CP0–CP3 的实施、CI 或发布门禁；启动前必须重新确认范围与资源。
 
 目的：提供符合 macOS 安全与分发要求的原生桌面版本。
 
@@ -187,8 +191,8 @@ Linux 桌面首期只承诺一个经过验证的发行版基线。其他发行�
 
 工作项：
 
-- 将 CI 分为无副作用验证和显式发布两层；各平台 job 可独立选择、独立失败、独立重跑。
-- 为 Windows、Linux、macOS、Docker 分别生成 SBOM、SHA-256、签名状态和构建元数据。
+- 将 CI 分为无副作用验证和显式发布两层；当前支持平台和 Docker job 可独立选择、独立失败、独立重跑。
+- 为当前支持平台与 Docker 分别生成 SBOM、SHA-256、签名状态和构建元数据；未来 macOS 支持启动后再加入对应产物。
 - 制定版本兼容策略：同一版本使用同一数据库 schema、MCP 工具清单和 Web API 契约。
 - 增加跨平台升级矩阵，验证同一数据副本在支持的平台间复制后可读取；这只是便携性验证，不实现自动跨设备同步。
 - 建立崩溃、日志、资源和长期 IDLE 预算，平台差异必须有明确阈值。
@@ -231,6 +235,6 @@ cargo test --workspace --all-features --target <target>
 
 ## 推荐执行顺序
 
-严格按 `CP0 → CP1 → CP2 → CP3 → CP4 → CP5` 推进。
+近期严格按 `CP0 → CP1 → CP2 → CP3 → CP5` 推进；macOS 不在当前关键路径中。
 
-CP0/CP1 是所有新平台的共同前置门禁；CP2 先稳定服务端 Linux 基线；CP3 和 CP4 分别在原生 Linux、macOS 环境实施。Docker arm64、macOS Intel 和 Universal Binary 都属于后续扩展，不应阻塞已经验收的平台发布。
+CP0/CP1 是近期平台工作的共同前置门禁；CP2 先稳定服务端 Linux 基线，CP3 在原生 Linux 环境实施。Docker arm64 属于后续扩展；macOS 作为未来支持单独启动，不阻塞已经验收的平台发布。

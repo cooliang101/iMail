@@ -2,7 +2,6 @@ use regex::Regex;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    path::PathBuf,
     sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -68,21 +67,8 @@ pub fn sanitize_log_message(value: &str) -> String {
     output
 }
 
-fn emergency_log_path() -> Option<PathBuf> {
-    #[cfg(windows)]
-    {
-        std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .map(|root| root.join("com.cooliang.imail").join("logs").join("app.log"))
-    }
-    #[cfg(not(windows))]
-    {
-        None
-    }
-}
-
 fn write_emergency(level: &str, event: &str, message: &str) {
-    let Some(path) = emergency_log_path() else {
+    let Some(path) = crate::desktop_platform::emergency_log_path() else {
         return;
     };
     let Some(parent) = path.parent() else { return };
@@ -187,24 +173,7 @@ pub fn desktop_open_app_logs(app: AppHandle) -> Result<(), String> {
         .map_err(|error| format!("读取应用日志目录失败：{error}"))?;
     fs::create_dir_all(&logs).map_err(|error| format!("创建应用日志目录失败：{error}"))?;
     log::info!(target: "desktop", "[logs.open] application log directory requested");
-    #[cfg(windows)]
-    {
-        return std::process::Command::new("explorer.exe")
-            .arg(&logs)
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| format!("打开应用日志目录失败：{error}"));
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return std::process::Command::new("open")
-            .arg(&logs)
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| format!("打开应用日志目录失败：{error}"));
-    }
-    #[allow(unreachable_code)]
-    Err("当前平台不支持打开应用日志目录".into())
+    crate::desktop_platform::open_directory(&logs, "应用日志目录")
 }
 
 #[cfg(test)]

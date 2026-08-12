@@ -26,8 +26,6 @@ const DEFAULT_LOCAL_SERVICE_PORT: u16 = 8787;
 #[cfg(any(test, feature = "legacy-daemon-admin"))]
 const MIN_LOCAL_SERVICE_PORT: u16 = 1024;
 const WINDOWS_RUN_VALUE: &str = "iMailService";
-#[cfg(any(target_os = "macos", test))]
-const MACOS_LAUNCH_LABEL: &str = "com.cooliang.imail.service";
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -249,100 +247,11 @@ fn unregister_startup(_config: &Path) -> Result<(), String> {
     }
 }
 
-#[cfg(any(target_os = "macos", test))]
-fn xml_escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
-}
-
-#[cfg(any(target_os = "macos", test))]
-fn launch_agent_contents(executable: &Path, config: &Path) -> String {
-    format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>Label</key><string>{MACOS_LAUNCH_LABEL}</string>
-<key>ProgramArguments</key><array><string>{}</string><string>--imail-daemon</string><string>{}</string></array>
-<key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
-</dict></plist>
-"#,
-        xml_escape(&executable.to_string_lossy()),
-        xml_escape(&config.to_string_lossy())
-    )
-}
-
-#[cfg(target_os = "macos")]
-fn launch_agent_path() -> Result<PathBuf, String> {
-    let home = std::env::var_os("HOME").ok_or_else(|| "无法确定当前用户目录".to_string())?;
-    Ok(PathBuf::from(home)
-        .join("Library/LaunchAgents")
-        .join(format!("{MACOS_LAUNCH_LABEL}.plist")))
-}
-
-#[cfg(target_os = "macos")]
-fn user_domain() -> Result<String, String> {
-    let output = Command::new("id")
-        .arg("-u")
-        .output()
-        .map_err(|error| format!("读取用户 ID 失败：{error}"))?;
-    if !output.status.success() {
-        return Err("读取用户 ID 失败".into());
-    }
-    Ok(format!(
-        "gui/{}",
-        String::from_utf8_lossy(&output.stdout).trim()
-    ))
-}
-
-#[cfg(target_os = "macos")]
-fn register_startup(executable: &Path, config: &Path) -> Result<(), String> {
-    let plist = launch_agent_path()?;
-    if let Some(parent) = plist.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("创建 LaunchAgents 目录失败：{error}"))?;
-    }
-    let content = launch_agent_contents(executable, config);
-    write_private(&plist, &content)?;
-    let domain = user_domain()?;
-    let _ = Command::new("launchctl")
-        .args(["bootout", &domain, &plist.to_string_lossy()])
-        .output();
-    let output = Command::new("launchctl")
-        .args(["bootstrap", &domain, &plist.to_string_lossy()])
-        .output()
-        .map_err(|error| format!("加载 LaunchAgent 失败：{error}"))?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "加载 LaunchAgent 失败：{}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ))
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn unregister_startup(_config: &Path) -> Result<(), String> {
-    let plist = launch_agent_path()?;
-    if plist.exists() {
-        let domain = user_domain()?;
-        let _ = Command::new("launchctl")
-            .args(["bootout", &domain, &plist.to_string_lossy()])
-            .output();
-        fs::remove_file(&plist).map_err(|error| format!("删除 LaunchAgent 失败：{error}"))?;
-    }
-    Ok(())
-}
-
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(windows))]
 fn register_startup(_executable: &Path, _config: &Path) -> Result<(), String> {
-    Err("当前平台尚不支持本地守护服务".into())
+    Err("旧本地守护注册只支持 Windows".into())
 }
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(windows))]
 fn unregister_startup(_config: &Path) -> Result<(), String> {
     Ok(())
 }
@@ -1173,38 +1082,16 @@ fn unregister_startup_for_cleanup(path: &Path) -> Result<(), String> {
     unregister_startup(path)
 }
 
-fn environment_local_service_root() -> Result<PathBuf, String> {
-    #[cfg(debug_assertions)]
-    if let Some(base) = std::env::var_os("IMAIL_SMOKE_LOCAL_APP_DATA") {
-        return Ok(PathBuf::from(base)
-            .join("com.cooliang.imail")
-            .join("local-service"));
-    }
-    #[cfg(windows)]
-    {
-        let base = std::env::var_os("LOCALAPPDATA")
-            .ok_or_else(|| "无法确定当前用户本地数据目录".to_string())?;
-        return Ok(PathBuf::from(base)
-            .join("com.cooliang.imail")
-            .join("local-service"));
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let home = std::env::var_os("HOME").ok_or_else(|| "无法确定当前用户目录".to_string())?;
-        return Ok(PathBuf::from(home)
-            .join("Library/Application Support/com.cooliang.imail/local-service"));
-    }
-    #[allow(unreachable_code)]
-    Err("当前平台不支持本地服务卸载清理".into())
-}
-
 pub fn run_uninstall_cleanup_from_args() -> Option<Result<(), String>> {
     if std::env::args_os().nth(1).as_deref()
         != Some(std::ffi::OsStr::new("--imail-uninstall-cleanup"))
     {
         return None;
     }
-    Some(environment_local_service_root().and_then(|root| cleanup_local_service_root(&root)))
+    Some(
+        crate::desktop_platform::legacy_local_service_root_from_environment()
+            .and_then(|root| cleanup_local_service_root(&root)),
+    )
 }
 
 fn file_sha256(path: &Path) -> Result<String, String> {
@@ -1625,24 +1512,7 @@ pub fn local_service_open_logs(app: AppHandle) -> Result<(), String> {
     let logs = local_service_root(&app)?.join("logs");
     fs::create_dir_all(&logs).map_err(|error| format!("创建服务日志目录失败：{error}"))?;
     log::info!(target: "desktop", "[logs.open] service log directory requested");
-    #[cfg(windows)]
-    {
-        return Command::new("explorer.exe")
-            .arg(&logs)
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| format!("打开服务日志目录失败：{error}"));
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return Command::new("open")
-            .arg(&logs)
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| format!("打开服务日志目录失败：{error}"));
-    }
-    #[allow(unreachable_code)]
-    Err("当前平台不支持打开服务日志目录".into())
+    crate::desktop_platform::open_directory(&logs, "服务日志目录")
 }
 
 pub fn run_daemon_from_args() -> bool {
@@ -1655,7 +1525,7 @@ pub fn run_daemon_from_args() -> bool {
         return true;
     };
     let path = PathBuf::from(config_path);
-    let Ok(root) = environment_local_service_root() else {
+    let Ok(root) = crate::desktop_platform::legacy_local_service_root_from_environment() else {
         return true;
     };
     if path != root.join("daemon.json") {
@@ -1889,20 +1759,6 @@ mod tests {
         assert!(validate_local_service_port(DEFAULT_LOCAL_SERVICE_PORT).is_ok());
         assert!(validate_local_service_port(18787).is_ok());
         assert!(validate_local_service_port(443).is_err());
-    }
-
-    #[test]
-    fn builds_safe_launch_agent_with_login_and_keepalive() {
-        let content = launch_agent_contents(
-            Path::new("/Applications/iMail & Work.app/Contents/MacOS/imail"),
-            Path::new("/Users/me/Library/Application Support/<iMail>/daemon.json"),
-        );
-        assert!(content.contains("<key>RunAtLoad</key><true/>"));
-        assert!(content.contains("<key>KeepAlive</key><true/>"));
-        assert!(content.contains("<string>--imail-daemon</string>"));
-        assert!(content.contains("iMail &amp; Work.app"));
-        assert!(content.contains("&lt;iMail&gt;/daemon.json"));
-        assert!(!content.contains("iMail & Work.app"));
     }
 
     #[test]
