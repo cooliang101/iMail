@@ -1,9 +1,12 @@
+# syntax=docker/dockerfile:1.7
+
 FROM node:24-bookworm-slim AS web-build
 ENV NODE_OPTIONS=--max-old-space-size=768
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm,sharing=locked npm ci
 COPY frontend/ ./
+COPY docs/custom-theme.md docs/mcp-integration.md /app/docs/
 RUN npm run build:web
 
 FROM rust:1.77.2-bookworm AS rust-build
@@ -14,9 +17,15 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY http-service/Cargo.toml ./http-service/Cargo.toml
 COPY http-service/src ./http-service/src
+COPY src-tauri/Cargo.toml ./src-tauri/Cargo.toml
+COPY src-tauri/src/lib.rs ./src-tauri/src/lib.rs
 COPY contracts ./contracts
-RUN cargo build --locked --release -p imail-http-service --bin imail-server \
-    && cargo build --locked --release -p imail-storage-sqlite --bin imail-maintenance
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    cargo build --locked --release -p imail-http-service --bin imail-server \
+    && cargo build --locked --release -p imail-storage-sqlite --bin imail-maintenance \
+    && install -D /app/target/release/imail-server /app/bin/imail-server \
+    && install -D /app/target/release/imail-maintenance /app/bin/imail-maintenance
 
 FROM debian:bookworm-slim AS runtime
 ENV IMAIL_DATA_DIR=/data \
@@ -32,8 +41,8 @@ RUN apt-get update \
     && mkdir -p /data /backups \
     && chown 10001:10001 /data /backups
 COPY --from=web-build /app/frontend/dist ./dist
-COPY --from=rust-build /app/target/release/imail-server ./imail-server
-COPY --from=rust-build /app/target/release/imail-maintenance ./imail-maintenance
+COPY --from=rust-build /app/bin/imail-server ./imail-server
+COPY --from=rust-build /app/bin/imail-maintenance ./imail-maintenance
 USER 10001:10001
 VOLUME ["/data", "/backups"]
 EXPOSE 8787

@@ -6,7 +6,6 @@ services:
     expose:
       - "8787"
     environment:
-      APP_MASTER_KEY: ${APP_MASTER_KEY:-}
       FRONTEND_URL: https://${IMAIL_PUBLIC_HOST:?set IMAIL_PUBLIC_HOST}
       OAUTH_CALLBACK_BASE_URL: https://${IMAIL_PUBLIC_HOST:?set IMAIL_PUBLIC_HOST}/api/oauth
       MCP_ALLOWED_HOSTS: ${IMAIL_PUBLIC_HOST:?set IMAIL_PUBLIC_HOST}

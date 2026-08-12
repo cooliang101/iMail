@@ -63,7 +63,7 @@ npm --prefix frontend run build:remote
 npm --prefix frontend run start:remote
 ```
 
-也可使用 Docker Compose：`http-service/compose.example.yml` 只向宿主机回环地址开放 8787，适合本机验证或接入已有代理；`http-service/compose.https.example.yml` 配合 `http-service/deploy/remote.env.example` 提供后端不暴露端口的 Caddy 自动 HTTPS 拓扑。远程部署必须持久化 `APP_MASTER_KEY` 或 `/data/master.key`，并把 `/data` 放在持久卷。完整步骤见[运维手册](docs/operator-runbook.md)。
+也可使用 Docker Compose：`http-service/compose.example.yml` 只向宿主机回环地址开放 8787，适合本机验证或接入已有代理；`http-service/compose.https.example.yml` 配合 `http-service/deploy/remote.env.example` 提供后端不暴露端口的 Caddy 自动 HTTPS 拓扑。远程部署必须持久化包含 `master.key` 的 `/data` 卷。完整步骤见[运维手册](docs/operator-runbook.md)。
 
 生产服务的注册与登录限流写入 SQLite，服务重启不会清零。登录、注册、授权码签发/撤销、邮箱凭据/代理/删除，以及 MCP 管理工具调用会写入不含密码、Token、OAuth Code 或原始 IP 的安全审计事件；当前登录用户可通过 `GET /api/security/audit-events` 查询自己的最近事件。
 
@@ -166,11 +166,10 @@ Yahoo Developer Network：
 
 应用用户、会话、邮箱账户、邮件缓存、联系人档案、Logo 采集记录、草稿、标签、稍后处理状态和开发 Token 保存在 `.data/imail.sqlite`。首次启动必须创建应用账号；升级已有数据库时，第一个注册用户会接管升级前的本地邮件数据。不同应用用户的数据彼此隔离，并可分别添加相同邮箱地址。密码使用带随机盐的 scrypt 派生值保存，会话使用 HttpOnly、SameSite=Lax Cookie，数据库只保存会话令牌的 SHA-256 哈希。登录按 IP 与账号双重限速，注册按 IP 限速；登录页只在浏览器本地记住曾登录账号的显示名称和登录名，不保存密码。
 
-其中 `contacts` 保存按应用用户隔离的统一联系人资料，`logo_fetch_attempts` 保存不可自动重试的采集审计。Logo 图片内容保存在 `.data/sender-logos/`，联系人记录保存其共享资源键、来源和获取时间；附件文件不长期写入数据库，下载时按需从源 IMAP 获取。邮箱凭据字段仍使用 AES-256-GCM 加密，加密主密钥默认生成在 `.data/master.key`。也可在 `.env` 中配置数据目录和 32 字节密钥的 64 位十六进制值：
+其中 `contacts` 保存按应用用户隔离的统一联系人资料，`logo_fetch_attempts` 保存不可自动重试的采集审计。Logo 图片内容保存在 `.data/sender-logos/`，联系人记录保存其共享资源键、来源和获取时间；附件文件不长期写入数据库，下载时按需从源 IMAP 获取。邮箱凭据字段仍使用 AES-256-GCM 加密，加密主密钥首次启动时生成在数据目录的 `master.key` 中。数据目录可通过环境变量配置：
 
 ```env
 IMAIL_DATA_DIR=.data
-APP_MASTER_KEY=请替换为64位十六进制值
 ```
 
 从旧版本升级时，首次启动会在一个事务中把 `.data/store.json` 导入 SQLite；成功后原文件会保留为 `.data/store.json.migrated`，不会重复导入。

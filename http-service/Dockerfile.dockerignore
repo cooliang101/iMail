@@ -1,13 +1,19 @@
-node_modules
-dist
-src-tauri/target
-target
-src-tauri/binaries
-src-tauri
-.playwright-cli
+**/node_modules
+**/dist
+**/target
+**/coverage
 .git
 .data
 output
-coverage
+.playwright-cli
 .env*
 *.log
+
+# Cargo loads every workspace member manifest even when only the HTTP service
+# package is built. Keep the desktop sources and assets out of the context but
+# retain its manifest so workspace discovery succeeds.
+src-tauri/**
+!src-tauri/Cargo.toml
+!src-tauri/src/
+src-tauri/src/**
+!src-tauri/src/lib.rs

@@ -96,7 +96,7 @@ docker exec imail /app/imail-maintenance upgrade-preflight /backups/imail-before
 
 三条命令均输出机器可读 JSON。`upgrade-preflight` 先在线备份，再只在新恢复副本上执行当前 Rust schema 迁移、`quick_check` 和外键检查；失败不会修改 `/data`，已成功生成的备份继续保留用于诊断和恢复。
 
-使用环境变量提供 `APP_MASTER_KEY` 时，密钥不在数据目录中，必须由密钥管理系统另行备份。没有原主密钥，即使数据库恢复成功也无法解密邮箱凭据。
+`master.key` 位于持久化 `/data` 中，并包含在维护工具生成的完整备份内。没有原主密钥，即使数据库恢复成功也无法解密邮箱凭据。
 
 ## 远程服务升级预检
 

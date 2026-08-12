@@ -167,6 +167,13 @@ try {
   if (imageInspection.Os !== 'linux' || imageInspection.Architecture !== 'amd64') {
     throw new Error(`Rust 镜像平台错误：${imageInspection.Os}/${imageInspection.Architecture}`);
   }
+  const runtimeTools = (await docker([
+    'run', '--rm', '--entrypoint', '/bin/sh', rustImage, '-c',
+    'for tool in node npm cargo rustc; do command -v "$tool" 2>/dev/null || true; done',
+  ])).stdout.trim();
+  if (runtimeTools) {
+    throw new Error(`Rust runtime 镜像不应包含构建工具或 Node runtime：${runtimeTools}`);
+  }
   await docker(['volume', 'create', dataVolume]);
   dataVolumeCreated = true;
   await docker(['volume', 'create', backupVolume]);
@@ -330,6 +337,8 @@ try {
     nonOverwritingRestore: true,
     upgradePreflight: true,
     gracefulSigterm: true,
+    bundledNodeRuntime: false,
+    bundledBuildToolchain: false,
   };
   const serialized = `${JSON.stringify(result, null, 2)}\n`;
   if (options.report) {

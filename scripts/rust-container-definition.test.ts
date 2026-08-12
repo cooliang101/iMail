@@ -13,7 +13,8 @@ describe('Rust container definition', () => {
     expect(dockerfile).toContain('USER 10001:10001');
     expect(dockerfile).toContain('IMAIL_SYNC_WORKER=true');
     expect(dockerfile).toContain('imail-storage-sqlite --bin imail-maintenance');
-    expect(dockerfile).toContain('/release/imail-maintenance ./imail-maintenance');
+    expect(dockerfile).toContain('/app/bin/imail-maintenance ./imail-maintenance');
+    expect(dockerfile).toContain('target=/usr/local/cargo/registry');
     expect(dockerfile).toContain('STOPSIGNAL SIGTERM');
     expect(dockerfile).toContain('HEALTHCHECK');
     expect(dockerfile).toContain('"/app/imail-server", "--host", "0.0.0.0"');
@@ -29,6 +30,8 @@ describe('Rust container definition', () => {
     expect(smoke).toContain('source=${dataVolume},destination=/data');
     expect(smoke).toContain('source=${backupVolume},destination=/backups');
     expect(smoke).toContain("imageInspection.Architecture !== 'amd64'");
+    expect(smoke).toContain("for tool in node npm cargo rustc");
+    expect(smoke).toContain('bundledNodeRuntime: false');
     expect(smoke).toContain("status === 'healthy'");
     expect(smoke).toContain('Rust 种子容器初始化注册失败');
     expect(smoke).toContain('Rust 未能读取重启前的登录数据');
@@ -52,11 +55,13 @@ describe('Rust container definition', () => {
 
   it('runs the Rust container gate before publishing the official Rust image', async () => {
     const workflow = await readFile(new URL('../.github/workflows/deployment-release.yml', import.meta.url), 'utf8');
-    const candidateGate = workflow.indexOf('npm --prefix frontend run test:rust-container');
+    const candidateGate = workflow.indexOf('node scripts/smoke-rust-container.mjs --build-engine buildx');
     const productionPublish = workflow.indexOf('docker/build-push-action@');
     expect(candidateGate).toBeGreaterThan(0);
     expect(productionPublish).toBeGreaterThan(candidateGate);
     expect(workflow).toContain('file: ./http-service/Dockerfile\n');
+    expect(workflow).toContain('sbom: true');
+    expect(workflow).toContain('provenance: mode=max');
     const dockerfile = await readFile(new URL('../http-service/Dockerfile', import.meta.url), 'utf8');
     expect(dockerfile).toContain('FROM debian:bookworm-slim AS runtime');
     expect(dockerfile).not.toMatch(/FROM node:[^\n]+ AS runtime/);
