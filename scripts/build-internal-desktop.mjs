@@ -9,7 +9,7 @@ const buildScript = 'build:desktop:windows';
 
 const npmCli = process.env.npm_execpath;
 if (!npmCli) {
-  console.error('请通过 npm run build:desktop:internal 启动内部测试构建。');
+  console.error('请通过 npm --prefix frontend run build:desktop:internal 启动内部测试构建。');
   process.exit(1);
 }
 

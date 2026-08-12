@@ -95,6 +95,20 @@ fn load_cookie_store(path: &Path) -> CookieStore {
     cookie_store::serde::json::load(BufReader::new(file)).unwrap_or_default()
 }
 
+pub(crate) fn persisted_session_token(
+    cookie_root: &Path,
+    service_base: &str,
+) -> Result<Option<String>, String> {
+    let normalized = normalize_base_url(service_base)?;
+    let url = Url::parse(&normalized).map_err(|_| "本地服务地址无效".to_string())?;
+    let store = load_cookie_store(&cookie_root.join(cookie_file_name(&normalized)));
+    let session = store
+        .get_request_values(&url)
+        .find(|(name, value)| *name == "imail_session" && !value.is_empty())
+        .map(|(_, value)| value.to_string());
+    Ok(session)
+}
+
 fn write_private_file(path: &Path, contents: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
@@ -511,6 +525,12 @@ mod tests {
             .unwrap();
         first_client.persist_cookies().unwrap();
         drop(first_state);
+        assert_eq!(
+            persisted_session_token(&root, service_a)
+                .unwrap()
+                .as_deref(),
+            Some("secret-a")
+        );
 
         let restarted_state = HttpBridgeState::new(root.clone());
         let (_, restored_client) = restarted_state.client(service_a).unwrap();
@@ -537,6 +557,7 @@ mod tests {
             .unwrap();
         restored_client.persist_cookies().unwrap();
         drop(restarted_state);
+        assert!(persisted_session_token(&root, service_a).unwrap().is_none());
 
         let logged_out_state = HttpBridgeState::new(root.clone());
         let (_, logged_out_client) = logged_out_state.client(service_a).unwrap();

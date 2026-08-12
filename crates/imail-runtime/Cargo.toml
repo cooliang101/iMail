@@ -1,0 +1,23 @@
+[package]
+name = "imail-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+imail-core = { path = "../imail-core" }
+imail-mail = { path = "../imail-mail" }
+imail-mail-network = { path = "../imail-mail-network" }
+imail-oauth = { path = "../imail-oauth" }
+imail-oauth-http = { path = "../imail-oauth-http" }
+imail-protocol = { path = "../imail-protocol" }
+imail-security = { path = "../imail-security" }
+imail-storage-sqlite = { path = "../imail-storage-sqlite" }
+serde_json.workspace = true
+sysinfo.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true

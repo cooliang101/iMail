@@ -8,7 +8,7 @@ iMail 的邮箱同步采用 push-first 模型，不依赖前端页面、用户�
 
 ## 实施状态
 
-截至 2026-08-04，M0–M6 已落地并完成 push-first 收敛：同步提交使用细粒度 SQL 事务；自动同步设置、任务、租约、邮箱游标、事件和 Worker 心跳均已持久化；API 默认拉起并监管独立 Worker；HTTP、MCP 和前端设置已接入；UIDVALIDITY、CONDSTORE/QRESYNC、远端 UID 删除检查和显式收件箱 IDLE 已启用。IDLE 变化会唤醒增量拉取，断线自动重连并立即校准，任务运行期间的后续通知会持久化为一次补跑；固定低频后台校准覆盖断线窗口和非收件箱变化。
+截至 2026-08-11，该同步模型已迁移到 Rust：同步提交使用细粒度 SQLite 事务；设置、任务、租约、邮箱游标、事件和 Worker 心跳均持久化；Tauri 嵌入式 host 与 Rust HTTP host 分别装配同一 worker pool、scheduler 和 IDLE watcher。本文后续对旧 Node 模型的描述仅为历史设计映射，源码通过 Git 历史追溯；当前实现以 `imail-storage-sqlite`、`imail-runtime` 和 `imail-core` 为准。
 
 保留的快照兼容接口在 `BEGIN IMMEDIATE` 内读取和提交，以确保与 Worker 跨进程串行；邮件同步热路径不再通过整库替换提交。
 
@@ -205,7 +205,7 @@ MCP：
 
 交付物：
 
-- 新增长期运行的 Worker 入口，例如 `server/sync/worker.ts`。
+- 在 `imail-runtime` 中维护长期运行的 worker pool、scheduler 与 IDLE watcher 入口。
 - API 进程停止直接执行 IMAP 同步，只负责读写策略和创建任务。
 - Worker 使用唯一实例 ID 领取任务、续租并记录心跳。
 - Worker 对单任务设置连接、下载、解析和总执行超时。
@@ -265,9 +265,9 @@ MCP：
 5. 每阶段发布前执行：
 
 ```bash
-npm run typecheck
-npm test
-npm run build
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
 ## 总体验收标准

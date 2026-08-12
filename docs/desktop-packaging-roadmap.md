@@ -1,61 +1,36 @@
-# 桌面客户端打包与本地守护服务边界
+# Windows 桌面打包与 Rust 嵌入边界
 
-Windows 桌面版复用 React 前端和 Platform Adapter，并在安装包中携带与当前版本匹配的 iMail 服务程序。用户选择本地服务后，桌面应用自动把该程序注册为用户级守护进程；选择远程服务后，桌面应用暂停本地守护进程并连接用户部署的实例。
+Windows 桌面版复用 React 前端并把 Rust 领域服务静态链接进 Tauri。安装包不携带 Node、SEA、服务 sidecar、manager 或独立 worker。
 
-前端与服务端保持进程隔离：Tauri WebView 不持有邮箱凭据或 SQLite，服务进程继续独立拥有邮件协议、存储、同步 Worker、HTTP API、Gateway 与 MCP。完整的模式定义、实施阶段和验收场景见 [本地守护服务与远程共享部署更新路线](./deployment-modes-roadmap.md)。
+## 运行边界
 
-## 桌面与服务生命周期
+- 本地模式：WebView 只使用类型化 command/event；Rust host 持有会话、SQLite、凭据、网络协议和同步生命周期。
+- 远程模式：WebView 仍不直接访问网络会话，由 Rust bridge 连接经校验的 HTTPS 服务。
+- 本地模式无服务 URL、Cookie Jar、SSE 或业务 listener；OAuth 只使用短生命周期随机 loopback callback。
+- 窗口关闭隐藏到托盘并继续同步；托盘“退出”关闭事件任务和嵌入式 host 后结束进程。
 
-桌面运行时保持单实例。重复启动恢复并聚焦现有主窗口；主窗口关闭请求仍可隐藏到系统托盘，只有显式退出才结束桌面 UI 进程。
+## 包内容
 
-本地守护服务不跟随桌面 UI 退出。它在当前用户登录后由平台守护机制启动，即使窗口没有打开也继续同步。桌面应用负责注册、状态查询、启动、暂停、升级、修复和移除，但不能通过进程名或端口管理身份未知的进程。
+- `tauri.conf.json` 的 `beforeBuildCommand` 只构建 Web。
+- `externalBin` 为空；NSIS 安装目录只有 `imail.exe`、卸载程序与必需资源。
+- 安装包扫描必须拒绝 `node.exe`、`.cjs`、`imail-service`、manager、worker 和 `service-runtime`。
+- 交付平台只有 Windows x64；不生成 macOS 或原生 Linux 桌面包。
 
-远程模式不使用本地守护服务。切换到远程模式时默认暂停本地服务，但保留注册信息和用户数据；远程服务不可达时不得自动回退到本地数据源。
+## 数据与卸载
 
-## 打包内容
+- 用户数据继续位于 `%LOCALAPPDATA%\com.cooliang.imail\local-service\data`，避免覆盖升级改变既有路径。
+- 覆盖安装与默认卸载保留数据库、主密钥、Logo、日志和迁移快照。
+- 卸载 hook 调用当前 `imail.exe --imail-uninstall-cleanup`，只清理旧 runtime/启动注册等受管文件。
+- 删除邮箱数据只能通过登录后的“隐私与数据”流程，并受重新认证和固定确认文本保护。
 
-Windows NSIS 安装包包含：
+## 旧版迁移
 
-- Tauri 桌面壳、托盘与平台能力；
-- React 前端生产资源；
-- Windows iMail 服务程序及必要运行资源；
-- 用户级守护进程的注册、状态查询、启动、停止、升级与移除能力。
+首次发现受管 `daemon.json` 且尚无成功记录时，Tauri 执行一次性单写入者切换：停止并确认旧 Node 服务、创建不可覆盖快照、验证数据库/主密钥/全部凭据、无网络启动 Rust host，并写入 `embedded-switch.json`。失败时保留现场；只有数据库哈希未变才允许恢复旧服务。
 
-安装包不包含预初始化数据库或用户密钥，不把可变数据写入安装目录，也不把守护程序注册为系统级高权限服务。数据库、发件人 Logo、主密钥和日志位于平台用户数据目录。
+退休的旧守护设置管理面已从默认 release 编译图移出。源码中的 `legacy-daemon-admin` feature 仅用于过渡期审计旧状态/启用/移除和 sidecar 部署逻辑；正式 Windows 包不启用它。首次升级仍依赖的停服、非覆盖快照、失败恢复、旧 supervisor 与卸载清理不受该 feature 控制，并保留一个发布周期。
 
-## 平台策略
+完成一个回退发布周期前保留该兼容代码和旧 runtime 文件；它们不被调用为当前服务，也不进入新安装包。
 
-- Windows 使用无需管理员权限、可在当前用户登录后自动运行的用户级后台机制。
-- Windows 必须验证登录启动、异常恢复、暂停、升级、注销和卸载行为，不能以弹出终端窗口或依赖桌面 UI 常驻替代守护能力。
-- 当前不维护原生 Linux 或 macOS 桌面构建；服务端只通过 Docker 镜像交付。
+## 验收
 
-## 网络与安全边界
-
-- 本地守护服务只监听回环地址，并提供可验证的实例身份。
-- 默认端口为 `8787`；若被占用，桌面端允许选择其他非特权回环端口并持久化到用户级守护配置。
-- 端口已被占用不能等同于服务已启动；桌面应用不得连接或终止身份未知的进程。
-- 桌面 API、会话、SSE 与附件请求继续统一经过 Rust 网络桥，WebView 不直接接触服务端会话。
-- Rust 网络桥为每个规范化服务地址维护独立 Cookie Jar；只把未过期的持久 Cookie 写入当前用户私有应用数据目录，桌面重启后恢复，退出登录后的失效状态也同步落盘。
-- 远程地址必须为 HTTPS，HTTP 只允许本机回环开发地址；前端在首个网络请求前校验，Rust 网络桥再次校验且不跟随 HTTP 重定向。桌面设置明确展示当前数据源和实例地址。
-- 服务响应、桌面错误和日志不得暴露邮箱凭据、OAuth Token 或加密字段。
-
-## 构建目标
-
-桌面构建最终由三个可独立验证的步骤组成：
-
-1. 构建 React 前端资源。
-2. 构建 Windows iMail 服务程序。
-3. 由 Tauri 将两者装配到 Windows NSIS。
-
-现有 `build:web`、`build:server` 与桌面构建保持可单独执行。守护服务构建不得改变 HTTP、Gateway 或 MCP 协议，桌面内测前仍需运行 `npm run typecheck`、`npm test`、`npm run build` 以及平台安装包冒烟测试。
-
-## 安装、升级与卸载约束
-
-- 选择本地服务即触发一键部署，不要求用户下载第二个安装包。
-- 桌面前端、守护程序与数据库迁移按同一桌面版本验证和签名。
-- 桌面升级必须安全替换运行中的守护程序，不能直接覆盖被占用文件。
-- 迁移开始前确认数据路径和备份条件；迁移失败不得继续用新版本写入。
-- 暂停或移除守护服务默认保留用户数据。
-- 守护生命周期与用户邮箱数据是两个明确控制面：“设置 → 服务连接”、卸载和“移除运行文件”只管理运行文件并默认保留数据，不提供数据删除按钮。
-- 当前登录用户若要清除自己的邮箱授权与邮箱数据，必须进入“设置 → 隐私与数据”，先核对范围，再用当前 iMail 密码和固定确认文字完成第二次确认。HTTP 服务仅删除该用户的邮箱账户、缓存、草稿、联系人、开发者令牌和同步状态，保留登录账号、服务程序、主密钥和其他用户数据。
-- Windows NSIS 在删除应用文件前调用 `--imail-uninstall-cleanup`，先停止并注销用户级守护服务；失败时中止卸载，成功后保留 `local-service/data`。
+构建前从仓库根目录运行 `npm --prefix frontend run typecheck`、`npm --prefix frontend test`、`npm --prefix frontend run build`、Rust/Tauri tests、严格 Clippy 与 rustfmt。随后构建 NSIS，执行 release 冒烟、归档扫描、进程/端口检查及数据哈希/快照复核。当前结果见 [`rust-migration-r9-report.md`](./rust-migration-r9-report.md)。

@@ -20,7 +20,7 @@ iMail 是一个本地优先的多邮箱集中管理 MVP。它把不同服务商�
 - “隐私与数据”支持独立密码加密的邮箱授权导出，以及两阶段确认、当前密码复核的当前用户邮箱数据清除
 - 设置中心的内置主题、启动、阅读、通知、邮件展示与快捷键偏好按应用账号同步保存；自定义主题令牌保存在当前设备
 - 内置经典薄荷清新、琥珀终端科技风、深海蓝图商业风和 Soft Neubrutalism 柔和撞色四套即时切换主题；账户栏、邮件列表和阅读正文都随主题改变，并支持安全令牌式自定义主题、AI JSON 导入与规范复制
-- 后端采用 push-first 同步模型与独立 Worker；前端关闭后仍由邮箱服务变化推送唤醒增量拉取
+- Rust 后端采用 push-first 持久同步运行时；窗口隐藏后 worker/IDLE 继续运行并由服务商变化唤醒增量拉取
 - 收件箱显式保持 IMAP IDLE 实时监听；启动和断线重连会立即校准，运行中到达的新事件保证补跑，固定低频后台校准兜底断线与非收件箱变化
 - 设置页只展示邮件接收服务健康、账户最近状态与“立即校准”；文件夹游标、变化监听、重连恢复和校准计划均由系统维护
 - 首次同步最近 80 封邮件，后续按 IMAP UID 增量更新收件箱、已发送和归档缓存
@@ -45,78 +45,78 @@ Outlook / Hotmail、Gmail、QQ、Yahoo、iCloud 与通用 IMAP 均按 MVP 接入
 
 ## 启动
 
-需要 Node.js 22.5 或更新版本（使用 Node 内置 `node:sqlite`）。
+前端开发需要 Node.js 22.5 或更新版本；服务核心和正式运行时使用 Rust。
 
 ```bash
-npm install
-npm run dev
+npm --prefix frontend install
+npm --prefix frontend run dev
 ```
 
 浏览器访问 `http://localhost:5173`。API 默认只监听 `127.0.0.1:8787`，不会暴露给局域网。
 
-API 启动器默认同时拉起独立同步 Worker。Worker 的任务、租约、邮箱 UID 游标、下次执行时间和失败状态均保存在 SQLite；浏览器、SSE 或开发者 WebSocket 断开不会停止同步。
+Rust HTTP 宿主默认在同一进程内装配同步 worker、scheduler 与 IDLE watcher。任务、租约、邮箱 UID 游标、下次执行时间和失败状态均保存在 SQLite；浏览器、SSE 或开发者 WebSocket 断开不会停止同步。
 
-开发服务使用 `npm start` 启动。远程生产构建会把 Web、API 和同步 Worker 作为同一发布单元，浏览器默认同源连接：
+开发服务使用 `npm --prefix frontend run dev` 启动。远程生产构建会把 Web、API 和同步运行时作为同一发布单元，浏览器默认同源连接：
 
 ```bash
-npm run build:remote
-npm run start:remote
+npm --prefix frontend run build:remote
+npm --prefix frontend run start:remote
 ```
 
-也可使用 Docker Compose：`compose.example.yml` 只向宿主机回环地址开放 8787，适合本机验证或接入已有代理；`compose.https.example.yml` 配合 `deploy/remote.env.example` 提供后端不暴露端口的 Caddy 自动 HTTPS 拓扑。远程部署必须持久化 `APP_MASTER_KEY` 或 `/data/master.key`，并把 `/data` 放在持久卷。完整步骤见[运维手册](docs/operator-runbook.md)。
+也可使用 Docker Compose：`http-service/compose.example.yml` 只向宿主机回环地址开放 8787，适合本机验证或接入已有代理；`http-service/compose.https.example.yml` 配合 `http-service/deploy/remote.env.example` 提供后端不暴露端口的 Caddy 自动 HTTPS 拓扑。远程部署必须持久化 `APP_MASTER_KEY` 或 `/data/master.key`，并把 `/data` 放在持久卷。完整步骤见[运维手册](docs/operator-runbook.md)。
 
 生产服务的注册与登录限流写入 SQLite，服务重启不会清零。登录、注册、授权码签发/撤销、邮箱凭据/代理/删除，以及 MCP 管理工具调用会写入不含密码、Token、OAuth Code 或原始 IP 的安全审计事件；当前登录用户可通过 `GET /api/security/audit-events` 查询自己的最近事件。
 
 生产环境不会隐式允许 Vite 的 `localhost:5173` CORS 来源。同源 Web 无需设置 `CORS_ORIGIN`；只有拆分 Web/API 域名时才显式列出 HTTPS Origin，并且不得带路径、查询、片段或凭据。
 
-生产数据可用 `npm run backup -- <备份目录>` 在线取得一致快照；恢复前用 `npm run restore:prepare -- <备份目录> <新目录>` 校验数据库、密钥并生成不覆盖当前数据卷的恢复目录。远程镜像也内置 `imail-backup.mjs` 和 `imail-restore.mjs`，Compose 使用独立 `/backups` 卷。完整切换步骤见[运维手册](docs/operator-runbook.md)。
+生产数据可用 `npm --prefix frontend run backup -- <备份目录>` 在线取得一致快照；恢复前用 `npm --prefix frontend run restore:prepare -- <备份目录> <新目录>` 校验数据库、密钥并生成不覆盖当前数据卷的恢复目录。Compose 使用独立 `/backups` 卷。完整切换步骤见[运维手册](docs/operator-runbook.md)。
 
-远程升级前运行 `npm run upgrade:preflight -- <新备份目录> <新预检目录>`。它使用将要发布的版本对一致性副本执行数据库迁移和完整性检查，不修改在线数据；远程镜像同时内置 `imail-upgrade-preflight.mjs`。
+远程升级前运行 `npm --prefix frontend run upgrade:preflight -- <新备份目录> <新预检目录>`。它使用将要发布的版本对一致性副本执行数据库迁移和完整性检查，不修改在线数据。
 
 ## 桌面应用
 
-桌面版使用 Tauri v2 承载同一套 React 前端，并随安装包携带独立服务程序。选择本地服务时，应用会将其安装为当前用户的守护进程；选择远程服务时，应用先验证远程实例，再暂停本机服务并连接用于多设备共享的实例。两种模式和迁移路线见 [部署模式更新路线](docs/deployment-modes-roadmap.md)。桌面 WebView 始终使用包内页面，浏览器访问远程服务时则使用服务端托管的同版本 Web 页面。
+桌面版使用 Tauri v2 承载同一套 React 前端。本地模式由 Tauri 进程内直接调用 Rust 领域服务，不启动 Node 守护进程，也不开放常驻 HTTP 端口；远程模式连接显式启用 HTTP Adapter 的 Rust 服务。Windows 迁移已经完成，Linux、macOS 与多架构容器的后续工作见 [跨平台支持路线](docs/cross-platform-support-roadmap.md)。桌面 WebView 始终使用包内页面，浏览器访问远程服务时使用服务端托管的同版本 Web 页面。
 
-本地守护服务默认使用 `127.0.0.1:8787`。如果该端口被其他程序占用，登录页或“设置 → 服务连接”会提供新端口输入；确认后应用迁移用户级守护配置并保存选择，数据目录不随端口改变。
+本地嵌入模式没有可配置端口。`8787` 只用于 Docker/远程 Rust HTTP 模式；切换服务模式不会合并、删除或移动两端数据。
 
 远程服务地址必须使用 HTTPS；仅 `localhost`、`127.0.0.0/8` 和 `::1` 这类本机回环开发地址可使用 HTTP。前端在身份握手之前拒绝不安全地址，Rust 网络桥会再次校验并禁止自动跟随 HTTP 重定向，避免登录请求被降级传输。
 
 ```bash
-npm run dev:web
-npm run build:web
+npm --prefix frontend run dev:web
+npm --prefix frontend run build:web
 ```
 
 Windows 开发和 NSIS 安装包构建需要 Node.js 22.5+、Rust stable、Microsoft C++ Build Tools 与 WebView2。当前桌面交付只支持 Windows x64，统一入口生成内部测试 NSIS：
 
 ```bash
-npm run dev:desktop
-npm run build:desktop:internal
+npm --prefix frontend run dev:desktop
+npm --prefix frontend run build:desktop:internal
 ```
 
 当前交付范围只有 Windows 桌面端和服务端 Docker 镜像；不提供原生 Linux 或 macOS 桌面安装包。Linux 侧只需运行 Docker 镜像，不维护额外的原生部署脚本。普通分支推送与 pull request 不触发 GitHub Actions；手动运行时必须选择 `docker` 或 `windows`，两条任务不会互相连带执行。三段式版本标签只发布 Docker，Windows 日常仍优先本机构建。
 
 桌面版默认保持后台运行：点击主窗口关闭按钮会隐藏到系统托盘，左键托盘图标或选择“打开 iMail”可恢复窗口；托盘右键菜单的“写邮件”会恢复窗口并直接打开新邮件编辑器，选择“退出 iMail”才会结束进程。应用采用单实例模式；再次启动 iMail 会恢复并聚焦已有窗口，不会创建第二个进程实例。
 
-“设置 → 服务连接”只负责选择本地/远程服务、端口恢复和用户级守护程序生命周期，不提供数据删除。要清理数据，登录后进入“设置 → 隐私与数据 → 清除我的邮箱数据”：界面先展示清除范围，再要求当前 iMail 密码和指定确认文字。该操作只清除当前登录用户的邮箱授权、邮件缓存、草稿、联系人、开发者令牌与同步状态；保留 iMail 登录账号、服务程序、主密钥、其他用户及其数据。“移除运行文件”和卸载桌面应用也仍默认保留数据。
+“设置 → 服务连接”只负责选择本地嵌入式服务或远程服务，不提供端口恢复、守护程序管理或数据删除。要清理数据，登录后进入“设置 → 隐私与数据 → 清除我的邮箱数据”：界面先展示清除范围，再要求当前 iMail 密码和指定确认文字。该操作只清除当前登录用户的邮箱授权、邮件缓存、草稿、联系人、开发者令牌与同步状态；保留 iMail 登录账号、应用运行文件、主密钥、其他用户及其数据。卸载桌面应用仍默认保留数据。
 
 “隐私与数据”还可导出当前登录用户全部邮箱的连接配置与授权凭据。导出文件使用独立的至少 12 位密码加密，可能包含应用专用密码、OAuth Token 和代理密码，因此文件与密码必须分开保管；导出内容不包含邮件、附件、草稿、联系人或 iMail 登录密码。该能力只通过登录后的应用 HTTP 界面提供，不加入 API Gateway 或 MCP。
 
-安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 桌面包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到测试机器。交付本地产物前可用 `Get-FileHash <安装包路径> -Algorithm SHA256` 生成并记录校验值。内测前验证真实桌面宿主：
+安装包输出到 `target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 桌面包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到测试机器。交付本地产物前可用 `Get-FileHash <安装包路径> -Algorithm SHA256` 生成并记录校验值。内测前验证真实桌面宿主：
 
 ```bash
-npm run test:desktop-release
+npm --prefix frontend run test:desktop-release
 ```
 
 服务端镜像由 GitHub Actions 推送到 `ghcr.io/cooliang101/imail`。一次手动发布生成 `edge` 与完整 `sha-<提交>` 标签；三段式版本标签生成完整版本号与提交 SHA，不生成含义模糊的 `latest`。Compose 默认使用 `edge`，固定部署应把 `IMAIL_IMAGE` 改为版本标签或 digest。首次发布后的 GHCR 可见性由包设置决定，工作流不会自动将其公开。
 
 ```bash
 docker pull ghcr.io/cooliang101/imail:edge
-docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull always
+docker compose --env-file .env.remote -f http-service/compose.https.example.yml up -d --pull always
 ```
 
-仓库根目录的 `Dockerfile` 仍可本地构建；执行 `npm run test:container-release` 验证镜像构建、非 root 运行、健康检查、Web/API 同源访问以及备份恢复。内部测试包和镜像的验收口径见[内部测试构建说明](docs/internal-testing.md)。
+`http-service/Dockerfile` 构建独立 HTTP 服务镜像，最终 runtime 不包含 Node；跨平台容器验收后续另立计划。内部验收口径见[内部测试构建说明](docs/internal-testing.md)。
 
-桌面宿主通过 Rust 网络桥连接选定的本地或远程服务 API，并在 Rust 侧维护登录 Cookie、实时事件流与附件下载；持久登录 Cookie 按规范化服务地址隔离并保存在当前用户的私有应用数据目录，退出桌面后可恢复，但不会进入 WebView 存储或 IPC 响应。Web 客户端直接同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。完整边界见 [`docs/desktop-packaging-roadmap.md`](docs/desktop-packaging-roadmap.md)。
+桌面本地模式通过类型化 Tauri command/event 直连 Rust；远程模式才使用 Rust 网络桥并按服务地址隔离 Cookie、事件流与附件下载。Web 客户端同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。
 
 ## 添加邮箱
 
@@ -152,7 +152,7 @@ Google Cloud Console（Windows 桌面端）：
 Microsoft Entra：
 
 1. 创建 App Registration，账户类型选择同时支持组织账户与个人 Microsoft 账户。
-2. 远程服务登记由 `OAUTH_CALLBACK_BASE_URL` 派生的 HTTPS 回调；原生桌面公共客户端登记 `http://localhost/api/oauth/microsoft/callback`，授权时按本地服务实际端口生成回调（Entra 的 `localhost` 匹配会忽略端口）。
+2. 远程服务登记由 `OAUTH_CALLBACK_BASE_URL` 派生的 HTTPS 回调；原生桌面公共客户端登记 `http://localhost/api/oauth/microsoft/callback`，授权时使用单次动态 loopback listener（Entra 的 `localhost` 匹配会忽略端口）。
 3. 添加 Office 365 Exchange Online Delegated Permissions：`IMAP.AccessAsUser.All` 与 `SMTP.Send`。
 4. 桌面 Client ID 填入 `MICROSOFT_OAUTH_DESKTOP_CLIENT_ID`；Windows 安装包与 Google 共用 authorization code + PKCE、动态 loopback 回调和无 Client Secret 的公共客户端流程。Web 机密客户端继续填写 `MICROSOFT_OAUTH_CLIENT_ID` 与 `MICROSOFT_OAUTH_CLIENT_SECRET`。
 
@@ -162,7 +162,7 @@ Yahoo Developer Network：
 2. 审核通过并获得 `mail-r`、`mail-w` 后，登记由 `OAUTH_CALLBACK_BASE_URL` 派生的 HTTPS 回调。
 3. 填写 `YAHOO_OAUTH_CLIENT_ID`、`YAHOO_OAUTH_CLIENT_SECRET`，并设置 `YAHOO_MAIL_OAUTH_APPROVED=true`。
 
-可用的公开回调地址、scope 与当前配置状态可通过 `GET /api/providers` 查看。Windows 桌面端的 Google 与 Microsoft Desktop app 统一使用系统浏览器、PKCE 与 `localhost` loopback 回调，端口取当前本地守护服务实际端口，因此不注册自定义 URI scheme。Microsoft 不打包 Client Secret；Google 会携带 Desktop app 凭据中的 Client Secret，但该字段在公共客户端中不具备保密性。生产环境必须设置 HTTPS 的 `OAUTH_CALLBACK_BASE_URL` 和 `FRONTEND_URL`。
+可用的公开回调地址、scope 与当前配置状态可通过 `GET /api/providers` 查看。Windows 桌面端的 Google 与 Microsoft Desktop app 统一使用系统浏览器、PKCE 与单次动态 `localhost` loopback callback，不注册自定义 URI scheme，也不开放业务 HTTP。Microsoft 不打包 Client Secret；Google Desktop Client Secret 在公共客户端中不具备保密性。生产环境必须设置 HTTPS 的 `OAUTH_CALLBACK_BASE_URL` 和 `FRONTEND_URL`。
 
 应用用户、会话、邮箱账户、邮件缓存、联系人档案、Logo 采集记录、草稿、标签、稍后处理状态和开发 Token 保存在 `.data/imail.sqlite`。首次启动必须创建应用账号；升级已有数据库时，第一个注册用户会接管升级前的本地邮件数据。不同应用用户的数据彼此隔离，并可分别添加相同邮箱地址。密码使用带随机盐的 scrypt 派生值保存，会话使用 HttpOnly、SameSite=Lax Cookie，数据库只保存会话令牌的 SHA-256 哈希。登录按 IP 与账号双重限速，注册按 IP 限速；登录页只在浏览器本地记住曾登录账号的显示名称和登录名，不保存密码。
 
@@ -179,22 +179,22 @@ APP_MASTER_KEY=请替换为64位十六进制值
 
 ## 外部接入
 
-Gateway 与 MCP 默认关闭。进入“外部接入”后，可在各自标签页手动启用；两个开关彼此独立、即时生效且按应用账号保存。关闭后已有授权码继续保留，但对应外部请求会被拒绝，核心应用 `/api` 与后台同步不受影响。
+Gateway 与 MCP 默认关闭，只在显式启用 HTTP Adapter 的 Rust 服务中可访问。桌面本地嵌入模式不开放这些网络端点；连接远程 Rust 服务后，可在“外部接入”分别启用 Gateway 或 MCP。
 
 进入界面底部的“外部接入”。“API 网关”标签页用于选择邮箱、API 权限和有效时间；“MCP”标签页用于为可信 Agent 创建独立授权码、复制 Streamable HTTP 配置，并查看或复制仓库中的原始 MCP 接入文档。API Token 以 `imail_` 开头，MCP 授权码以 `imail_mcp_` 开头；完整凭据只在创建成功时显示一次，服务端只保存 SHA-256 哈希。
 
 基础地址：
 
 ```text
-http://127.0.0.1:8787/gateway/v1
+https://mail.example.com/gateway/v1
 ```
 
-以上本地 URL 使用默认端口；若桌面服务设置已改用其他端口，请将本节所有 `8787` 替换为当前服务地址显示的端口。
+以下示例使用远程 HTTPS 地址；本机开发可启动 `http-service` 的 Rust `imail-server` 后改用 `http://127.0.0.1:8787`。
 
 轻量交互文档：
 
 ```text
-http://127.0.0.1:8787/gateway/docs
+https://mail.example.com/gateway/docs
 ```
 
 该页面无第三方 UI 运行时依赖，可直接填入 Token、参数和 JSON 正文测试接口。OpenAPI 3.1 契约位于 `/gateway/openapi.json`。
@@ -202,7 +202,7 @@ http://127.0.0.1:8787/gateway/docs
 订阅新邮件：
 
 ```js
-const socket = new WebSocket('ws://127.0.0.1:8787/gateway/v1/events');
+const socket = new WebSocket('wss://mail.example.com/gateway/v1/events');
 
 socket.addEventListener('open', () => {
   socket.send(JSON.stringify({ type: 'authenticate', token: 'imail_your_token' }));
@@ -219,45 +219,45 @@ socket.addEventListener('message', ({ data }) => {
 读取邮件：
 
 ```bash
-curl "http://127.0.0.1:8787/gateway/v1/messages?limit=10" \
+curl "https://mail.example.com/gateway/v1/messages?limit=10" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 列表只返回摘要，不加载邮件正文。使用响应中的 `page.nextCursor` 获取下一页：
 
 ```bash
-curl "http://127.0.0.1:8787/gateway/v1/messages?limit=10&cursor=上一页游标" \
+curl "https://mail.example.com/gateway/v1/messages?limit=10&cursor=上一页游标" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 读取单封邮件正文：
 
 ```bash
-curl "http://127.0.0.1:8787/gateway/v1/messages/邮件ID" \
+curl "https://mail.example.com/gateway/v1/messages/邮件ID" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 指定邮箱可使用邮箱级路由，或在聚合路由上传入 `mailbox`：
 
 ```bash
-curl "http://127.0.0.1:8787/gateway/v1/mailboxes/user@example.com/messages?limit=10" \
+curl "https://mail.example.com/gateway/v1/mailboxes/user@example.com/messages?limit=10" \
   -H "Authorization: Bearer imail_your_token"
 
-curl "http://127.0.0.1:8787/gateway/v1/messages?mailbox=user@example.com" \
+curl "https://mail.example.com/gateway/v1/messages?mailbox=user@example.com" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 读取可用账户：
 
 ```bash
-curl "http://127.0.0.1:8787/gateway/v1/mailboxes" \
+curl "https://mail.example.com/gateway/v1/mailboxes" \
   -H "Authorization: Bearer imail_your_token"
 ```
 
 发送邮件：
 
 ```bash
-curl -X POST "http://127.0.0.1:8787/gateway/v1/send" \
+curl -X POST "https://mail.example.com/gateway/v1/send" \
   -H "Authorization: Bearer imail_your_token" \
   -H "Content-Type: application/json" \
   -d '{
@@ -291,10 +291,10 @@ iMail 内置基于官方 TypeScript SDK v2 的 Streamable HTTP MCP 服务。MCP 
 在“外部接入 → MCP”中启用后，MCP 地址为：
 
 ```text
-http://127.0.0.1:8787/mcp
+https://mail.example.com/mcp
 ```
 
-桌面本地服务改过端口时，MCP 客户端也必须使用“当前服务地址”中显示的端口。
+桌面本地嵌入模式没有 MCP HTTP 地址；该地址来自当前远程 Rust 服务。
 
 客户端应把授权码放入 Bearer 请求头：
 
@@ -306,7 +306,7 @@ Authorization: Bearer imail_mcp_xxx
 
 ```json
 {
-  "url": "http://127.0.0.1:8787/mcp",
+  "url": "https://mail.example.com/mcp",
   "headers": {
     "Authorization": "Bearer imail_mcp_xxx"
   }
@@ -351,58 +351,53 @@ MCP_ALLOWED_HOSTS=mail.example.com
 ## 工程结构
 
 ```text
-src/App.tsx          客户端顶层状态与页面编排，不放业务组件实现
-src/components/      跨业务复用的基础 UI、服务商标识与展示工具
-src/features/mail/   邮件列表虚拟化与阅读器
-src/features/accounts/ 邮箱接入、授权与账户设置
-src/features/compose/  写信与草稿工作区
-src/features/organize/ 标签、稍后处理、通知和工作空间
-src/features/developer/ 外部接入、API Token 与 MCP 授权码 UI
-src/features/appearance/ 主题元数据、根主题 Provider 与本地回退
-src/features/settings/ 设置窗口与各偏好面板
-src/app-model.ts     跨 feature 的客户端类型
-server/index.ts      服务进程启动入口
-server/app.ts        Express 应用与路由装配
-server/routes/       管理 API 与开发者网关路由
-server/domain/       HTTP、MCP 与后台任务共享的领域服务和错误模型
-server/http/         校验、鉴权、响应转换与错误处理
-server/mcp/          MCP Streamable HTTP 传输、授权、装配与领域工具
-server/mail/         IMAP/SMTP 连接、增量同步、远程操作与发送
-server/sync/         持久化调度、任务租约、独立 Worker 与运行状态
-server/oauth/        OAuth 配置、授权流程、身份校验与 Token 刷新
-server/storage/      SQLite schema、数据映射与事务写入
-server/contact-model.ts 联系人聚合与可注册主域 Logo 归并
-server/sender-logo.ts 安全 Logo 发现、缓存与永久采集审计
-server/crypto.ts     本地凭据加密
-server/providers.ts  服务商预设
+frontend/            React/Vite/npm 前端工程根目录，详见 frontend/README.md
+frontend/src/App.tsx          客户端顶层状态与页面编排，不放业务组件实现
+frontend/src/components/      跨业务复用的基础 UI、服务商标识与展示工具
+frontend/src/features/mail/   邮件列表虚拟化与阅读器
+frontend/src/features/accounts/ 邮箱接入、授权与账户设置
+frontend/src/features/compose/  写信与草稿工作区
+frontend/src/features/organize/ 标签、稍后处理、通知和工作空间
+frontend/src/features/developer/ 外部接入、API Token 与 MCP 授权码 UI
+frontend/src/features/appearance/ 主题元数据、根主题 Provider 与本地回退
+frontend/src/features/settings/ 设置窗口与各偏好面板
+frontend/src/app-model.ts     跨 feature 的客户端类型
+Cargo.toml / Cargo.lock        根 Rust workspace 与统一依赖锁
+crates/imail-http/             应用与独立服务共用的 Web API、MCP、Gateway 能力
+crates/imail-core/             Tauri、HTTP 与 MCP 共用的应用服务
+crates/imail-mail-network/     IMAP/SMTP、代理与 MIME 网络实现
+crates/imail-runtime/          持久化 worker、scheduler、IDLE 与生命周期
+crates/imail-storage-sqlite/   SQLite、迁移、备份与同步事务
+http-service/                  独立 HTTP 启动器及 Docker/Compose/Caddy 部署
+src-tauri/src/embedded_service.rs  Windows 桌面类型化直调适配器
 .data/               本地数据与密钥，不进入 Git
 ```
 
-详细的服务端模块边界见 [`server/README.md`](server/README.md)。界面主题、排版、布局、响应式与新增样式的维护规则见 [`docs/style-system.md`](docs/style-system.md)。
+服务端模块边界见 [`crates/README.md`](crates/README.md)，独立部署说明见 [`http-service/README.md`](http-service/README.md)。旧 Node 服务实现已在迁移验收完成后删除，需要追溯时使用 Git 历史。界面主题、排版、布局、响应式与新增样式的维护规则见 [`docs/style-system.md`](docs/style-system.md)。
 
 ## 品牌素材
 
-- `public/brand/imail-logo.png`：1024×1024 透明 Logo 母版
-- `public/brand/imail-app-icon.png`：1024×1024 应用图标
-- `public/favicon.svg`：跟随系统明暗模式的现代浏览器图标
-- `public/favicon.ico`：包含 16 至 256 像素的 Windows / 浏览器图标
-- `public/favicon-16.png`、`favicon-32.png`、`favicon-48.png`：浏览器图标
-- `public/apple-touch-icon.png`：180×180 Apple Touch Icon
-- `public/pwa-192.png`、`public/pwa-512.png`：PWA 安装图标
-- `public/manifest.webmanifest`：iMail Web App Manifest
-- `public/sw.js`：仅 Web 生产环境注册的 Service Worker；缓存版本化静态资源与离线页面外壳，明确绕过 API、SSE、MCP 和 Gateway
+- `frontend/public/brand/imail-logo.png`：1024×1024 透明 Logo 母版
+- `frontend/public/brand/imail-app-icon.png`：1024×1024 应用图标
+- `frontend/public/favicon.svg`：跟随系统明暗模式的现代浏览器图标
+- `frontend/public/favicon.ico`：包含 16 至 256 像素的 Windows / 浏览器图标
+- `frontend/public/favicon-16.png`、`favicon-32.png`、`favicon-48.png`：浏览器图标
+- `frontend/public/apple-touch-icon.png`：180×180 Apple Touch Icon
+- `frontend/public/pwa-192.png`、`frontend/public/pwa-512.png`：PWA 安装图标
+- `frontend/public/manifest.webmanifest`：iMail Web App Manifest
+- `frontend/public/sw.js`：仅 Web 生产环境注册的 Service Worker；缓存版本化静态资源与离线页面外壳，明确绕过 API、SSE、MCP 和 Gateway
 
 ## 验证
 
 ```bash
-npm run typecheck
-npm test
-npm run build
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 # Windows 内部测试完整冒烟
-npm run test:internal-release
+npm --prefix frontend run test:internal-release
 ```
 
-Docker 测试机额外运行 `npm run test:container-release`。平台人工验收和证据要求见 [`docs/deployment-verification.md`](docs/deployment-verification.md)。
+平台人工验收和证据要求见 [`docs/deployment-verification.md`](docs/deployment-verification.md)。
 
 ## 后续增强方向
 

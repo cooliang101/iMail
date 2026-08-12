@@ -1,0 +1,21 @@
+[package]
+name = "imail-security"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+aes-gcm.workspace = true
+base64.workspace = true
+base64ct.workspace = true
+hmac.workspace = true
+rand.workspace = true
+scrypt.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+zeroize_derive.workspace = true

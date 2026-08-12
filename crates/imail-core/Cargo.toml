@@ -1,0 +1,20 @@
+[package]
+name = "imail-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+imail-protocol = { path = "../imail-protocol" }
+imail-mail = { path = "../imail-mail" }
+imail-oauth = { path = "../imail-oauth" }
+icu_collator.workspace = true
+icu_locid.workspace = true
+litemap.workspace = true
+psl.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

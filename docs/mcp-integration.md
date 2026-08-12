@@ -2,7 +2,7 @@
 
 iMail 默认关闭 MCP 调用。先在“外部接入 → MCP”中手动启用；开关即时生效、按应用账号保存，且不会同时启用独立的 API Gateway。
 
-iMail 为可信 Agent 提供 Streamable HTTP MCP 接入，使用“外部接入”页面签发的短期 `mcp:full` 授权码。普通 API 网关 Token 不能调用 MCP。
+iMail 的远程 Rust 服务可选提供 Streamable HTTP MCP，使用“外部接入”页面签发的短期 `mcp:full` 授权码。桌面本地嵌入模式不开放常驻 HTTP/MCP 地址；普通 API 网关 Token 不能调用 MCP。
 
 每个 MCP 授权码都归属于创建它的应用账号。`mcp:full` 表示管理该应用账号当前及未来接入的全部邮箱，不会越过应用账号边界读取其他用户的数据。
 
@@ -19,20 +19,20 @@ iMail 为可信 Agent 提供 Streamable HTTP MCP 接入，使用“外部接入�
 
 ## 2. Streamable HTTP
 
-推荐同一台设备上的 Agent 使用：
+连接显式启用 MCP 的 Rust HTTP 服务：
 
 ```text
-URL: http://127.0.0.1:8787/mcp
+URL: https://mail.example.com/mcp
 Authorization: Bearer imail_mcp_xxx
 ```
 
-`8787` 是本地守护服务的默认端口。若桌面端因端口占用选择了其他端口，请以“设置 → 服务连接”显示的当前服务地址为准。
+开发时可以显式运行 `imail-server --http --host 127.0.0.1 --port 8787` 使用回环 HTTP；生产和跨设备访问必须使用 HTTPS。
 
 通用配置：
 
 ```json
 {
-  "url": "http://127.0.0.1:8787/mcp",
+  "url": "https://mail.example.com/mcp",
   "headers": {
     "Authorization": "Bearer imail_mcp_xxx"
   }
@@ -80,7 +80,7 @@ Authorization: Bearer imail_mcp_xxx
 
 - 操作账户前先调用 `accounts_list`，使用邮箱地址定位，不猜内部 ID。
 - 操作邮件前先调用 `messages_list` 或 `message_get`，确认发件人、主题和目标邮箱。
-- `mailbox_sync` 返回 `jobId` 和排队状态；任务由独立 Worker 执行，调用方可用 `sync_policy_get` 查看状态，不应依赖 MCP 连接存活。
+- `mailbox_sync` 返回 `jobId` 和排队状态；任务由 Rust 持久 worker pool 执行，调用方可用 `sync_policy_get` 查看状态，不应依赖 MCP 连接存活。
 - `sync_policy_update` 只接受 `enabled`、`folderMode`、`selectedMailboxes` 和 `notifyOnError`。IMAP 推送负责变化唤醒，启动、重连与低频一致性校准由服务自动执行，不提供按账户分钟频率或恢复重试开关。
 - `mailbox_sync` 和 `messages_list` 的 `mailboxRole` 支持 `inbox`、`sent`、`archive`、`drafts`、`trash`、`junk` 与 `custom`；常见的 Drafts、Deleted Items/Message(s)、Junk/Spam 等无 Special-Use 标记文件夹也会归入对应标准角色。
 - 发送邮件前确认 `accountEmail`、收件人、主题和正文；发送不是幂等操作。

@@ -1,13 +1,13 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "$schema": "../frontend/node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "iMail",
   "version": "0.0.1",
   "identifier": "com.cooliang.imail",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "../frontend/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run prepare:desktop:dev",
-    "beforeBuildCommand": "npm run build:web && npm run build:service-runtime"
+    "beforeDevCommand": "npm run dev:frontend",
+    "beforeBuildCommand": "npm run build:web"
   },
   "app": {
     "windows": [
@@ -29,7 +29,6 @@
   },
   "bundle": {
     "active": true,
-    "externalBin": ["binaries/imail-service"],
     "category": "Productivity",
     "shortDescription": "多邮箱统一收件箱与本地开发邮件网关",
     "longDescription": "iMail 是一个本地优先的多邮箱客户端，并提供受控的 MCP 与 REST 邮件网关。",
@@ -37,7 +36,6 @@
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.icns",
       "icons/icon.ico"
     ]
   }

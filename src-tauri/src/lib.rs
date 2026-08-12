@@ -6,6 +6,7 @@ use tauri::{
 };
 
 mod app_logging;
+mod embedded_service;
 mod http_bridge;
 mod local_service;
 
@@ -54,6 +55,7 @@ pub fn run() {
     app_logging::prepare_desktop_process();
     let app = tauri::Builder::default()
         .manage(DesktopWindowState::default())
+        .manage(embedded_service::EmbeddedMailServiceState::default())
         .plugin(app_logging::plugin())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             log::info!(target: "desktop", "[process.single_instance] activating existing window");
@@ -106,6 +108,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             desktop_frontend_ready,
+            embedded_service::desktop_mail_service_call,
+            embedded_service::desktop_start_embedded_events,
+            embedded_service::desktop_stop_embedded_events,
+            embedded_service::desktop_read_embedded_binary,
+            embedded_service::desktop_download_embedded,
             app_logging::desktop_log,
             app_logging::desktop_open_app_logs,
             http_bridge::desktop_http_request,
@@ -113,11 +120,6 @@ pub fn run() {
             http_bridge::desktop_read_binary,
             http_bridge::desktop_start_events,
             http_bridge::desktop_stop_events,
-            local_service::local_service_status,
-            local_service::local_service_enable,
-            local_service::local_service_pause,
-            local_service::local_service_remove,
-            local_service::local_service_open_logs,
         ])
         .setup(|app| {
             log::info!(target: "desktop", "[tauri.setup] version={} os={} arch={}", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH);
@@ -154,10 +156,16 @@ pub fn run() {
         }
     };
 
-    app.run(|_app, event| match event {
+    app.run(|app, event| match event {
         tauri::RunEvent::Ready => log::info!(target: "desktop", "[process.ready] event loop ready"),
         tauri::RunEvent::ExitRequested { code, .. } => {
-            log::info!(target: "desktop", "[process.exit_requested] code={code:?}")
+            log::info!(target: "desktop", "[process.exit_requested] code={code:?}");
+            if let Err(error) = app
+                .state::<embedded_service::EmbeddedMailServiceState>()
+                .shutdown()
+            {
+                log::error!(target: "desktop", "[embedded.shutdown.failed] {error}");
+            }
         }
         tauri::RunEvent::Exit => log::info!(target: "desktop", "[process.exit] event loop stopped"),
         _ => {}

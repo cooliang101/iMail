@@ -8,6 +8,13 @@ repository = ""
 edition = "2021"
 rust-version = "1.77.2"
 
+[features]
+default = []
+# Source-only compatibility for auditing the retired daemon administration UI.
+# Release builds do not enable it; one-release switch rollback and uninstall
+# cleanup remain available independently.
+legacy-daemon-admin = []
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
@@ -32,7 +39,16 @@ futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["cookies", "rustls-tls", "stream"] }
 reqwest_cookie_store = "0.9"
 cookie_store = "0.22"
+chrono = "0.4"
 sha2 = "0.10"
-tokio = { version = "1", features = ["time", "rt"] }
+tokio = { version = "1", features = ["time", "rt", "macros"] }
+axum = { version = "=0.7.5", default-features = false }
+tower = { version = "=0.4.13", features = ["util"] }
+imail-http = { path = "../crates/imail-http" }
+imail-core = { path = "../crates/imail-core" }
+imail-protocol = { path = "../crates/imail-protocol" }
+imail-security = { path = "../crates/imail-security" }
+imail-storage-sqlite = { path = "../crates/imail-storage-sqlite" }
 uuid = { version = "1", features = ["v4"] }
+url = "=2.5.2"
 fs2 = "0.4"

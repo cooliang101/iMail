@@ -1,9 +1,8 @@
 node_modules/
 dist/
-desktop-runtime/
-server-runtime/
 src-tauri/binaries/
-src-tauri/cleanup-helper/target/
+src-tauri/cleanup-helper/
+/target/
 src-tauri/icons/android/
 src-tauri/icons/ios/
 src-tauri/icons/64x64.png

@@ -1,0 +1,45 @@
+[package]
+name = "imail-storage-sqlite"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+chrono.workspace = true
+imail-core = { path = "../imail-core" }
+imail-mail = { path = "../imail-mail" }
+imail-protocol = { path = "../imail-protocol" }
+imail-security = { path = "../imail-security" }
+rand.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+imail-oauth = { path = "../imail-oauth" }
+
+[features]
+contract-cli = []
+
+[[bin]]
+name = "imail-db-inspect"
+path = "src/bin/imail-db-inspect.rs"
+
+[[bin]]
+name = "imail-db-migrate"
+path = "src/bin/imail-db-migrate.rs"
+
+[[bin]]
+name = "imail-maintenance"
+path = "src/bin/imail-maintenance.rs"
+
+[[bin]]
+name = "imail-auth-contract"
+path = "src/bin/imail-auth-contract.rs"
+required-features = ["contract-cli"]

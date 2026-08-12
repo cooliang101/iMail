@@ -2,13 +2,13 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync } from '
 import path from 'node:path';
 import process from 'node:process';
 import { DatabaseSync } from 'node:sqlite';
-import packageMetadata from '../package.json' with { type: 'json' };
+import packageMetadata from '../frontend/package.json' with { type: 'json' };
 import { verifyBackupManifest } from './backup-integrity.mjs';
 
 const backupRoot = path.resolve(process.argv[2] || '');
 const restoreRoot = path.resolve(process.argv[3] || '');
 if (!process.argv[2] || !process.argv[3]) {
-  throw new Error('用法：npm run restore:prepare -- <备份目录> <新的恢复目录>');
+  throw new Error('用法：npm --prefix frontend run restore:prepare -- <备份目录> <新的恢复目录>');
 }
 if (!existsSync(backupRoot)) throw new Error(`备份目录不存在：${backupRoot}`);
 if (existsSync(restoreRoot)) throw new Error(`恢复目标已存在，拒绝覆盖：${restoreRoot}`);

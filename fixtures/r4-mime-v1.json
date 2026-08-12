@@ -1,0 +1,30 @@
+{
+  "messageId": "<fixture@example.com>",
+  "from": {
+    "name": "发件人",
+    "address": "sender@example.com"
+  },
+  "to": [
+    {
+      "name": "Alice",
+      "address": "alice@example.com"
+    },
+    {
+      "name": "Bob",
+      "address": "bob@example.com"
+    }
+  ],
+  "subject": "你好 – Status",
+  "text": "Hello world.\n第二行。",
+  "html": "<p>Hello <strong>world</strong>.</p><p>第二行。</p>",
+  "date": "2026-08-10T04:34:56.000Z",
+  "preview": "Hello world. 第二行。",
+  "attachments": [
+    {
+      "filename": "报告.txt",
+      "contentType": "text/plain",
+      "size": 5,
+      "index": 0
+    }
+  ]
+}

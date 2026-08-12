@@ -1,0 +1,17 @@
+[package]
+name = "imail-http-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "imail-server"
+path = "src/main.rs"
+
+[dependencies]
+imail-http = { path = "../crates/imail-http" }
+imail-oauth = { path = "../crates/imail-oauth" }
+imail-security = { path = "../crates/imail-security" }
+imail-storage-sqlite = { path = "../crates/imail-storage-sqlite" }
+tokio.workspace = true
