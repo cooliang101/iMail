@@ -13,7 +13,6 @@
 | `CORS_ORIGIN` | 开发模式内置回环前端，生产未设置 | 仅在 Web 与 API 不同源时列出完整 Origin，逗号分隔；非回环来源必须 HTTPS |
 | `IMAIL_REGISTRATION_MODE` | 开发为 `open`，生产为 `initial-only` | 生产初始化后是否继续允许创建应用用户 |
 | `IMAIL_SYNC_WORKER` | `true` | `http-service` 的 Rust `imail-server` 是否在同一进程装配 worker、scheduler 与 IDLE watcher；`false` 仅用于诊断或契约隔离 |
-| `IMAIL_SYNC_WORKER_MODE` | `child` | `child` 由 API 启动器监管；`external` 由外部管理器运行；`disabled` 仅用于诊断 |
 | `IMAIL_SYNC_CONCURRENCY` | `3` | Worker 最大并发同步任务数，范围 1–10 |
 | `IMAIL_SYNC_WORKER_POLL_MS` | `1000` | Worker 领取任务间隔，最小 250ms |
 | `IMAIL_SYNC_SCHEDULER_INTERVAL_MS` | `5000` | 到期校准任务扫描间隔，最小 5 秒 |
@@ -24,7 +23,7 @@
 | `IMAIL_SYNC_IDLE_RECONCILE_MS` | `5000` | IDLE 连接期望状态检查与断线重建间隔，最小 5 秒 |
 | `IMAIL_SYNC_IDLE_REFRESH_MS` | `60000` | IDLE 保活刷新周期；不支持 IDLE 的服务商以此间隔执行 STATUS 兜底，最小 15 秒 |
 
-Rust 宿主读取 `IMAIL_SYNC_WORKER` 并复用其余 `IMAIL_SYNC_*` 调优项。对外报告 `syncWorker=true` 之前必须已成功启动运行时，启动失败会让整个服务失败，而不是只启动 HTTP 空壳。旧 `IMAIL_SYNC_WORKER_MODE` 仅用于迁移对照测试。
+Rust 宿主读取 `IMAIL_SYNC_WORKER` 并复用其余 `IMAIL_SYNC_*` 调优项。对外报告 `syncWorker=true` 之前必须已成功启动运行时，启动失败会让整个服务失败，而不是只启动 HTTP 空壳。
 
 Rust HTTP 宿主继续接受现有远程部署变量 `HOST`、`PORT`、`CORS_ORIGIN`、`IMAIL_TRUST_PROXY` 和 `IMAIL_REGISTRATION_MODE`。`--host`/`--port` 命令行值优先；`IMAIL_CORS_ORIGINS`、`IMAIL_TRUST_PROXY_ONE_HOP` 与 `IMAIL_REGISTRATION_OPEN` 是迁移期显式覆盖别名，不要求现有部署改名。
 
@@ -38,7 +37,7 @@ Streamable HTTP：
 npm --prefix frontend run dev
 ```
 
-`npm --prefix frontend run dev` 同时启动 Vite 与 `http-service/` 中的 Rust `imail-server`。独立服务入口默认启用 HTTP，并在同一进程装配 worker、scheduler 与 IDLE watcher；不再运行独立 Node Worker。
+`npm --prefix frontend run dev` 同时启动 Vite 与 `http-service/` 中的 Rust `imail-server`。独立服务入口默认启用 HTTP，并在同一进程装配 worker、scheduler 与 IDLE watcher。
 
 ## 远程生产部署
 
@@ -158,11 +157,11 @@ npm --prefix frontend run rust:tls-soak -- 3600 32 output/rust-migration-tests/r
 IMAIL_ALLOW_INSTALLER_SMOKE=true npm --prefix frontend run test:windows-installer
 ```
 
-资源报告使用不可覆盖写入；目标已存在时必须换用新的版本化文件名，不能删除或覆盖旧证据。Node/Rust 对照报告已经作为迁移验收证据保留，但旧 Node 基准实现和生成入口已删除。新的持续资源门禁只测当前 Rust 实现，并继续使用系统临时目录或迁移数据副本，不得挂载或修改活动 `.data`。
+资源报告使用不可覆盖写入；目标已存在时必须换用新的版本化文件名，不能删除或覆盖旧证据。持续资源门禁只测当前 Rust 实现，并继续使用系统临时目录或数据副本，不得挂载或修改活动 `.data`。
 
 真实 TLS 长稳同样拒绝覆盖报告，并且只使用系统临时数据目录。日常回归可运行 60 秒；进入切换评审前应至少运行一份数小时报告。该本地 fixture 不含真实服务商、OAuth 或公网设备行为，不能替代专用公共邮箱验收。
 
-逐项证据和需要在真实平台执行的检查见 [`deployment-verification.md`](./deployment-verification.md)。
+Windows 与 Docker 的人工验收要求见[内部测试](internal-testing.md)，邮件网络副作用门禁见[邮件验收协议](rust-mail-acceptance.md)。
 
 不要为了生成 Windows 内部测试包创建标签或触发 GitHub Actions。Windows 交付直接使用本机 `build:desktop:internal` 产物并记录版本、构建提交、平台/架构与 SHA-256；三段式版本标签只负责把已确认版本的服务端镜像发布到 GHCR。
 
@@ -195,7 +194,6 @@ curl -fsS --cookie 'imail_session=<当前会话>' \
 桌面端可在“设置 → 服务连接”打开应用轮转日志：
 
 - “应用日志”打开 `%LOCALAPPDATA%\com.cooliang.imail\logs`。`app.log` 记录桌面进程启动、Tauri 初始化、前端就绪、窗口/托盘操作、本地服务生命周期、正常退出、Rust panic，以及 WebView 的全局错误、未处理 Promise 和 `console.warn/error`。单文件上限 5 MB，最多保留 3 份。
-- 旧 `local-service\logs` 与 `supervisor-status.json` 只作为迁移证据保留，不再由当前桌面运行时写入。
 
 应用和服务对外部错误文本执行统一脱敏，邮箱地址、Authorization/Cookie、密码、OAuth code/state/Token、client secret 和加密字段不得进入日志。提交问题时优先提供相关时间段的日志，不要通过关闭脱敏或手工打印凭据补充信息。
 

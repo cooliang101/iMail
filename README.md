@@ -75,7 +75,7 @@ npm --prefix frontend run start:remote
 
 ## 桌面应用
 
-桌面版使用 Tauri v2 承载同一套 React 前端。本地模式由 Tauri 进程内直接调用 Rust 领域服务，不启动 Node 守护进程，也不开放常驻 HTTP 端口；远程模式连接显式启用 HTTP Adapter 的 Rust 服务。Windows 迁移已经完成，Linux、macOS 与多架构容器的后续工作见 [跨平台支持路线](docs/cross-platform-support-roadmap.md)。桌面 WebView 始终使用包内页面，浏览器访问远程服务时使用服务端托管的同版本 Web 页面。
+桌面版使用 Tauri v2 承载同一套 React 前端。本地模式由 Tauri 进程内直接调用 Rust 领域服务，不启动独立守护进程，也不开放常驻 HTTP 端口；远程模式连接显式启用 HTTP Adapter 的 Rust 服务。桌面 WebView 始终使用包内页面，浏览器访问远程服务时使用服务端托管的同版本 Web 页面。当前边界见[部署模式](docs/deployment-modes.md)，后续平台扩展见[跨平台支持路线](docs/cross-platform-support-roadmap.md)。
 
 本地嵌入模式没有可配置端口。`8787` 只用于 Docker/远程 Rust HTTP 模式；切换服务模式不会合并、删除或移动两端数据。
 
@@ -114,7 +114,7 @@ docker pull ghcr.io/cooliang101/imail:edge
 docker compose --env-file .env.remote -f http-service/compose.https.example.yml up -d --pull always
 ```
 
-`http-service/Dockerfile` 构建独立 HTTP 服务镜像，最终 runtime 不包含 Node；跨平台容器验收后续另立计划。内部验收口径见[内部测试构建说明](docs/internal-testing.md)。
+`http-service/Dockerfile` 构建 `linux/amd64` 独立 HTTP 服务镜像，最终 runtime 不包含 Node。内部验收口径见[内部测试构建说明](docs/internal-testing.md)。
 
 桌面本地模式通过类型化 Tauri command/event 直连 Rust；远程模式才使用 Rust 网络桥并按服务地址隔离 Cookie、事件流与附件下载。Web 客户端同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。
 
@@ -214,7 +214,7 @@ socket.addEventListener('message', ({ data }) => {
 });
 ```
 
-连接要求 `messages:read` 权限。网关仅推送 Token 授权邮箱的新邮件摘要，不包含正文或内部账户 ID；Token 被撤销或过期后连接会以 `1008` 关闭。新邮件由独立同步 Worker 按持久化策略采集，网关只转发已经写入数据库的事件，不触发也不维持同步。首次同步用于建立本地基线，不会把历史邮件当作新邮件推送。服务端客户端也可以在 WebSocket 握手中使用 `Authorization: Bearer ...`。
+连接要求 `messages:read` 权限。网关仅推送 Token 授权邮箱的新邮件摘要，不包含正文或内部账户 ID；Token 被撤销或过期后连接会以 `1008` 关闭。新邮件由后台同步运行时按持久化策略采集，网关只转发已经写入数据库的事件，不触发也不维持同步。首次同步用于建立本地基线，不会把历史邮件当作新邮件推送。服务端客户端也可以在 WebSocket 握手中使用 `Authorization: Bearer ...`。
 
 读取邮件：
 
@@ -282,7 +282,7 @@ Token 有效期范围为 5 分钟至 7 天，且只能访问创建时选中的�
 
 ## MCP Agent 接入
 
-iMail 内置基于官方 TypeScript SDK v2 的 Streamable HTTP MCP 服务。MCP 使用单独的 `mcp:full` 短期授权码；普通 `messages:*` / `accounts:read` Token 无法调用 MCP，避免已有只读 Token 意外获得账户删除、授权码更新或发信能力。
+iMail 的 Rust 服务内置 Streamable HTTP MCP，并通过官方 TypeScript SDK 客户端验证互操作。MCP 使用单独的 `mcp:full` 短期授权码；普通 `messages:*` / `accounts:read` Token 无法调用 MCP，避免已有只读 Token 意外获得账户删除、授权码更新或发信能力。
 
 在“外部接入”的“MCP”标签页点击“创建 MCP 授权码”。生成的授权码以 `imail_mcp_` 开头，只显示一次，服务端仍只保存 SHA-256 哈希。它最长有效 7 天，可以在同一标签页即时撤销。即使尚未接入邮箱，也可以先签发 MCP 授权码，让可信 Agent 通过 `account_add_with_code` 接入第一个邮箱。页面同时提供 Streamable HTTP 配置、工具速查、安全调用顺序，以及 [`docs/mcp-integration.md`](docs/mcp-integration.md) 原文的展开与复制功能。
 
@@ -373,7 +373,7 @@ src-tauri/src/embedded_service.rs  Windows 桌面类型化直调适配器
 .data/               本地数据与密钥，不进入 Git
 ```
 
-服务端模块边界见 [`crates/README.md`](crates/README.md)，独立部署说明见 [`http-service/README.md`](http-service/README.md)。旧 Node 服务实现已在迁移验收完成后删除，需要追溯时使用 Git 历史。界面主题、排版、布局、响应式与新增样式的维护规则见 [`docs/style-system.md`](docs/style-system.md)。
+服务端模块边界见 [`crates/README.md`](crates/README.md)，独立部署说明见 [`http-service/README.md`](http-service/README.md)，文档入口见 [`docs/README.md`](docs/README.md)。界面主题、排版、布局、响应式与新增样式的维护规则见 [`docs/style-system.md`](docs/style-system.md)。
 
 ## 品牌素材
 
@@ -397,7 +397,7 @@ npm --prefix frontend run build
 npm --prefix frontend run test:internal-release
 ```
 
-平台人工验收和证据要求见 [`docs/deployment-verification.md`](docs/deployment-verification.md)。
+平台人工验收和证据要求见 [`docs/internal-testing.md`](docs/internal-testing.md)。
 
 ## 后续增强方向
 

@@ -8,11 +8,11 @@ iMail 的 Rust 领域服务独立拥有邮箱凭据、SQLite、同步任务、We
 
 当前支持的交付平台仅为 Windows x64 桌面端与服务端 Docker 镜像。Linux 只作为 Docker 运行环境，不维护原生安装或桌面包；macOS 桌面构建与发布不进入当前支持矩阵。
 
-本地模式没有端口、暂停或移除守护程序的控制面。卸载默认保留应用数据；删除邮箱数据只能从“隐私与数据”执行。旧 `127.0.0.1:8787` 与 Node 守护配置只用于一次性升级识别和非覆盖回退，不属于当前运行架构。
+本地模式没有端口、暂停或移除守护程序的控制面。卸载默认保留应用数据；删除邮箱数据只能从“隐私与数据”执行。`127.0.0.1:8787` 只用于本机 HTTP 开发服务，不属于桌面本地模式。
 
 Windows 桌面 OAuth 使用系统浏览器、authorization code + PKCE 和单次临时 `localhost` callback listener；端口由操作系统动态分配，该 listener 不承载业务 API。远程服务通过同一 OAuth 引擎显式配置 HTTPS `OAUTH_CALLBACK_BASE_URL` 与 Web Client 凭据。
 
-远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源。`http-service/` 只负责独立进程启动和部署，通用 Web API/MCP/Gateway 实现仍由 `crates/imail-http/` 提供。后续平台扩展与原生验收门禁见 [跨平台支持路线](./cross-platform-support-roadmap.md)。
+远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源。`http-service/` 只负责独立进程启动和部署，通用 Web API/MCP/Gateway 实现仍由 `crates/imail-http/` 提供。当前部署边界见[部署模式](deployment-modes.md)，未来平台扩展见[跨平台支持路线](cross-platform-support-roadmap.md)。
 
 Web 生产构建注册独立 Service Worker：带内容哈希的 JS、CSS、字体和图片采用缓存优先，页面导航采用网络优先并回退到已缓存应用外壳。`/api`、`/gateway`、`/mcp` 与 `text/event-stream` 请求始终绕过缓存；Tauri 运行时不注册 Service Worker。
 

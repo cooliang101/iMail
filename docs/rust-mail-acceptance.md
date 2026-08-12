@@ -1,6 +1,6 @@
 # Rust 专用邮箱验收协议
 
-该驱动用于 R4/R5 真实 IMAP/SMTP 验收。它会产生远程副作用，只允许使用专用测试邮箱；不得配置生产邮箱或当前用户的日常邮箱。
+该驱动用于真实 IMAP/SMTP 与 OAuth 验收。它会产生远程副作用，只允许使用专用测试邮箱；不得配置生产邮箱或当前用户的日常邮箱。
 
 ## 安全约束
 
@@ -8,7 +8,7 @@
 - 密码、预置 access token 与交互式 OAuth 只能选择一种。交互式 OAuth 还必须单独设置 `IMAIL_ACCEPTANCE_ALLOW_INTERACTIVE_OAUTH=true`。
 - OAuth callback 返回的身份必须与 `IMAIL_ACCEPTANCE_EMAIL` 大小写不敏感地完全一致；不一致时在任何邮件写入前终止，避免误用个人账户。
 - 报告不包含邮箱地址、授权 URL/state、密码、Token、邮件 Message-ID、UID、文件夹名称或正文。
-- 单账户入口仍可用于交互式 OAuth 凭据准备；当前数据迁移验收使用四账户闭环入口，每个账户只向闭集内另一个账户发送，不允许 CC/BCC，也不允许任何闭集外收件人。
+- 单账户入口可用于交互式 OAuth 凭据准备；四账户闭环验收中，每个账户只向闭集内另一个账户发送，不允许 CC/BCC，也不允许任何闭集外收件人。
 - 成功接收后把验收邮件移动到服务商的 Archive/All Mail；不调用删除、不清空邮箱。投递确认失败时停止后续边，不自动重复发送。
 - 报告路径已存在时拒绝覆盖。
 - 运行失败时保留已发送邮件，便于定位；不得以清理邮件作为重试前置条件。
@@ -78,7 +78,7 @@ npm --prefix frontend run rust:mail-acceptance
 10. 将测试邮件移动到 Archive/All Mail，不删除；
 11. 输出脱敏 JSON 报告。
 
-交互式 OAuth 报告中的 `oauthAuthorized` 与 `oauthRefreshVerified` 必须为 `true`，所有模式中的 `deleted` 必须为 `false`。该驱动不打开 `.data`，也不启动 Node 或 Rust 后台同步，因此不会让两个实现同时保持同一账户的 IDLE。
+交互式 OAuth 报告中的 `oauthAuthorized` 与 `oauthRefreshVerified` 必须为 `true`，所有模式中的 `deleted` 必须为 `false`。该驱动不打开 `.data`，也不启动后台同步；运行前仍必须确认没有其他 iMail 实例连接同一验收账户。
 
 ## 本地真实 TLS 运行时长稳
 
@@ -90,8 +90,8 @@ npm --prefix frontend run rust:tls-soak -- 3600 32 output/rust-migration-tests/r
 
 三个位置参数依次为持续秒数、允许的首尾 RSS 增长 MiB 和新报告路径。持续时间只接受 30–86400 秒；报告必须位于 `output/rust-migration-tests`、父目录已存在且目标不存在。入口不读取 `.data`，也不访问公共邮箱；它验证真实本地 TLS socket、首次 IDLE 断线恢复、`EXISTS`→recovery→worker FETCH、周期 scheduler 校准、队列/heartbeat 收敛、资源采样和优雅停机。loopback 长稳只能作为公共邮箱门禁前的协议栈回归，不能替代服务商限流、NAT/代理超时或 OAuth 策略。
 
-## 现有四账户闭环
+## 四账户闭环
 
-迁移阶段使用当前四账户完成的闭环报告继续保留在 `output/rust-migration-tests`，但依赖旧 Node 凭据读取器的矩阵包装脚本已随 Node 服务源码删除。后续如需再次发送，只能通过 `npm --prefix frontend run rust:mail-acceptance` 逐边调用纯 Rust 验收二进制，并显式提供 `IMAIL_ACCEPTANCE_ALLOWED_RECIPIENTS_JSON`。Rust 入口强制该数组恰好包含四个唯一邮箱，发送方和收件方都必须属于闭集且不能相同，否则在连接和发送前失败；不得使用其他收件人。
+再次执行闭环时，通过 `npm --prefix frontend run rust:mail-acceptance` 逐边调用验收二进制，并显式提供 `IMAIL_ACCEPTANCE_ALLOWED_RECIPIENTS_JSON`。入口强制该数组恰好包含四个唯一邮箱，发送方和收件方都必须属于闭集且不能相同，否则在连接和发送前失败；不得使用其他收件人。
 
 使用当前桌面账户配置准备验收环境时，必须先显式退出 Tauri 桌面进程并确认嵌入式 worker/IDLE 已停止，同时确认没有 8787 listener。验收结束或失败后再启动桌面应用；禁止两个 Rust host 同时对四个账户保持同步连接。

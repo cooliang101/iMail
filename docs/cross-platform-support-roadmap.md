@@ -21,7 +21,7 @@ iMail 的 Node 服务迁移与 Windows Rust-only 桌面升级已经完成。当�
 | macOS Apple Silicon / Intel 桌面 | Tauri + 进程内 Rust 服务 | 尚未支持 |
 | 服务端 Docker `linux/arm64` | Rust HTTP 服务 | 尚未支持 |
 
-旧迁移过程的阶段证据保留在 `docs/rust-migration-r*-report.md` 和 `output/rust-migration-tests/`，不再维护一份仍可执行的升级路线。Git 历史负责追溯已经删除的 Node 服务实现。
+已经完成的服务迁移过程通过 Git 历史追溯，运行证据仍保留在 `output/rust-migration-tests/`；本文只维护后续跨平台开发计划。
 
 ## 目标
 
