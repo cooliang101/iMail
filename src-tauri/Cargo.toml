@@ -44,11 +44,11 @@ sha2 = "0.10"
 tokio = { version = "1", features = ["time", "rt", "macros"] }
 axum = { version = "=0.7.5", default-features = false }
 tower = { version = "=0.4.13", features = ["util"] }
-imail-http = { path = "../rust/crates/imail-http" }
-imail-core = { path = "../rust/crates/imail-core" }
-imail-protocol = { path = "../rust/crates/imail-protocol" }
-imail-security = { path = "../rust/crates/imail-security" }
-imail-storage-sqlite = { path = "../rust/crates/imail-storage-sqlite" }
+imail-http = { path = "../crates/imail-http" }
+imail-core = { path = "../crates/imail-core" }
+imail-protocol = { path = "../crates/imail-protocol" }
+imail-security = { path = "../crates/imail-security" }
+imail-storage-sqlite = { path = "../crates/imail-storage-sqlite" }
 uuid = { version = "1", features = ["v4"] }
 url = "=2.5.2"
 fs2 = "0.4"

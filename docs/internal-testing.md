@@ -13,7 +13,7 @@ npm ci --prefix frontend
 npm --prefix frontend run build:desktop:internal
 ```
 
-命令只接受 Windows，并生成 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe`。Linux 只需要 Docker 引擎来构建服务端镜像，不维护额外的原生部署流程。
+命令只接受 Windows，并生成 `target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe`。Linux 只需要 Docker 引擎来构建服务端镜像，不维护额外的原生部署流程。
 
 提交测试包前还应执行项目门禁：
 

@@ -160,7 +160,7 @@ try {
     await docker(['buildx', 'version']);
   }
   await buildImage([
-    '--platform', 'linux/amd64', '--file', 'Dockerfile', '--tag', rustImage, '.',
+    '--platform', 'linux/amd64', '--file', 'http-service/Dockerfile', '--tag', rustImage, '.',
   ]);
   rustImageCreated = true;
   const imageInspection = JSON.parse((await docker(['image', 'inspect', rustImage])).stdout)[0];

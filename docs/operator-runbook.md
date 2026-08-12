@@ -12,7 +12,7 @@
 | `IMAIL_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | 远程生产 API 与 Web 允许的请求主机名，不含端口 |
 | `CORS_ORIGIN` | 开发模式内置回环前端，生产未设置 | 仅在 Web 与 API 不同源时列出完整 Origin，逗号分隔；非回环来源必须 HTTPS |
 | `IMAIL_REGISTRATION_MODE` | 开发为 `open`，生产为 `initial-only` | 生产初始化后是否继续允许创建应用用户 |
-| `IMAIL_SYNC_WORKER` | `true` | Rust `imail-server --http` 是否在同一进程装配 worker、scheduler 与 IDLE watcher；`false` 仅用于诊断或契约隔离 |
+| `IMAIL_SYNC_WORKER` | `true` | `http-service` 的 Rust `imail-server` 是否在同一进程装配 worker、scheduler 与 IDLE watcher；`false` 仅用于诊断或契约隔离 |
 | `IMAIL_SYNC_WORKER_MODE` | `child` | `child` 由 API 启动器监管；`external` 由外部管理器运行；`disabled` 仅用于诊断 |
 | `IMAIL_SYNC_CONCURRENCY` | `3` | Worker 最大并发同步任务数，范围 1–10 |
 | `IMAIL_SYNC_WORKER_POLL_MS` | `1000` | Worker 领取任务间隔，最小 250ms |
@@ -38,21 +38,21 @@ Streamable HTTP：
 npm --prefix frontend run dev
 ```
 
-`npm --prefix frontend run dev` 同时启动 Vite 与 Rust `imail-server --http`。Rust 服务在同一进程装配 worker、scheduler 与 IDLE watcher；不再运行独立 Node Worker。
+`npm --prefix frontend run dev` 同时启动 Vite 与 `http-service/` 中的 Rust `imail-server`。独立服务入口默认启用 HTTP，并在同一进程装配 worker、scheduler 与 IDLE watcher；不再运行独立 Node Worker。
 
 ## 远程生产部署
 
-`npm --prefix frontend run build:remote` 生成 `frontend/dist`、Rust HTTP 服务和 Rust 维护工具；`npm --prefix frontend run start:remote` 显式以 `--http` 监听 `0.0.0.0:8787`。正式容器把 `frontend/dist` 复制为镜像内 `/app/dist`，runtime 不包含 Node，以非 root 用户运行并把所有可变数据写入 `/data`。`compose.example.yml` 只把端口绑定到宿主机回环地址。
+`npm --prefix frontend run build:remote` 生成 `frontend/dist`、`http-service/` 独立启动器和 Rust 维护工具；`npm --prefix frontend run start:remote` 监听 `0.0.0.0:8787`。正式容器把 `frontend/dist` 复制为镜像内 `/app/dist`，runtime 不包含 Node，以非 root 用户运行并把所有可变数据写入 `/data`。`http-service/compose.example.yml` 只把端口绑定到宿主机回环地址。
 
-仓库同时提供带 Caddy 自动 HTTPS 的 `compose.https.example.yml`。服务镜像由受控 GitHub Actions 发布到 `ghcr.io/cooliang101/imail`；复制环境变量模板，填写已解析到部署主机的域名，并将 `IMAIL_IMAGE` 固定到所需版本标签或 digest 后启动。若 GHCR 包保持私有，先使用具有 `read:packages` 权限的 Token 执行 `docker login ghcr.io`：
+仓库同时提供带 Caddy 自动 HTTPS 的 `http-service/compose.https.example.yml`。服务镜像由受控 GitHub Actions 发布到 `ghcr.io/cooliang101/imail`；复制环境变量模板，填写已解析到部署主机的域名，并将 `IMAIL_IMAGE` 固定到所需版本标签或 digest 后启动。若 GHCR 包保持私有，先使用具有 `read:packages` 权限的 Token 执行 `docker login ghcr.io`：
 
 ```bash
-cp deploy/remote.env.example .env.remote
+cp http-service/deploy/remote.env.example .env.remote
 # 编辑 .env.remote，至少设置 IMAIL_PUBLIC_HOST，并在固定部署中替换 edge
-docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull always
+docker compose --env-file .env.remote -f http-service/compose.https.example.yml up -d --pull always
 ```
 
-该拓扑只向公网发布 Caddy 的 80/443（含 HTTP/3 UDP）端口，iMail 的 8787 只存在于 Compose 网络。Caddy 自动申请和续期证书，配置禁用上游响应缓冲以保证 SSE 实时送达；WebSocket 由 `reverse_proxy` 原生转发。部署前确认 DNS 已生效且防火墙允许 TCP 80/443 与 UDP 443。若已有反向代理，继续使用回环绑定的 `compose.example.yml`，并自行配置 SSE 禁用缓冲、WebSocket 升级和足够长的读取超时。
+该拓扑只向公网发布 Caddy 的 80/443（含 HTTP/3 UDP）端口，iMail 的 8787 只存在于 Compose 网络。Caddy 自动申请和续期证书，配置禁用上游响应缓冲以保证 SSE 实时送达；WebSocket 由 `reverse_proxy` 原生转发。部署前确认 DNS 已生效且防火墙允许 TCP 80/443 与 UDP 443。若已有反向代理，继续使用回环绑定的 `http-service/compose.example.yml`，并自行配置 SSE 禁用缓冲、WebSocket 升级和足够长的读取超时。
 
 公网入口必须使用 HTTPS。仅当反向代理是服务的直接前一跳时设置 `IMAIL_TRUST_PROXY=true`，并把公开地址同步写入 `FRONTEND_URL` 和 `OAUTH_CALLBACK_BASE_URL`。`MCP_ALLOWED_HOSTS` 只列出实际主机名。生产环境默认只允许首个用户完成初始化；除非实例明确供多个互不信任用户共同使用，否则不要把 `IMAIL_REGISTRATION_MODE` 改成 `open`。
 
@@ -71,9 +71,9 @@ npm --prefix frontend run backup -- /safe/backups/imail-2026-08-03
 Compose 将独立的 `imail-backups` 卷挂载到 `/backups`，容器使用 Rust 维护 CLI 在线备份：
 
 ```bash
-docker compose --env-file .env.remote -f compose.https.example.yml exec imail \
+docker compose --env-file .env.remote -f http-service/compose.https.example.yml exec imail \
   /app/imail-maintenance backup /backups/imail-2026-08-03
-docker compose --env-file .env.remote -f compose.https.example.yml cp \
+docker compose --env-file .env.remote -f http-service/compose.https.example.yml cp \
   imail:/backups/imail-2026-08-03 ./imail-2026-08-03
 ```
 
@@ -112,8 +112,8 @@ npm --prefix frontend run upgrade:preflight -- \
 Compose 部署应先拉取新镜像，但保持旧容器运行；然后用新镜像的一次性容器执行预检：
 
 ```bash
-docker compose --env-file .env.remote -f compose.https.example.yml pull imail
-docker compose --env-file .env.remote -f compose.https.example.yml run --rm --no-deps imail \
+docker compose --env-file .env.remote -f http-service/compose.https.example.yml pull imail
+docker compose --env-file .env.remote -f http-service/compose.https.example.yml run --rm --no-deps imail \
   /app/imail-maintenance upgrade-preflight \
   /backups/imail-before-upgrade /backups/imail-new-version-preflight
 ```
@@ -166,7 +166,7 @@ IMAIL_ALLOW_INSTALLER_SMOKE=true npm --prefix frontend run test:windows-installe
 
 不要为了生成 Windows 内部测试包创建标签或触发 GitHub Actions。Windows 交付直接使用本机 `build:desktop:internal` 产物并记录版本、构建提交、平台/架构与 SHA-256；三段式版本标签只负责把已确认版本的服务端镜像发布到 GHCR。
 
-`rust/crates/imail-http/src/mcp.rs` 的测试覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`scripts/mcp-rust-sdk-interop.test.ts` 使用官方 TypeScript 客户端与 Rust 服务进行互操作验证。
+`crates/imail-http/src/mcp.rs` 的测试覆盖授权拒绝、MCP 初始化、工具清单、工具调用和凭据不泄漏；`scripts/mcp-rust-sdk-interop.test.ts` 使用官方 TypeScript 客户端与 Rust 服务进行互操作验证。
 
 ## 故障排查
 

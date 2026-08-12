@@ -14,7 +14,7 @@ let fixtureDirectory: string | undefined;
 async function startRustFixture(): Promise<FixtureConnection> {
   fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), 'imail-mcp-sdk-'));
   child = spawn('cargo', [
-    'run', '--quiet', '--manifest-path', 'rust/Cargo.toml', '-p', 'imail-http',
+    'run', '--quiet', '-p', 'imail-http',
     '--bin', 'imail-mcp-fixture-server', '--', '--data-dir', fixtureDirectory,
   ], {
     cwd: path.resolve(import.meta.dirname, '..'),

@@ -1,5 +1,7 @@
 [workspace]
 members = [
+  "http-service",
+  "src-tauri",
   "crates/imail-protocol",
   "crates/imail-core",
   "crates/imail-http",

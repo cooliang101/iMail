@@ -59,7 +59,7 @@ async function run() {
     throw new Error('长稳报告父目录不存在；请先确认验收输出目录');
   }
   const args = [
-    'test', '--release', '--locked', '--manifest-path', 'rust/Cargo.toml',
+    'test', '--release', '--locked',
     '-p', 'imail-http',
     'tests::real_mail_fixture::real_tls_idle_runtime_soak_acceptance',
     '--', '--ignored', '--exact', '--nocapture',

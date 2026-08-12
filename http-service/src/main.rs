@@ -107,7 +107,7 @@ fn arguments() -> Result<ServerArguments, Box<dyn std::error::Error>> {
     let mut data_dir = optional_environment("IMAIL_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(".data"));
-    let mut bridge = Vec::new();
+    let mut bridge = vec!["--http".to_string()];
     let mut daemon_control_file = None;
     let mut values = std::env::args().skip(1);
     while let Some(value) = values.next() {

@@ -2185,7 +2185,7 @@ mod tests {
         assert!(listed.to_string().contains("accounts_list"));
         let tools = listed["result"]["tools"].as_array().unwrap();
         let shared_contract: Value =
-            serde_json::from_str(include_str!("../../../../contracts/mcp-tools.json")).unwrap();
+            serde_json::from_str(include_str!("../../../contracts/mcp-tools.json")).unwrap();
         assert_eq!(listed["result"]["tools"], shared_contract["tools"]);
         let move_tool = tools
             .iter()

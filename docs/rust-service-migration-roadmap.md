@@ -183,9 +183,9 @@ interface MailService {
 稳定后的统一门禁目标为：
 
 ```powershell
-cargo fmt --all --check --manifest-path rust/Cargo.toml
-cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings
-cargo test --workspace --all-features --manifest-path rust/Cargo.toml
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
 npm --prefix frontend run typecheck
 npm --prefix frontend test
 npm --prefix frontend run build

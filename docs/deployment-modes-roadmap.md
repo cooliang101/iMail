@@ -22,8 +22,9 @@
 
 ### Rust HTTP 服务模式
 
-- `imail-server` 默认无 HTTP；只有显式 `--http` 才监听网络。
-- HTTP Adapter 提供同源 Web、REST、SSE、WebSocket、Gateway、MCP 和 OAuth callback。
+- `http-service/` 是独立部署入口，`imail-server` 启动后默认监听 HTTP；主机和端口仍需显式按部署环境配置。
+- Web API、Gateway 与 MCP 属于 `crates/` 的通用服务能力；独立入口只负责把它们挂到 REST、SSE、WebSocket、Streamable HTTP 和 OAuth callback，不复制领域实现。
+- Tauri 应用通过类型化 command/event 复用相同应用能力；是否开放外部 HTTP listener 是 transport 配置，不决定 MCP/Web API 的领域能力是否存在。
 - Gateway 与 MCP 默认关闭，必须由用户开关和 Token scope 同时授权。
 - 正式容器由 Rust runtime 运行；Node 仅在镜像 build stage 生成静态 Web 资源。
 

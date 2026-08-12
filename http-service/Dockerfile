@@ -10,10 +10,13 @@ FROM rust:1.77.2-bookworm AS rust-build
 ENV CARGO_BUILD_JOBS=1 \
     CARGO_INCREMENTAL=0
 WORKDIR /app
-COPY rust ./rust
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY http-service/Cargo.toml ./http-service/Cargo.toml
+COPY http-service/src ./http-service/src
 COPY contracts ./contracts
-RUN cargo build --locked --release --manifest-path rust/Cargo.toml -p imail-http --bin imail-server \
-    && cargo build --locked --release --manifest-path rust/Cargo.toml -p imail-storage-sqlite --bin imail-maintenance
+RUN cargo build --locked --release -p imail-http-service --bin imail-server \
+    && cargo build --locked --release -p imail-storage-sqlite --bin imail-maintenance
 
 FROM debian:bookworm-slim AS runtime
 ENV IMAIL_DATA_DIR=/data \
@@ -29,11 +32,11 @@ RUN apt-get update \
     && mkdir -p /data /backups \
     && chown 10001:10001 /data /backups
 COPY --from=web-build /app/frontend/dist ./dist
-COPY --from=rust-build /app/rust/target/release/imail-server ./imail-server
-COPY --from=rust-build /app/rust/target/release/imail-maintenance ./imail-maintenance
+COPY --from=rust-build /app/target/release/imail-server ./imail-server
+COPY --from=rust-build /app/target/release/imail-maintenance ./imail-maintenance
 USER 10001:10001
 VOLUME ["/data", "/backups"]
 EXPOSE 8787
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8787/api/health"]
-CMD ["/app/imail-server", "--http", "--host", "0.0.0.0", "--port", "8787"]
+CMD ["/app/imail-server", "--host", "0.0.0.0", "--port", "8787"]

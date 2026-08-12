@@ -1,6 +1,6 @@
 # iMail Rust workspace
 
-该 workspace 是 iMail 当前唯一的服务端实现，同时服务于 Windows Tauri 进程内直连与显式启用的 HTTP adapter。旧 Node 服务已在等价迁移和 Windows 验收完成后删除，历史实现通过 Git 追溯。
+根目录 Cargo workspace 是 iMail 当前唯一的服务端实现。`crates/` 中的通用能力同时服务于 Windows Tauri 进程内直连与 `http-service/` 独立部署入口；旧 Node 服务已在等价迁移和 Windows 验收完成后删除，历史实现通过 Git 追溯。
 
 ## 当前 crate
 
@@ -12,15 +12,15 @@
 ## 验证
 
 ```powershell
-npm run rust:fmt
-npm run rust:clippy
-npm run rust:test
+npm --prefix frontend run rust:fmt
+npm --prefix frontend run rust:clippy
+npm --prefix frontend run rust:test
 ```
 
-迁移检查器必须指向由 `npm run migration:baseline` 创建的快照，不要在开发验证中直接改写当前 `.data`：
+迁移检查器必须指向由 `npm --prefix frontend run migration:baseline` 创建的快照，不要在开发验证中直接改写当前 `.data`：
 
 ```powershell
-cargo run --manifest-path rust/Cargo.toml -p imail-storage-sqlite --bin imail-db-inspect -- `
+cargo run -p imail-storage-sqlite --bin imail-db-inspect -- `
   output/rust-migration-tests/<run-id>/snapshot
 ```
 
@@ -28,8 +28,4 @@ cargo run --manifest-path rust/Cargo.toml -p imail-storage-sqlite --bin imail-db
 
 追加 `--credentials` 会使用快照中的主密钥验证全部账户加密载荷，只输出成功数量和字段名计数，不输出账户标识或任何凭据值。
 
-用同一 run id 重复执行 Node/Rust 对照，并确认快照与活动数据库未被 Rust 修改：
-
-```powershell
-npm run rust:verify-snapshot -- <run-id>
-```
+迁移期 Node/Rust 对照入口已经随旧 Node 服务删除；历史结果保留在 `docs/rust-migration-*-report.md` 与 `output/rust-migration-tests/`。当前持续门禁只运行 Rust 实现，并继续保护活动 `.data`。

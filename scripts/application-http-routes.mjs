@@ -41,7 +41,7 @@ function balancedRouteCalls(source) {
 }
 
 async function rustApplicationRoutes(root) {
-  const sourceDirectory = path.join(root, 'rust', 'crates', 'imail-http', 'src');
+  const sourceDirectory = path.join(root, 'crates', 'imail-http', 'src');
   const files = (await readdir(sourceDirectory))
     .filter((name) => name.endsWith('.rs') && !['gateway.rs', 'mcp.rs', 'web_client.rs'].includes(name));
   const routes = new Set();

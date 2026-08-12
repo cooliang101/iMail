@@ -28,13 +28,38 @@ describe('frontend workspace layout', () => {
     }
   });
 
-  it('points Tauri, Docker and CI at the frontend workspace', async () => {
+  it('uses a root Rust workspace and keeps HTTP deployment isolated', async () => {
+    for (const required of [
+      'Cargo.toml',
+      'Cargo.lock',
+      'crates/imail-core',
+      'crates/imail-http',
+      'http-service/Cargo.toml',
+      'http-service/src/main.rs',
+      'http-service/Dockerfile',
+      'http-service/compose.example.yml',
+      'http-service/compose.https.example.yml',
+      'http-service/deploy/Caddyfile',
+    ]) {
+      expect(await exists(required), required).toBe(true);
+    }
+    for (const forbidden of ['rust', 'Dockerfile', 'compose.example.yml', 'compose.https.example.yml', 'deploy']) {
+      expect(await exists(forbidden), forbidden).toBe(false);
+    }
+
+    const workspaceManifest = await readFile(path.join(workspaceRoot, 'Cargo.toml'), 'utf8');
+    expect(workspaceManifest).toContain('"src-tauri"');
+    expect(workspaceManifest).toContain('"http-service"');
+    expect(await exists('src-tauri/Cargo.lock')).toBe(false);
+  });
+
+  it('points Tauri, the standalone HTTP service and CI at the frontend workspace', async () => {
     const tauri = JSON.parse(await readFile(path.join(workspaceRoot, 'src-tauri', 'tauri.conf.json'), 'utf8'));
     expect(tauri.$schema).toBe('../frontend/node_modules/@tauri-apps/cli/config.schema.json');
     expect(tauri.build.frontendDist).toBe('../frontend/dist');
     expect(tauri.build.beforeBuildCommand).toBe('npm run build:web');
 
-    const dockerfile = await readFile(path.join(workspaceRoot, 'Dockerfile'), 'utf8');
+    const dockerfile = await readFile(path.join(workspaceRoot, 'http-service', 'Dockerfile'), 'utf8');
     expect(dockerfile).toContain('COPY frontend/package.json frontend/package-lock.json ./');
     expect(dockerfile).toContain('COPY --from=web-build /app/frontend/dist ./dist');
 

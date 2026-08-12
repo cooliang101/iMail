@@ -1511,7 +1511,7 @@ fn rust_backup_round_trips_and_is_accepted_by_the_node_restore_preflight() {
     );
     drop(restored_connection);
 
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let node = Command::new("node")
         .arg("scripts/prepare-restore.mjs")
         .arg(&backup_root)

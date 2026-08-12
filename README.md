@@ -63,7 +63,7 @@ npm --prefix frontend run build:remote
 npm --prefix frontend run start:remote
 ```
 
-也可使用 Docker Compose：`compose.example.yml` 只向宿主机回环地址开放 8787，适合本机验证或接入已有代理；`compose.https.example.yml` 配合 `deploy/remote.env.example` 提供后端不暴露端口的 Caddy 自动 HTTPS 拓扑。远程部署必须持久化 `APP_MASTER_KEY` 或 `/data/master.key`，并把 `/data` 放在持久卷。完整步骤见[运维手册](docs/operator-runbook.md)。
+也可使用 Docker Compose：`http-service/compose.example.yml` 只向宿主机回环地址开放 8787，适合本机验证或接入已有代理；`http-service/compose.https.example.yml` 配合 `http-service/deploy/remote.env.example` 提供后端不暴露端口的 Caddy 自动 HTTPS 拓扑。远程部署必须持久化 `APP_MASTER_KEY` 或 `/data/master.key`，并把 `/data` 放在持久卷。完整步骤见[运维手册](docs/operator-runbook.md)。
 
 生产服务的注册与登录限流写入 SQLite，服务重启不会清零。登录、注册、授权码签发/撤销、邮箱凭据/代理/删除，以及 MCP 管理工具调用会写入不含密码、Token、OAuth Code 或原始 IP 的安全审计事件；当前登录用户可通过 `GET /api/security/audit-events` 查询自己的最近事件。
 
@@ -101,7 +101,7 @@ npm --prefix frontend run build:desktop:internal
 
 “隐私与数据”还可导出当前登录用户全部邮箱的连接配置与授权凭据。导出文件使用独立的至少 12 位密码加密，可能包含应用专用密码、OAuth Token 和代理密码，因此文件与密码必须分开保管；导出内容不包含邮件、附件、草稿、联系人或 iMail 登录密码。该能力只通过登录后的应用 HTTP 界面提供，不加入 API Gateway 或 MCP。
 
-安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 桌面包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到测试机器。交付本地产物前可用 `Get-FileHash <安装包路径> -Algorithm SHA256` 生成并记录校验值。内测前验证真实桌面宿主：
+安装包输出到 `target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 桌面包固定使用 Tauri 官方支持的 MSVC 目标，避免把 GNU 运行时隐式依赖带到测试机器。交付本地产物前可用 `Get-FileHash <安装包路径> -Algorithm SHA256` 生成并记录校验值。内测前验证真实桌面宿主：
 
 ```bash
 npm --prefix frontend run test:desktop-release
@@ -111,10 +111,10 @@ npm --prefix frontend run test:desktop-release
 
 ```bash
 docker pull ghcr.io/cooliang101/imail:edge
-docker compose --env-file .env.remote -f compose.https.example.yml up -d --pull always
+docker compose --env-file .env.remote -f http-service/compose.https.example.yml up -d --pull always
 ```
 
-仓库根目录的 `Dockerfile` 构建 Rust 正式镜像，最终 runtime 不包含 Node；跨平台容器验收后续另立计划。内部验收口径见[内部测试构建说明](docs/internal-testing.md)。
+`http-service/Dockerfile` 构建独立 HTTP 服务镜像，最终 runtime 不包含 Node；跨平台容器验收后续另立计划。内部验收口径见[内部测试构建说明](docs/internal-testing.md)。
 
 桌面本地模式通过类型化 Tauri command/event 直连 Rust；远程模式才使用 Rust 网络桥并按服务地址隔离 Cookie、事件流与附件下载。Web 客户端同源连接远程服务。只有拆分 Web 与 API 域名时才需要在 `CORS_ORIGIN` 中列出实际 Web 来源。
 
@@ -189,7 +189,7 @@ Gateway 与 MCP 默认关闭，只在显式启用 HTTP Adapter 的 Rust 服务�
 https://mail.example.com/gateway/v1
 ```
 
-以下示例使用远程 HTTPS 地址；本机开发可显式启动 Rust `imail-server --http` 后改用 `http://127.0.0.1:8787`。
+以下示例使用远程 HTTPS 地址；本机开发可启动 `http-service` 的 Rust `imail-server` 后改用 `http://127.0.0.1:8787`。
 
 轻量交互文档：
 
@@ -362,16 +362,18 @@ frontend/src/features/developer/ 外部接入、API Token 与 MCP 授权码 UI
 frontend/src/features/appearance/ 主题元数据、根主题 Provider 与本地回退
 frontend/src/features/settings/ 设置窗口与各偏好面板
 frontend/src/app-model.ts     跨 feature 的客户端类型
-rust/crates/imail-http/            可选 HTTP、Gateway、MCP 与 Web 适配器
-rust/crates/imail-core/            Tauri、HTTP 与 MCP 共用的应用服务
-rust/crates/imail-mail-network/    IMAP/SMTP、代理与 MIME 网络实现
-rust/crates/imail-runtime/         持久化 worker、scheduler、IDLE 与生命周期
-rust/crates/imail-storage-sqlite/  SQLite、迁移、备份与同步事务
+Cargo.toml / Cargo.lock        根 Rust workspace 与统一依赖锁
+crates/imail-http/             应用与独立服务共用的 Web API、MCP、Gateway 能力
+crates/imail-core/             Tauri、HTTP 与 MCP 共用的应用服务
+crates/imail-mail-network/     IMAP/SMTP、代理与 MIME 网络实现
+crates/imail-runtime/          持久化 worker、scheduler、IDLE 与生命周期
+crates/imail-storage-sqlite/   SQLite、迁移、备份与同步事务
+http-service/                  独立 HTTP 启动器及 Docker/Compose/Caddy 部署
 src-tauri/src/embedded_service.rs  Windows 桌面类型化直调适配器
 .data/               本地数据与密钥，不进入 Git
 ```
 
-服务端模块边界见 [`rust/README.md`](rust/README.md)。旧 Node 服务实现已在迁移验收完成后删除，需要追溯时使用 Git 历史。界面主题、排版、布局、响应式与新增样式的维护规则见 [`docs/style-system.md`](docs/style-system.md)。
+服务端模块边界见 [`crates/README.md`](crates/README.md)，独立部署说明见 [`http-service/README.md`](http-service/README.md)。旧 Node 服务实现已在迁移验收完成后删除，需要追溯时使用 Git 历史。界面主题、排版、布局、响应式与新增样式的维护规则见 [`docs/style-system.md`](docs/style-system.md)。
 
 ## 品牌素材
 

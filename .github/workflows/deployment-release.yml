@@ -74,7 +74,7 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: .
-          file: ./Dockerfile
+          file: ./http-service/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
@@ -96,15 +96,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: . -> target
       - run: npm ci --prefix frontend
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc
+      - run: cargo test -p imail --lib --target x86_64-pc-windows-msvc
       - run: npm --prefix frontend run build:desktop:internal
       - run: npm --prefix frontend run test:windows-installer
       - run: npm --prefix frontend run test:desktop-release
       - uses: actions/upload-artifact@v4
         with:
           name: imail-windows-x64-internal-test
-          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          path: target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           if-no-files-found: error
           retention-days: 14

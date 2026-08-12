@@ -1129,7 +1129,7 @@ fn tools() -> Vec<Value> {
     CONTRACT
         .get_or_init(|| {
             let contract: Value =
-                serde_json::from_str(include_str!("../../../../contracts/mcp-tools.json"))
+                serde_json::from_str(include_str!("../../../contracts/mcp-tools.json"))
                     .expect("checked-in MCP tools contract must be valid JSON");
             let tools = contract
                 .get("tools")

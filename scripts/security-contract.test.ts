@@ -9,7 +9,7 @@ describe('Node/Rust security contract', () => {
     const generated = JSON.parse(execFileSync(process.execPath, ['scripts/generate-security-contract.mjs'], {
       cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     }));
-    const fixture = JSON.parse(readFileSync(path.resolve('rust/fixtures/security-v1.json'), 'utf8'));
+    const fixture = JSON.parse(readFileSync(path.resolve('fixtures/security-v1.json'), 'utf8'));
     expect(generated).toEqual(fixture);
   });
 });

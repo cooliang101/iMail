@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('Rust container definition', () => {
   it('builds the pinned MSRV binary and runs without Node as a non-root explicit HTTP bridge', async () => {
-    const dockerfile = await readFile(new URL('../Dockerfile', import.meta.url), 'utf8');
+    const dockerfile = await readFile(new URL('../http-service/Dockerfile', import.meta.url), 'utf8');
     expect(dockerfile).toContain('FROM rust:1.77.2-bookworm AS rust-build');
     expect(dockerfile).toContain('CARGO_BUILD_JOBS=1');
     expect(dockerfile).toContain('NODE_OPTIONS=--max-old-space-size=768');
@@ -16,13 +16,13 @@ describe('Rust container definition', () => {
     expect(dockerfile).toContain('/release/imail-maintenance ./imail-maintenance');
     expect(dockerfile).toContain('STOPSIGNAL SIGTERM');
     expect(dockerfile).toContain('HEALTHCHECK');
-    expect(dockerfile).toContain('"/app/imail-server", "--http", "--host", "0.0.0.0"');
+    expect(dockerfile).toContain('"/app/imail-server", "--host", "0.0.0.0"');
   });
 
   it('defines a linux/amd64, read-only-root, graceful-SIGTERM smoke test', async () => {
     const smoke = await readFile(new URL('./smoke-rust-container.mjs', import.meta.url), 'utf8');
     expect(smoke).toContain("'--platform', 'linux/amd64'");
-    expect(smoke).toContain("'--file', 'Dockerfile', '--tag', rustImage");
+    expect(smoke).toContain("'--file', 'http-service/Dockerfile', '--tag', rustImage");
     expect(smoke).toContain("docker(['buildx', 'build', '--quiet', '--load', ...args])");
     expect(smoke).toContain("'--read-only'");
     expect(smoke).toContain("'--tmpfs', '/tmp:rw,noexec,nosuid,size=64m'");
@@ -56,8 +56,8 @@ describe('Rust container definition', () => {
     const productionPublish = workflow.indexOf('docker/build-push-action@');
     expect(candidateGate).toBeGreaterThan(0);
     expect(productionPublish).toBeGreaterThan(candidateGate);
-    expect(workflow).toContain('file: ./Dockerfile\n');
-    const dockerfile = await readFile(new URL('../Dockerfile', import.meta.url), 'utf8');
+    expect(workflow).toContain('file: ./http-service/Dockerfile\n');
+    const dockerfile = await readFile(new URL('../http-service/Dockerfile', import.meta.url), 'utf8');
     expect(dockerfile).toContain('FROM debian:bookworm-slim AS runtime');
     expect(dockerfile).not.toMatch(/FROM node:[^\n]+ AS runtime/);
   });

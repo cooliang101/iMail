@@ -13,8 +13,8 @@
 | `npm --prefix frontend run build` | 生产 Web 资源，输出到 `frontend/dist` |
 | `npm --prefix frontend run rust:test` | Rust 核心、SQLite、邮件网络、同步运行时和 HTTP adapter |
 | `npm --prefix frontend run rust:clippy` | Rust workspace 全 target/feature 严格 lint |
-| `cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc` | Windows Tauri 直调、会话、事件、迁移和安全边界 |
-| `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features --target x86_64-pc-windows-msvc -- -D warnings` | Windows 宿主严格 lint |
+| `cargo test -p imail --lib --target x86_64-pc-windows-msvc` | Windows Tauri 直调、会话、事件、迁移和安全边界 |
+| `cargo clippy -p imail --all-targets --all-features --target x86_64-pc-windows-msvc -- -D warnings` | Windows 宿主严格 lint |
 | `npm --prefix frontend run build:desktop:windows` | Rust-only NSIS 构建 |
 | `npm --prefix frontend run test:desktop-release` | release Tauri 无界面启动与退出 |
 

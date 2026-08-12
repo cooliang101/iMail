@@ -65,8 +65,8 @@ describe('Rust standalone HTTP service host', () => {
     const port = await availablePort();
     const errors: Buffer[] = [];
     child = spawn('cargo', [
-      'run', '--quiet', '--manifest-path', 'rust/Cargo.toml', '-p', 'imail-http',
-      '--bin', 'imail-server', '--', '--data-dir', dataDir, '--daemon-control-file', controlFile, '--http',
+      'run', '--quiet', '-p', 'imail-http-service',
+      '--bin', 'imail-server', '--', '--data-dir', dataDir, '--daemon-control-file', controlFile,
     ], {
       cwd: path.resolve(import.meta.dirname, '..'),
       env: {

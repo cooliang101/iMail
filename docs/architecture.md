@@ -2,7 +2,7 @@
 
 ## 服务与客户端边界
 
-iMail 的 Rust 领域服务独立拥有邮箱凭据、SQLite、同步任务、Gateway 与 MCP 能力。Tauri 本地模式把该服务直接嵌入桌面进程；远程桌面和 Web 才通过可选 Rust HTTP Adapter 访问同一领域实现。
+iMail 的 Rust 领域服务独立拥有邮箱凭据、SQLite、同步任务、Web API、Gateway 与 MCP 能力。通用能力统一位于根 workspace 的 `crates/`：Tauri 本地模式通过应用桥接直接调用，独立部署模式由 `http-service/` 的薄启动器挂载到 HTTP，两者不维护第二套业务实现。
 
 桌面应用提供本地与远程两种模式。本地模式通过类型化 Tauri command/event 直调 Rust，不保存服务 URL、不使用 Cookie/SSE，也不开放常驻业务端口；窗口隐藏到托盘后同步继续，显式退出才停止。远程模式经受控 Rust 网络桥请求用户配置的 HTTPS 地址，WebView 不直接接触服务端 Cookie。模式切换只改变 adapter 和数据源，不复制、合并或迁移数据，远程连接失败也不自动回退。
 
@@ -12,7 +12,7 @@ iMail 的 Rust 领域服务独立拥有邮箱凭据、SQLite、同步任务、Ga
 
 Windows 桌面 OAuth 使用系统浏览器、authorization code + PKCE 和单次临时 `localhost` callback listener；端口由操作系统动态分配，该 listener 不承载业务 API。远程服务通过同一 OAuth 引擎显式配置 HTTPS `OAUTH_CALLBACK_BASE_URL` 与 Web Client 凭据。
 
-远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源。完整迁移路线见 [Rust 服务重写与 Tauri 直连升级路线](./rust-service-migration-roadmap.md)。
+远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源。`http-service/` 只负责独立进程启动和部署，通用 Web API/MCP/Gateway 实现仍由 `crates/imail-http/` 提供。完整迁移路线见 [Rust 服务重写与 Tauri 直连升级路线](./rust-service-migration-roadmap.md)。
 
 Web 生产构建注册独立 Service Worker：带内容哈希的 JS、CSS、字体和图片采用缓存优先，页面导航采用网络优先并回退到已缓存应用外壳。`/api`、`/gateway`、`/mcp` 与 `text/event-stream` 请求始终绕过缓存；Tauri 运行时不注册 Service Worker。
 
@@ -52,10 +52,10 @@ Tauri / HTTP / MCP ── settings, status, sync-now ──► Rust application 
 IMAP providers ◄──────────────────────────── Sync Worker
 ```
 
-- `rust/crates/imail-storage-sqlite/src/sync_runtime.rs`：同步策略、任务租约、游标、事件、Worker 心跳和原子提交。
-- `rust/crates/imail-runtime/src/sync_workers.rs`：worker pool、scheduler、退避、续租和协作式关闭。
-- `rust/crates/imail-runtime/src/account_watchers.rs`：IMAP IDLE/STATUS watcher、断线恢复与任务唤醒。
-- `rust/crates/imail-core/src/sync_runtime.rs`：与 transport 无关的同步计划和安全错误分类。
+- `crates/imail-storage-sqlite/src/sync_runtime.rs`：同步策略、任务租约、游标、事件、Worker 心跳和原子提交。
+- `crates/imail-runtime/src/sync_workers.rs`：worker pool、scheduler、退避、续租和协作式关闭。
+- `crates/imail-runtime/src/account_watchers.rs`：IMAP IDLE/STATUS watcher、断线恢复与任务唤醒。
+- `crates/imail-core/src/sync_runtime.rs`：与 transport 无关的同步计划和安全错误分类。
 - Tauri Event 直接读取持久事件并主动唤醒；Rust HTTP Adapter 将相同事件映射为 SSE/WebSocket。两种入口不维护第二份同步状态。
 
 同步执行只把安全裁剪后的领域事件写入 SQLite。SSE 和开发者 WebSocket 从同一持久化事件日志读取，避免独立 Worker 无法触达进程内事件总线，也避免同一封新邮件被内存总线和数据库重复投递。
@@ -85,13 +85,13 @@ Agent
 
 ### 模块职责
 
-- `rust/crates/imail-http/src/mcp.rs`：Host/Origin、防护、Bearer 授权和协议分派。
+- `crates/imail-http/src/mcp.rs`：通用 MCP 能力、Host/Origin 防护、Bearer 授权和协议分派。
 - `contracts/mcp-tools.json`：由 Rust MCP 实现嵌入并在 Rust 测试中校验的稳定工具契约。
 - `imail-core`、`imail-mail` 与 `imail-storage-sqlite`：HTTP、MCP 与 Tauri 共用的领域行为。
 
 账户可选的 `http`、`https`、`socks5` 代理由 `imail-mail-network` 统一注入 IMAP 与 SMTP 连接，因此连接测试、同步、远程邮件操作、附件下载和发信遵循同一邮箱配置。SQLite schema v5 为 `accounts` 增加可空的 `proxy_json`，持久化协议、主机、端口和可选用户名；v4 升级只添加该列，不改写已有账户。代理密码继续合并进加密凭据载荷，公开账户视图和 MCP 输出不返回密码。关闭代理时同时清除 `proxy_json` 和加密载荷中的代理密码，备份/恢复按 schema v5 保留两部分。
-- `rust/crates/imail-core/src/theme.rs` 与 `rust/crates/imail-http/src/mcp.rs`：校验并按应用用户保存 MCP 自定义主题令牌；与 HTTP preferences schema 隔离。
-- `rust/crates/imail-core/src/developer_tokens.rs`、`rust/crates/imail-storage-sqlite/src/developer_tokens.rs` 与 `imail-security`：生成和验证高熵授权码、SHA-256 哈希、过期、撤销与用户作用域。
+- `crates/imail-core/src/theme.rs` 与 `crates/imail-http/src/mcp.rs`：校验并按应用用户保存 MCP 自定义主题令牌；与 HTTP preferences schema 隔离。
+- `crates/imail-core/src/developer_tokens.rs`、`crates/imail-storage-sqlite/src/developer_tokens.rs` 与 `imail-security`：生成和验证高熵授权码、SHA-256 哈希、过期、撤销与用户作用域。
 
 ### 权限模型
 

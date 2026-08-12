@@ -12,7 +12,7 @@ if (process.env.CI !== 'true' && process.env.IMAIL_ALLOW_INSTALLER_SMOKE !== 'tr
   throw new Error('为避免改写现有用户安装，此脚本只在 CI 或显式设置 IMAIL_ALLOW_INSTALLER_SMOKE=true 时运行');
 }
 
-const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(root, 'src-tauri', 'target');
+const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(root, 'target');
 const bundleDir = path.join(cargoTargetDir, 'x86_64-pc-windows-msvc', 'release', 'bundle', 'nsis');
 const installerName = (await readdir(bundleDir)).find((name) => name.endsWith('-setup.exe'));
 if (!installerName) throw new Error('缺少 NSIS 安装包，请先执行 npm --prefix frontend run build:desktop:windows');
