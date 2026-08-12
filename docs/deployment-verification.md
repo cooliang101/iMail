@@ -48,12 +48,12 @@
 
 ## 当前证据
 
-R9 Windows 迁移结果见 [`rust-migration-r9-report.md`](./rust-migration-r9-report.md)；迁移验证后删除旧 Node 服务源码的范围、回归结果和新安装包哈希见 [`rust-migration-r10-report.md`](./rust-migration-r10-report.md)。完整路线和阶段不变量见 [`rust-service-migration-roadmap.md`](./rust-service-migration-roadmap.md)。
+R9 Windows 迁移结果见 [`rust-migration-r9-report.md`](./rust-migration-r9-report.md)；迁移验证后删除旧 Node 服务源码的范围、回归结果和新安装包哈希见 [`rust-migration-r10-report.md`](./rust-migration-r10-report.md)。后续 Linux、macOS 与多架构容器工作见 [`cross-platform-support-roadmap.md`](./cross-platform-support-roadmap.md)。
 
-## 独立后续计划（不属于当前任务）
+## 独立后续计划（不属于当前 Windows 验收）
 
 - WSL2/Docker `linux/amd64` 正式镜像运行门禁。
 - 公网证书、Caddy/反向代理和正式镜像发布。
 - Windows 正式代码签名与公开分发。
 
-这些项目不影响当前 Windows 任务完成状态，也不授权创建 tag、推送镜像或触发 GitHub Actions。
+这些项目的阶段、数据不变量与完成门禁已经整理到 [`cross-platform-support-roadmap.md`](./cross-platform-support-roadmap.md)。它们不影响当前 Windows 任务完成状态，也不授权创建 tag、推送镜像或触发 GitHub Actions。

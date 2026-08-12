@@ -50,7 +50,7 @@
 - 覆盖安装和卸载不删除数据；重新安装可继续读取原实例。
 - 运行状态没有 iMail Node 进程或常驻业务 listener。
 
-Linux/WSL2、Docker 的真实运行门禁和交叉编译不属于当前 Windows 任务，后续必须另建独立跨平台计划；这不改变正式 Dockerfile 已采用 Rust runtime 的代码状态，也不把未执行的运行门禁记为通过。
+Linux/WSL2、Docker 的真实运行门禁和原生 Linux/macOS 桌面不属于当前 Windows 验收；后续阶段见[跨平台支持路线](./cross-platform-support-roadmap.md)。这不改变正式 Dockerfile 已采用 Rust runtime 的代码状态，也不把未执行的运行门禁记为通过。
 
 ## 发布边界
 

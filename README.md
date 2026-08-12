@@ -75,7 +75,7 @@ npm --prefix frontend run start:remote
 
 ## 桌面应用
 
-桌面版使用 Tauri v2 承载同一套 React 前端。本地模式由 Tauri 进程内直接调用 Rust 领域服务，不启动 Node 守护进程，也不开放常驻 HTTP 端口；远程模式连接显式启用 HTTP Adapter 的 Rust 服务。完整阶段、数据保留与回退门禁见 [Rust 服务重写与 Tauri 直连升级路线](docs/rust-service-migration-roadmap.md)。桌面 WebView 始终使用包内页面，浏览器访问远程服务时使用服务端托管的同版本 Web 页面。
+桌面版使用 Tauri v2 承载同一套 React 前端。本地模式由 Tauri 进程内直接调用 Rust 领域服务，不启动 Node 守护进程，也不开放常驻 HTTP 端口；远程模式连接显式启用 HTTP Adapter 的 Rust 服务。Windows 迁移已经完成，Linux、macOS 与多架构容器的后续工作见 [跨平台支持路线](docs/cross-platform-support-roadmap.md)。桌面 WebView 始终使用包内页面，浏览器访问远程服务时使用服务端托管的同版本 Web 页面。
 
 本地嵌入模式没有可配置端口。`8787` 只用于 Docker/远程 Rust HTTP 模式；切换服务模式不会合并、删除或移动两端数据。
 
