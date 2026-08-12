@@ -99,6 +99,7 @@ pub struct MailConnectionConfig {
 pub struct RemoteMessageLocator {
     pub mailbox: String,
     pub uid: u32,
+    pub message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -542,6 +543,7 @@ mod tests {
         let locator = RemoteMessageLocator {
             mailbox: "INBOX".into(),
             uid: 42,
+            message_id: Some("<fixture@example.org>".into()),
         };
         let metadata = vec![ParsedAttachmentView {
             filename: "fallback.txt".into(),
@@ -612,6 +614,7 @@ mod tests {
         let locator = RemoteMessageLocator {
             mailbox: "INBOX".into(),
             uid: 42,
+            message_id: None,
         };
         let mut service = RemoteMailService::new(&mut imap, &mut smtp);
 

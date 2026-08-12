@@ -461,6 +461,7 @@ pub(crate) async fn download_attachment_for(
     index: usize,
 ) -> Result<imail_mail::DownloadedAttachment, MailApplicationError<AuthStoreError>> {
     let data_dir = state.config.data_dir.clone();
+    let cache_dir = data_dir.clone();
     let environment = state.config.oauth_environment.clone();
     let coordinator = Arc::clone(&state.refresh_coordinator);
     let oauth_factory = Arc::clone(&state.config.oauth_provider_factory);
@@ -468,6 +469,10 @@ pub(crate) async fn download_attachment_for(
     let transport = Arc::clone(&state.config.mail_transport_factory);
     run_mail(data_dir, move |store, key| {
         let message = MessageQueryService::new(&*store).get(&owner, &message_id)?;
+        let cache_key = crate::attachment_cache::AttachmentCacheKey::new(&owner, &message, index);
+        if let Some(attachment) = crate::attachment_cache::read(&cache_dir, &cache_key) {
+            return Ok(attachment);
+        }
         let codec = MasterKeyCredentialCodec::new(key);
         refresh_account(
             store,
@@ -480,8 +485,11 @@ pub(crate) async fn download_attachment_for(
         )?;
         let mut imap = transport.create_imap().map_err(mail_unavailable)?;
         let mut unused_smtp = UnusedSmtp;
-        MailApplicationService::new(&*store, &codec, imap.as_mut(), &mut unused_smtp)
-            .download_attachment(&owner, &message_id, index)
+        let attachment =
+            MailApplicationService::new(&*store, &codec, imap.as_mut(), &mut unused_smtp)
+                .download_attachment(&owner, &message_id, index)?;
+        let _ = crate::attachment_cache::write(&cache_dir, &cache_key, &attachment);
+        Ok(attachment)
     })
     .await
 }
@@ -1591,7 +1599,7 @@ where
     }))
 }
 
-fn mail_error(cause: MailApplicationError<AuthStoreError>) -> Response {
+pub(crate) fn mail_error(cause: MailApplicationError<AuthStoreError>) -> Response {
     let status = StatusCode::from_u16(cause.status()).unwrap_or(StatusCode::BAD_GATEWAY);
     if cause.status() < 500 {
         return error(status, cause.to_string());

@@ -70,6 +70,8 @@ describe('mail service client adapters', () => {
       ['/api/accounts/a/oauth/reconnect', { method: 'POST' }, 'oauthReconnect'],
       ['/api/oauth/status', { method: 'POST', body: '{"state":"opaque"}' }, 'oauthStatus'],
       ['/api/send', { method: 'POST', body: '{"subject":"hello"}' }, 'messageSend'],
+      ['/api/messages/m1/attachments/2/preview', { method: 'POST' }, 'attachmentPreviewCreate'],
+      ['/api/attachment-previews/preview-1', { method: 'DELETE' }, 'attachmentPreviewDelete'],
       ['/api/drafts', undefined, 'draftsList'],
       ['/api/drafts', { method: 'POST', headers: { 'X-Draft-Id': 'draft-1' }, body: '{"subject":"draft"}' }, 'draftCreate'],
       ['/api/drafts/draft-1', { method: 'PUT', body: '{"subject":"draft"}' }, 'draftUpdate'],

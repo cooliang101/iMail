@@ -19,6 +19,7 @@ use imail_mail::{
 };
 use imail_protocol::{RemoteMessageFlagPatch, SendMessageResult};
 use mail_builder::MessageBuilder;
+use mail_parser::MessageParser;
 use mail_send::{smtp::AssertReply, Credentials, SmtpClient};
 use rustls_pki_types::ServerName;
 use tokio::{
@@ -33,6 +34,7 @@ use tokio_socks::tcp::Socks5Stream;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_PROXY_RESPONSE_BYTES: usize = 16 * 1024;
+const MESSAGE_ID_SCAN_UID_BATCH: usize = 500;
 
 pub trait NetworkCancellation: Send + Sync + 'static {
     fn is_cancelled(&self) -> bool;
@@ -122,6 +124,169 @@ impl NetworkMailAdapter {
     }
 }
 
+async fn fetch_source_by_uid(
+    session: &mut ImapSession,
+    uid: u32,
+) -> Result<Option<Vec<u8>>, NetworkError> {
+    for query in [
+        "(UID BODY.PEEK[])",
+        "(UID RFC822)",
+        "(UID BODY[])",
+        "BODY.PEEK[]",
+        "RFC822",
+    ] {
+        let mut fetches = session
+            .uid_fetch(uid.to_string(), query)
+            .await
+            .map_err(NetworkError::imap)?;
+        let mut source = None;
+        while let Some(fetch) = fetches.try_next().await.map_err(NetworkError::imap)? {
+            if let Some(body) = fetch.body().filter(|body| !body.is_empty()) {
+                source = Some(body.to_vec());
+                break;
+            }
+        }
+        drop(fetches);
+        if source.is_some() {
+            return Ok(source);
+        }
+    }
+    Ok(None)
+}
+
+fn imap_search_message_id(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 998 || value.contains(['\r', '\n', '\0']) {
+        return None;
+    }
+    Some(value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn normalized_message_id(value: &str) -> Option<String> {
+    let value = value.trim();
+    let value = value
+        .strip_prefix('<')
+        .and_then(|value| value.strip_suffix('>'))
+        .unwrap_or(value)
+        .trim();
+    (!value.is_empty()).then(|| value.to_ascii_lowercase())
+}
+
+fn header_message_id(header: &[u8]) -> Option<String> {
+    MessageParser::default()
+        .parse_headers(header)
+        .and_then(|message| message.message_id().and_then(normalized_message_id))
+}
+
+fn source_matches_message_id(source: &[u8], expected: Option<&str>) -> bool {
+    let Some(expected) = expected.and_then(normalized_message_id) else {
+        return true;
+    };
+    header_message_id(source).as_deref() == Some(expected.as_str())
+}
+
+async fn find_uid_by_message_id_headers(
+    session: &mut ImapSession,
+    expected: &str,
+) -> Result<Option<u32>, NetworkError> {
+    let Some(expected) = normalized_message_id(expected) else {
+        return Ok(None);
+    };
+    let mut uids = session
+        .uid_search("ALL")
+        .await
+        .map_err(NetworkError::imap)?
+        .into_iter()
+        .collect::<Vec<_>>();
+    uids.sort_unstable_by(|left, right| right.cmp(left));
+    for batch in uids.chunks(MESSAGE_ID_SCAN_UID_BATCH) {
+        let set = batch
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let mut fetches = session
+            .uid_fetch(set, "(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+            .await
+            .map_err(NetworkError::imap)?;
+        let mut found = None;
+        while let Some(fetch) = fetches.try_next().await.map_err(NetworkError::imap)? {
+            if fetch.header().and_then(header_message_id).as_deref() == Some(expected.as_str()) {
+                found = fetch.uid;
+                break;
+            }
+        }
+        drop(fetches);
+        if found.is_some() {
+            return Ok(found);
+        }
+    }
+    Ok(None)
+}
+
+async fn fetch_source_by_message_id(
+    session: &mut ImapSession,
+    expected: &str,
+) -> Result<Option<Vec<u8>>, NetworkError> {
+    let Some(search_value) = imap_search_message_id(expected) else {
+        return Ok(None);
+    };
+    let query = format!("HEADER Message-ID \"{search_value}\"");
+    let mut matches = session
+        .uid_search(query)
+        .await
+        .map_err(NetworkError::imap)?
+        .into_iter()
+        .collect::<Vec<_>>();
+    matches.sort_unstable_by(|left, right| right.cmp(left));
+    for uid in matches {
+        if let Some(found) = fetch_source_by_uid(session, uid).await? {
+            if source_matches_message_id(&found, Some(expected)) {
+                return Ok(Some(found));
+            }
+        }
+    }
+    if let Some(uid) = find_uid_by_message_id_headers(session, expected).await? {
+        return Ok(fetch_source_by_uid(session, uid)
+            .await?
+            .filter(|found| source_matches_message_id(found, Some(expected))));
+    }
+    Ok(None)
+}
+
+async fn selectable_mailboxes(
+    session: &mut ImapSession,
+    excluded: &str,
+) -> Result<Vec<(String, Option<String>)>, NetworkError> {
+    let mut names = session
+        .list(None, Some("*"))
+        .await
+        .map_err(NetworkError::imap)?;
+    let mut result = Vec::new();
+    while let Some(name) = names.try_next().await.map_err(NetworkError::imap)? {
+        if name.name() == excluded
+            || name
+                .attributes()
+                .iter()
+                .any(|attribute| matches!(attribute, async_imap::types::NameAttribute::NoSelect))
+        {
+            continue;
+        }
+        result.push((name.name().to_string(), special_use(name.attributes())));
+    }
+    drop(names);
+    result.sort_by_key(|(path, special_use)| {
+        let priority = match special_use.as_deref() {
+            Some("\\Archive") | Some("\\All") => 0,
+            Some("\\Sent") => 1,
+            Some("\\Trash") | Some("\\Junk") | Some("\\Drafts") => 3,
+            _ => 2,
+        };
+        (priority, path.to_ascii_lowercase())
+    });
+    Ok(result)
+}
+
 async fn wait_for_cancellation(cancellation: Option<Arc<dyn NetworkCancellation>>) {
     let Some(cancellation) = cancellation else {
         std::future::pending::<()>().await;
@@ -153,19 +318,33 @@ impl ImapPort for NetworkMailAdapter {
                 .examine(&locator.mailbox)
                 .await
                 .map_err(NetworkError::imap)?;
-            let mut fetches = session
-                .uid_fetch(locator.uid.to_string(), "UID BODY.PEEK[]")
-                .await
-                .map_err(NetworkError::imap)?;
-            let source = fetches
-                .try_next()
-                .await
-                .map_err(NetworkError::imap)?
-                .and_then(|fetch| fetch.body().map(ToOwned::to_owned))
-                .ok_or_else(|| NetworkError::Provider("邮件服务器没有返回原始内容".into()))?;
-            drop(fetches);
+            let mut source = fetch_source_by_uid(&mut session, locator.uid).await?;
+            if source.as_deref().is_some_and(|source| {
+                !source_matches_message_id(source, locator.message_id.as_deref())
+            }) {
+                source = None;
+            }
+            if source.is_none() {
+                if let Some(message_id) = locator.message_id.as_deref() {
+                    source = fetch_source_by_message_id(&mut session, message_id).await?;
+                    if source.is_none() {
+                        let mailboxes =
+                            selectable_mailboxes(&mut session, &locator.mailbox).await?;
+                        for (mailbox, _) in mailboxes {
+                            if session.examine(&mailbox).await.is_err() {
+                                continue;
+                            }
+                            source = fetch_source_by_message_id(&mut session, message_id).await?;
+                            if source.is_some() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
             let _ = session.logout().await;
-            Ok(source)
+            source
+                .ok_or_else(|| NetworkError::Provider("邮件服务器没有返回可读取的原始内容".into()))
         })
     }
 
@@ -1269,6 +1448,88 @@ mod tests {
         transcript
     }
 
+    fn spawn_icloud_fallback_fixture(
+        listener: StdTcpListener,
+        tls: Arc<rustls::ServerConfig>,
+        source: Vec<u8>,
+    ) -> JoinHandle<Vec<String>> {
+        thread::spawn(move || {
+            RuntimeBuilder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async move {
+                    let listener = TcpListener::from_std(listener).unwrap();
+                    let acceptor = TlsAcceptor::from(tls);
+                    let (stream, _) = listener.accept().await.unwrap();
+                    let mut stream = acceptor.accept(stream).await.unwrap();
+                    stream.write_all(b"* OK iCloud fixture ready\r\n").await.unwrap();
+                    let (read, mut write) = tokio::io::split(stream);
+                    let mut lines = BufReader::new(read).lines();
+                    let mut transcript = Vec::new();
+                    while let Some(line) = lines.next_line().await.unwrap() {
+                        transcript.push(line.clone());
+                        let tag = line.split_whitespace().next().unwrap_or("A0");
+                        let command = line.to_ascii_uppercase();
+                        let response = if command.contains(" LOGIN ") {
+                            format!("{tag} OK LOGIN completed\r\n").into_bytes()
+                        } else if command.contains(" CAPABILITY") {
+                            format!("* CAPABILITY IMAP4rev1\r\n{tag} OK CAPABILITY completed\r\n")
+                                .into_bytes()
+                        } else if command.contains(" EXAMINE ") {
+                            format!("* 1 EXISTS\r\n* OK [UIDVALIDITY 8] UIDs valid\r\n* OK [UIDNEXT 2] next UID\r\n{tag} OK [READ-ONLY] selected\r\n").into_bytes()
+                        } else if command.contains("UID SEARCH HEADER MESSAGE-ID") {
+                            format!("* SEARCH\r\n{tag} OK SEARCH completed\r\n").into_bytes()
+                        } else if command.contains("UID SEARCH ALL") {
+                            format!("* SEARCH 1\r\n{tag} OK SEARCH completed\r\n").into_bytes()
+                        } else if command.contains("UID FETCH 1 ")
+                            && command.contains("HEADER.FIELDS")
+                        {
+                            let header = b"Message-ID: <icloud-fallback@example.test>\r\n\r\n";
+                            let mut response = format!(
+                                "* 1 FETCH (UID 1 BODY[HEADER.FIELDS (MESSAGE-ID)] {{{}}}\r\n",
+                                header.len()
+                            )
+                            .into_bytes();
+                            response.extend_from_slice(header);
+                            response.extend_from_slice(
+                                format!(")\r\n{tag} OK FETCH completed\r\n").as_bytes(),
+                            );
+                            response
+                        } else if command.contains("UID FETCH 1 ")
+                            && command.contains("(UID BODY.PEEK[])")
+                        {
+                            let mut response = format!(
+                                "* 1 FETCH (UID 1 BODY[] {{{}}}\r\n",
+                                source.len()
+                            )
+                            .into_bytes();
+                            response.extend_from_slice(&source);
+                            response.extend_from_slice(
+                                format!(")\r\n{tag} OK FETCH completed\r\n").as_bytes(),
+                            );
+                            response
+                        } else if command.contains("UID FETCH 1 ")
+                            || command.contains("UID FETCH 99 ")
+                        {
+                            format!("{tag} OK FETCH completed\r\n").into_bytes()
+                        } else if command.contains(" LOGOUT") {
+                            let response = format!(
+                                "* BYE fixture closing\r\n{tag} OK LOGOUT completed\r\n"
+                            )
+                            .into_bytes();
+                            write.write_all(&response).await.unwrap();
+                            break;
+                        } else {
+                            format!("{tag} BAD unsupported fixture command\r\n").into_bytes()
+                        };
+                        write.write_all(&response).await.unwrap();
+                    }
+                    transcript
+                })
+        })
+    }
+
     fn spawn_smtp_fixture(
         listener: StdTcpListener,
         tls: Arc<rustls::ServerConfig>,
@@ -1450,6 +1711,40 @@ mod tests {
     }
 
     #[test]
+    fn icloud_fallback_matches_headers_locally_when_uid_and_server_search_are_stale() {
+        let (tls_connector, tls_server) = fixture_tls();
+        let (imap_listener, imap_port) = fixture_listener();
+        let source = concat!(
+            "From: Sender <sender@example.test>\r\n",
+            "To: Fixture <fixture@example.test>\r\n",
+            "Subject: iCloud attachment\r\n",
+            "Message-ID: <icloud-fallback@example.test>\r\n",
+            "Content-Type: text/plain; charset=utf-8\r\n",
+            "\r\n",
+            "attachment source\r\n"
+        )
+        .as_bytes()
+        .to_vec();
+        let fixture = spawn_icloud_fallback_fixture(imap_listener, tls_server, source.clone());
+        let mut adapter = NetworkMailAdapter::with_tls_connector(tls_connector).unwrap();
+        let fetched = ImapPort::fetch_source(
+            &mut adapter,
+            &fixture_config(imap_port, 465),
+            &RemoteMessageLocator {
+                mailbox: "INBOX".into(),
+                uid: 99,
+                message_id: Some("<icloud-fallback@example.test>".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(fetched, source);
+        let transcript = fixture.join().unwrap().join("\n").to_ascii_uppercase();
+        assert!(transcript.contains("UID SEARCH HEADER MESSAGE-ID"));
+        assert!(transcript.contains("UID SEARCH ALL"));
+        assert!(transcript.contains("HEADER.FIELDS (MESSAGE-ID)"));
+    }
+
+    #[test]
     fn builds_a_safe_multipart_message_with_a_message_id() {
         let message = OutgoingMessage {
             from: MailAddressView {
@@ -1496,6 +1791,41 @@ mod tests {
         assert!(matches!(
             smtp_credentials(&config),
             Credentials::OAuthBearer { .. }
+        ));
+    }
+
+    #[test]
+    fn message_id_search_values_reject_injection_and_escape_quotes() {
+        assert_eq!(
+            imap_search_message_id("<mail@example.org>"),
+            Some("<mail@example.org>".into())
+        );
+        assert_eq!(
+            imap_search_message_id("<mail\\\"tag@example.org>"),
+            Some("<mail\\\\\\\"tag@example.org>".into())
+        );
+        assert_eq!(imap_search_message_id("bad\r\nUID SEARCH ALL"), None);
+        assert_eq!(imap_search_message_id(""), None);
+    }
+
+    #[test]
+    fn extracts_message_id_from_the_minimal_header_used_for_icloud_fallback() {
+        assert_eq!(
+            header_message_id(b"Message-ID: <Cloud-Part-42@icloud.example>\r\n\r\n"),
+            Some("cloud-part-42@icloud.example".into())
+        );
+        assert_eq!(
+            normalized_message_id("  <Cloud-Part-42@icloud.example>  "),
+            Some("cloud-part-42@icloud.example".into())
+        );
+        assert_eq!(header_message_id(b"Subject: no identity\r\n\r\n"), None);
+        assert!(source_matches_message_id(
+            b"Message-ID: <same@example.test>\r\n\r\nbody",
+            Some("<same@example.test>")
+        ));
+        assert!(!source_matches_message_id(
+            b"Message-ID: <reused-uid@example.test>\r\n\r\nbody",
+            Some("<same@example.test>")
         ));
     }
 

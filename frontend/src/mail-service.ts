@@ -38,6 +38,8 @@ export type EmbeddedDomainCall =
   | { operation: 'syncMailboxRole'; role: string }
   | { operation: 'messageUpdate'; messageId: string; unread?: boolean; flagged?: boolean; labels?: string[]; snoozedUntil?: unknown }
   | { operation: 'messageMove'; messageId: string; destination: string }
+  | { operation: 'attachmentPreviewCreate'; messageId: string; index: number }
+  | { operation: 'attachmentPreviewDelete'; previewId: string }
   | { operation: 'messageSend'; input: Record<string, unknown> }
   | { operation: 'draftsList' }
   | { operation: 'draftCreate'; draftId?: string; input: Record<string, unknown> }
@@ -107,6 +109,10 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   }
   const move = url.pathname.match(/^\/api\/messages\/([^/]+)\/move$/);
   if (method === 'POST' && move && typeof body?.destination === 'string') return { operation: 'messageMove', messageId: decodeURIComponent(move[1]), destination: body.destination };
+  const attachmentPreview = url.pathname.match(/^\/api\/messages\/([^/]+)\/attachments\/(\d+)\/preview$/);
+  if (method === 'POST' && options.body === undefined && attachmentPreview) return { operation: 'attachmentPreviewCreate', messageId: decodeURIComponent(attachmentPreview[1]), index: Number(attachmentPreview[2]) };
+  const preview = url.pathname.match(/^\/api\/attachment-previews\/([^/]+)$/);
+  if (method === 'DELETE' && options.body === undefined && preview) return { operation: 'attachmentPreviewDelete', previewId: decodeURIComponent(preview[1]) };
   if (method === 'POST' && url.pathname === '/api/auth/register' && body) return { operation: 'authRegister', input: body };
   if (method === 'POST' && url.pathname === '/api/auth/login' && body) return { operation: 'authLogin', input: body };
   if (method === 'POST' && url.pathname === '/api/auth/logout' && options.body === undefined) return { operation: 'authLogout' };

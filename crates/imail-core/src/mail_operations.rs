@@ -113,7 +113,7 @@ where
         let config = self.account_config(user_id, &message.account_id)?;
         let metadata = serde_json::from_value::<Vec<ParsedAttachmentView>>(message.attachments)
             .map_err(|_| domain("MESSAGE_ATTACHMENTS_INVALID", 500, "邮件附件元数据不可用"))?;
-        let locator = locator(message.mailbox, message.uid)?;
+        let locator = locator(message.mailbox, message.uid, message.message_id)?;
         RemoteMailService::new(self.imap, self.smtp)
             .download_attachment(&config, &locator, &metadata, index)
             .map_err(MailApplicationError::Remote)
@@ -127,7 +127,7 @@ where
     ) -> Result<(), MailApplicationError<RepositoryError<R>>> {
         let message = self.message(user_id, message_id)?;
         let config = self.account_config(user_id, &message.account_id)?;
-        let locator = locator(message.mailbox, message.uid)?;
+        let locator = locator(message.mailbox, message.uid, message.message_id)?;
         RemoteMailService::new(self.imap, self.smtp)
             .update_flags(&config, &locator, patch)
             .map_err(MailApplicationError::Remote)
@@ -141,7 +141,7 @@ where
     ) -> Result<RemoteMessageMoveResult, MailApplicationError<RepositoryError<R>>> {
         let message = self.message(user_id, message_id)?;
         let config = self.account_config(user_id, &message.account_id)?;
-        let locator = locator(message.mailbox, message.uid)?;
+        let locator = locator(message.mailbox, message.uid, message.message_id)?;
         RemoteMailService::new(self.imap, self.smtp)
             .move_message(&config, &locator, destination)
             .map_err(MailApplicationError::Remote)
@@ -290,6 +290,7 @@ fn required_bool<E: Error + Send + Sync + 'static>(
 fn locator<E: Error + Send + Sync + 'static>(
     mailbox: String,
     uid: i64,
+    message_id: Option<String>,
 ) -> Result<RemoteMessageLocator, MailApplicationError<E>> {
     Ok(RemoteMessageLocator {
         mailbox,
@@ -297,6 +298,7 @@ fn locator<E: Error + Send + Sync + 'static>(
             .ok()
             .filter(|uid| *uid > 0)
             .ok_or_else(|| domain("MESSAGE_UID_INVALID", 500, "邮件远程标识不可用"))?,
+        message_id,
     })
 }
 

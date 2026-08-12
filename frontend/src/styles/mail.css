@@ -104,7 +104,6 @@
 .mail-html-stage pre { white-space: pre-wrap; }
 .mail-html-stage blockquote { margin-inline: 0; padding-left: 14px; border-left: 3px solid #dce8e4; color: #63756f; }
 .mail-body-loading { color: var(--color-text-tertiary); }
-.attachments { border-top: 1px solid var(--color-canvas); padding-top: 17px; }.attachments > p { font-size: 10px; color: var(--color-text-secondary); }.attachments a { border: 1px solid var(--color-border); background: var(--color-surface-subtle); border-radius: 11px; padding: 10px 12px; display: inline-flex; gap: 9px; align-items: center; text-align: left; color: var(--neutral-90); text-decoration: none; transition: .16s ease; }.attachments a:hover { border-color: #8fc8ba; background: #eff8f5; transform: translateY(-1px); }.attachments a span { display: flex; flex-direction: column; gap: 2px; }.attachments strong { font-size: 9px; }.attachments small { color: #91a09d; font-size: 8px; }
 .reader-labels { display: flex; flex-wrap: wrap; gap: 6px; margin: -13px 0 19px; }.reader-labels span { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 4px 8px; background: #e9f4f1; color: var(--color-accent-pressed); font-size: 9px; font-weight: 650; }
 
 [data-theme='soft-neubrutalism'] .message-pane { background: #fffaf0; }

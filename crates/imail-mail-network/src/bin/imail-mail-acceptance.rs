@@ -654,6 +654,7 @@ fn wait_for_message(
                         locator: RemoteMessageLocator {
                             mailbox: batch.mailbox.clone(),
                             uid: message.uid,
+                            message_id: parse_rfc822(&message.source)?.message_id,
                         },
                         source: message.source.clone(),
                         first_batch: batch,

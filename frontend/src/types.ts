@@ -65,9 +65,16 @@ export type Message = {
   unread: boolean;
   flagged: boolean;
   hasAttachments: boolean;
-  attachments: Array<{ filename: string; contentType: string; size: number; index: number }>;
+  attachments: MessageAttachment[];
   labels: string[];
   snoozedUntil?: string;
+};
+
+export type MessageAttachment = {
+  filename: string;
+  contentType: string;
+  size: number;
+  index: number;
 };
 
 export type Contact = {

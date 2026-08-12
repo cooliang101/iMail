@@ -42,6 +42,8 @@ use url::Url;
 use uuid::{Uuid, Version};
 
 pub mod accounts;
+mod attachment_cache;
+mod attachment_previews;
 mod auth;
 mod developer_tokens;
 pub mod drafts;
@@ -416,6 +418,7 @@ struct AppState {
     completed_oauth: Mutex<HashMap<String, CompletedOAuthRecord>>,
     oauth_in_flight: Mutex<HashSet<String>>,
     logo_in_flight: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    attachment_previews: attachment_previews::PreviewState,
     security: security::SecurityState,
     daemon_shutdown: Option<tokio::sync::mpsc::Sender<()>>,
 }
@@ -717,6 +720,46 @@ impl EmbeddedServiceHost {
             .await
     }
 
+    pub async fn create_attachment_preview(
+        &self,
+        owner_id: String,
+        message_id: String,
+        index: usize,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        attachment_previews::embedded_create(Arc::clone(&self.state), owner_id, message_id, index)
+            .await
+    }
+
+    pub async fn read_attachment_preview(
+        &self,
+        owner_id: String,
+        preview_id: String,
+        entry_id: Option<String>,
+    ) -> Result<Vec<u8>, EmbeddedOperationError> {
+        let state = Arc::clone(&self.state);
+        tokio::task::spawn_blocking(move || {
+            attachment_previews::embedded_content(
+                &state,
+                &owner_id,
+                &preview_id,
+                entry_id.as_deref(),
+            )
+        })
+        .await
+        .map_err(|_| EmbeddedOperationError {
+            status: 500,
+            message: "附件预览处理失败".into(),
+        })?
+    }
+
+    pub fn delete_attachment_preview(
+        &self,
+        owner_id: String,
+        preview_id: String,
+    ) -> Result<(), EmbeddedOperationError> {
+        attachment_previews::embedded_delete(&self.state, &owner_id, &preview_id)
+    }
+
     pub async fn contact_logo(
         &self,
         owner_id: String,
@@ -774,11 +817,13 @@ fn build_router_state(
         completed_oauth: Mutex::new(HashMap::new()),
         oauth_in_flight: Mutex::new(HashSet::new()),
         logo_in_flight: Mutex::new(HashMap::new()),
+        attachment_previews: attachment_previews::PreviewState::default(),
         security: security::SecurityState::default(),
         daemon_shutdown,
     });
     let protected = Router::new()
         .merge(accounts::routes())
+        .merge(attachment_previews::routes())
         .merge(drafts::routes())
         .merge(developer_tokens::routes())
         .merge(external_access::routes())
@@ -5845,6 +5890,69 @@ mod tests {
             to_bytes(attachment.into_body(), 1024).await.unwrap(),
             "hello"
         );
+        let fetches_after_download = mail_state.lock().unwrap().fetches;
+
+        let preview = router
+            .clone()
+            .oneshot(request(
+                Method::POST,
+                format!("/api/messages/{message_id}/attachments/0/preview"),
+                &owner_session,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(preview.status(), StatusCode::CREATED);
+        let preview = json(preview).await;
+        assert_eq!(preview["descriptor"]["kind"], "text");
+        assert_eq!(
+            preview["descriptor"]["contentType"],
+            "text/plain; charset=utf-8"
+        );
+        assert_eq!(
+            mail_state.lock().unwrap().fetches,
+            fetches_after_download,
+            "preview should reuse the attachment downloaded into the local cache"
+        );
+        let preview_id = preview["previewId"].as_str().unwrap();
+
+        let foreign_preview = router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                format!("/api/attachment-previews/{preview_id}/content"),
+                &other_session,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(foreign_preview.status(), StatusCode::NOT_FOUND);
+
+        let mut range_request = request(
+            Method::GET,
+            format!("/api/attachment-previews/{preview_id}/content"),
+            &owner_session,
+            Body::empty(),
+        );
+        range_request
+            .headers_mut()
+            .insert("range", HeaderValue::from_static("bytes=1-3"));
+        let ranged = router.clone().oneshot(range_request).await.unwrap();
+        assert_eq!(ranged.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(ranged.headers()["content-range"], "bytes 1-3/5");
+        assert_eq!(to_bytes(ranged.into_body(), 1024).await.unwrap(), "ell");
+
+        let removed = router
+            .clone()
+            .oneshot(request(
+                Method::DELETE,
+                format!("/api/attachment-previews/{preview_id}"),
+                &owner_session,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(removed.status(), StatusCode::NO_CONTENT);
 
         let moved = router
             .clone()

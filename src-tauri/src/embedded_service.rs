@@ -139,6 +139,15 @@ pub enum EmbeddedDomainCall {
         message_id: String,
         destination: String,
     },
+    AttachmentPreviewCreate {
+        #[serde(rename = "messageId")]
+        message_id: String,
+        index: usize,
+    },
+    AttachmentPreviewDelete {
+        #[serde(rename = "previewId")]
+        preview_id: String,
+    },
     LabelsList,
     ContactsList,
     NotificationsList,
@@ -302,6 +311,19 @@ impl EmbeddedDomainCall {
                 format!("/api/messages/{}/move", path_segment(&message_id)),
                 "POST",
                 Some(serde_json::json!({"destination": destination}).to_string()),
+            ),
+            Self::AttachmentPreviewCreate { message_id, index } => (
+                format!(
+                    "/api/messages/{}/attachments/{index}/preview",
+                    path_segment(&message_id)
+                ),
+                "POST",
+                None,
+            ),
+            Self::AttachmentPreviewDelete { preview_id } => (
+                format!("/api/attachment-previews/{}", path_segment(&preview_id)),
+                "DELETE",
+                None,
             ),
             Self::LabelsList => ("/api/labels".into(), "GET", None),
             Self::ContactsList => ("/api/contacts".into(), "GET", None),
@@ -1127,6 +1149,43 @@ impl EmbeddedMailServiceState {
                     .await;
                 Ok(Some(embedded_operation_response(result)))
             }
+            EmbeddedDomainCall::AttachmentPreviewCreate { message_id, index } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "嵌入式服务尚未初始化".to_string())?;
+                let result = host
+                    .create_attachment_preview(user_id, message_id.clone(), *index)
+                    .await;
+                let mut response = embedded_operation_response(result);
+                if response.status == 200 {
+                    response.status = 201;
+                }
+                Ok(Some(response))
+            }
+            EmbeddedDomainCall::AttachmentPreviewDelete { preview_id } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "嵌入式服务尚未初始化".to_string())?;
+                Ok(Some(
+                    match host.delete_attachment_preview(user_id, preview_id.clone()) {
+                        Ok(()) => EmbeddedServiceResponse {
+                            status: 204,
+                            body: String::new(),
+                        },
+                        Err(error) => {
+                            json_response(error.status, serde_json::json!({"error":error.message}))
+                        }
+                    },
+                ))
+            }
             EmbeddedDomainCall::MessageSend { input } => {
                 let Some(user_id) = self.current_user_id()? else {
                     return Ok(Some(unauthorized_response()));
@@ -1550,6 +1609,23 @@ impl EmbeddedMailServiceState {
                 .download_attachment(user_id, message_id, index)
                 .await
                 .map_err(|error| format!("嵌入式附件读取失败：{}", error.status));
+        }
+        if let Some(["api", "attachment-previews", preview_id, "content"]) = segments.as_deref() {
+            let preview_id = decode_path_segment(preview_id)?;
+            return host
+                .read_attachment_preview(user_id, preview_id, None)
+                .await
+                .map_err(|error| format!("嵌入式附件预览读取失败：{}", error.status));
+        }
+        if let Some(["api", "attachment-previews", preview_id, "archive", "entries", entry_id]) =
+            segments.as_deref()
+        {
+            let preview_id = decode_path_segment(preview_id)?;
+            let entry_id = decode_path_segment(entry_id)?;
+            return host
+                .read_attachment_preview(user_id, preview_id, Some(entry_id))
+                .await
+                .map_err(|error| format!("嵌入式压缩包条目读取失败：{}", error.status));
         }
         if parsed.path() == "/api/contacts/logo" {
             let address = parsed

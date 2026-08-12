@@ -27,6 +27,7 @@ imail-oauth-http = { path = "../imail-oauth-http", optional = true }
 imail-protocol = { path = "../imail-protocol" }
 imail-security = { path = "../imail-security", optional = true }
 mail-builder.workspace = true
+mail-parser.workspace = true
 mail-send.workspace = true
 rustls.workspace = true
 rustls-native-certs.workspace = true

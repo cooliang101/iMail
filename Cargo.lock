@@ -2306,6 +2306,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "imagesize"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edcd27d72f2f071c64249075f42e205ff93c9a4c5f6c6da53e79ed9f9832c285"
+
+[[package]]
 name = "imail"
 version = "0.0.1"
 dependencies = [
@@ -2340,6 +2346,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "imail-attachment"
+version = "0.0.1"
+dependencies = [
+ "encoding_rs",
+ "imagesize",
+ "infer",
+ "serde",
+ "thiserror 1.0.69",
+ "zip",
+]
+
+[[package]]
 name = "imail-core"
 version = "0.0.1"
 dependencies = [
@@ -2365,6 +2383,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "futures-util",
+ "imail-attachment",
  "imail-core",
  "imail-mail",
  "imail-mail-network",
@@ -2433,6 +2452,7 @@ dependencies = [
  "imail-protocol",
  "imail-security",
  "mail-builder",
+ "mail-parser",
  "mail-send",
  "rcgen",
  "rustls",
@@ -7088,6 +7108,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "zip"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "760394e246e4c28189f19d488c058bf16f564016aefac5d32bb1f3b51d5e9261"
+dependencies = [
+ "byteorder",
+ "crc32fast",
+ "crossbeam-utils",
+ "flate2",
 ]
 
 [[package]]

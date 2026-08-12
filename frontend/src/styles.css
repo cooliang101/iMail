@@ -2,6 +2,7 @@
 @import './styles/desktop-frame.css';
 @import './styles/auth.css';
 @import './styles/mail.css';
+@import './styles/attachments.css';
 @import './styles/dialogs.css';
 @import './styles/settings.css';
 @import './styles/compose.css';

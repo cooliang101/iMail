@@ -1,0 +1,49 @@
+.attachments { border-top: 1px solid var(--color-canvas); padding-top: 17px; }
+.attachments > p { margin: 0 0 9px; color: var(--color-text-secondary); font-size: 10px; }
+.attachment-list { display: grid; gap: 8px; }
+.attachment-card { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; border: 1px solid var(--color-border); border-radius: 11px; padding: 9px 10px; background: var(--color-surface-subtle); }
+.attachment-card > span { min-width: 0; display: grid; gap: 2px; }
+.attachment-card > span strong { overflow: hidden; color: var(--neutral-90); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
+.attachment-card > span small { color: var(--color-text-tertiary); font-size: 8px; }
+.attachment-card > div { display: flex; gap: 6px; }
+.attachment-card button, .attachment-card a { min-height: 30px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 5px 8px; color: var(--neutral-90); font: 600 9px var(--font-family-ui); text-decoration: none; cursor: pointer; }
+.attachment-card button:hover, .attachment-card a:hover { border-color: var(--color-focus); background: var(--color-accent-subtle); color: var(--color-accent-pressed); }
+.modal.modal-wide.attachment-preview-modal { width: min(1080px, 100%); height: min(780px, calc(100dvh - 40px)); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.attachment-preview-header { min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid var(--color-border); padding: 15px 17px 14px; }
+.attachment-preview-header > div:first-child { min-width: 0; }
+.attachment-preview-header span { color: var(--accent); font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.attachment-preview-header h2 { overflow: hidden; margin: 3px 0 2px; color: var(--neutral-90); font: 700 17px/1.25 var(--font-family-display); white-space: nowrap; text-overflow: ellipsis; }
+.attachment-preview-header p { margin: 0; color: var(--color-text-secondary); font-size: 9px; }
+.attachment-preview-header-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.attachment-preview-header-actions button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-dialog-control); color: var(--neutral-90); cursor: pointer; }
+.attachment-preview-header-actions button:hover { background: var(--color-dialog-control-hover); color: var(--color-accent-pressed); }
+.attachment-preview-stage { min-height: 0; overflow: hidden; display: grid; background: var(--color-canvas); }
+.attachment-preview-status { place-self: center; max-width: 360px; display: grid; justify-items: center; gap: 8px; padding: 24px; color: var(--color-text-secondary); text-align: center; }
+.attachment-preview-status strong { color: var(--neutral-90); font-size: 13px; }
+.attachment-preview-status span { font-size: 10px; line-height: 1.6; }
+.attachment-preview-status.error { color: var(--color-danger); }
+.attachment-preview-status .spin { animation: attachment-spin .8s linear infinite; }
+@keyframes attachment-spin { to { transform: rotate(360deg); } }
+.attachment-image-viewer, .attachment-video-viewer { min-width: 0; min-height: 0; display: grid; place-items: center; overflow: auto; padding: 20px; background: #17201e; }
+.attachment-image-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 18px 48px #0005; }
+.attachment-video-viewer video { width: min(100%, 960px); max-height: 100%; background: #000; }
+.attachment-text-viewer { min-width: 0; min-height: 0; overflow: auto; padding: 20px; background: var(--color-surface); }
+.attachment-text-viewer pre { min-width: min-content; margin: 0; color: var(--neutral-90); font: 12px/1.7 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.attachment-pdf-viewer { width: 100%; height: 100%; border: 0; background: #fff; }
+.archive-browser { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; padding: 14px; }
+.archive-browser-summary { display: flex; align-items: center; gap: 10px; border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; background: var(--color-surface); color: var(--color-accent-pressed); }
+.archive-browser-summary span { display: grid; gap: 2px; }
+.archive-browser-summary strong { color: var(--neutral-90); font-size: 10px; }
+.archive-browser-summary small { color: var(--color-text-secondary); font-size: 8px; }
+.archive-entry-list { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 5px; }
+.archive-entry { min-width: 0; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 8px; border: 1px solid var(--color-border); border-radius: 9px; padding: 7px 8px; background: var(--color-surface); }
+.archive-entry > i { display: grid; place-items: center; color: var(--color-accent-pressed); font-style: normal; }
+.archive-entry > span { min-width: 0; display: grid; gap: 2px; }
+.archive-entry strong { overflow: hidden; color: var(--neutral-90); font-size: 9px; white-space: nowrap; text-overflow: ellipsis; }
+.archive-entry small { color: var(--color-text-tertiary); font-size: 8px; }
+.archive-entry button { border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface-subtle); padding: 5px 8px; color: var(--color-accent-pressed); font-size: 9px; cursor: pointer; }
+@media (max-width: 680px) {
+  .attachment-card { grid-template-columns: auto minmax(0, 1fr); }
+  .attachment-card > div { grid-column: 2; }
+  .attachment-preview-modal { height: calc(100dvh - 20px) !important; }
+}

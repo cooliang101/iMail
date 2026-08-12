@@ -301,15 +301,18 @@ pub async fn desktop_read_binary(
         .get(request_url(&base_url, &path)?)
         .send()
         .await
-        .map_err(|error| format!("图片加载失败：{error}"))?;
+        .map_err(|error| format!("二进制资源加载失败：{error}"))?;
     client.persist_cookies_best_effort();
     if !response.status().is_success() {
-        return Err(format!("图片加载失败：{}", response.status().as_u16()));
+        return Err(format!(
+            "二进制资源加载失败：{}",
+            response.status().as_u16()
+        ));
     }
     let bytes = response
         .bytes()
         .await
-        .map_err(|error| format!("读取图片失败：{error}"))?;
+        .map_err(|error| format!("读取二进制资源失败：{error}"))?;
     Ok(tauri::ipc::Response::new(bytes.to_vec()))
 }
 

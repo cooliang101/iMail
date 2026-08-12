@@ -305,6 +305,14 @@ pub(crate) async fn embedded_clear_user_data(
     .await
     .map_err(|_| embedded_error(500, "服务暂时不可用"))?;
     let account_count = cleared.account_count as usize;
+    let cache_dir = state.config.data_dir.clone();
+    let cache_owner = user_id.clone();
+    tokio::task::spawn_blocking(move || {
+        crate::attachment_cache::clear_user(&cache_dir, &cache_owner)
+    })
+    .await
+    .map_err(|_| embedded_error(500, "服务暂时不可用"))?
+    .map_err(|_| embedded_error(500, "服务暂时不可用"))?;
     state.security.invalidate_user(&user_id);
     record_event_for(
         &state,
@@ -500,6 +508,15 @@ async fn clear_user_data(
         Ok(value) => value.account_count as usize,
         Err(_) => return internal_error(),
     };
+    let cache_dir = state.config.data_dir.clone();
+    let cache_owner = user.user_id.clone();
+    let cache_cleared = tokio::task::spawn_blocking(move || {
+        crate::attachment_cache::clear_user(&cache_dir, &cache_owner)
+    })
+    .await;
+    if !matches!(cache_cleared, Ok(Ok(()))) {
+        return internal_error();
+    }
     state.security.invalidate_user(&user.user_id);
     if record_event(&state, &user, "privacy.user-data-cleared", account_count)
         .await
