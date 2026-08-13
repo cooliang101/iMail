@@ -17,7 +17,8 @@ import { AppContextMenu } from './features/context-menu';
 import { gatewayPreferencesPayload, loadAppPreferences, mergeGatewayPreferences, preferencesStorageKeyFor, SettingsModal, type GatewayPreferences, type SettingsTab } from './features/settings';
 import { useAuth } from './features/auth';
 import { useAppTheme } from './features/appearance';
-import { subscribeDesktopCompose } from './platform/desktop-events';
+import { subscribeDesktopAccountSelection, subscribeDesktopCompose, updateDesktopTrayMenu } from './platform/desktop-events';
+import { useNewMailNotifications } from './features/notifications';
 
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; hasMore: boolean };
 function App() {
@@ -75,6 +76,7 @@ function App() {
 
   const accounts = realAccounts;
   const messages = realMessages;
+  useNewMailNotifications(preferences.notificationKinds.unread);
 
   const load = useCallback(async () => {
     try {
@@ -99,7 +101,14 @@ function App() {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => subscribeDesktopCompose(() => openCompose()), []);
+  useEffect(() => subscribeDesktopAccountSelection((accountId) => {
+    if (!realAccountsRef.current.some((account) => account.id === accountId)) return;
+    selectScope('inbox', accountId);
+  }), []);
   useEffect(() => { setTheme(preferences.theme, preferences.customTheme); }, [preferences.customTheme, preferences.theme]);
+  useEffect(() => {
+    void updateDesktopTrayMenu(accounts, preferences.theme, preferences.customTheme).catch(() => undefined);
+  }, [accounts, preferences.customTheme, preferences.theme]);
   useEffect(() => {
     void api<{ preferences: GatewayPreferences }>('/api/preferences').then((result) => {
       const local = loadAppPreferences(localStorage, localPreferencesKey);

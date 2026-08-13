@@ -1,8 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
-    menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, State,
+    AppHandle, Manager, State,
 };
 
 mod app_logging;
@@ -10,6 +9,7 @@ mod desktop_platform;
 mod embedded_service;
 mod http_bridge;
 mod local_service;
+mod tray_menu;
 
 #[derive(Default)]
 struct DesktopWindowState {
@@ -56,6 +56,7 @@ pub fn run() {
     app_logging::prepare_desktop_process();
     let app = tauri::Builder::default()
         .manage(DesktopWindowState::default())
+        .manage(tray_menu::TrayMenuState::default())
         .manage(embedded_service::EmbeddedMailServiceState::default())
         .plugin(app_logging::plugin())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -66,6 +67,19 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .on_window_event(|window, event| {
+            if window.label() == "tray-menu" {
+                match event {
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    tauri::WindowEvent::Focused(false) => {
+                        let _ = window.hide();
+                    }
+                    _ => {}
+                }
+                return;
+            }
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     log::info!(target: "desktop", "[window.hide] close requested; keeping tray process active");
@@ -74,41 +88,35 @@ pub fn run() {
                 }
             }
         })
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => {
-                log::info!(target: "desktop", "[tray.show] opening main window");
-                show_ready_main_window(app);
-            }
-            "compose" => {
-                log::info!(target: "desktop", "[tray.compose] compose requested");
-                show_ready_main_window(app);
-                if app
-                    .state::<DesktopWindowState>()
-                    .frontend_ready
-                    .load(Ordering::Acquire)
-                {
-                    let _ = app.emit("desktop-compose", ());
-                }
-            }
-            "quit" => {
-                log::info!(target: "desktop", "[process.quit] quit requested from tray menu");
-                app.exit(0);
-            }
-            _ => {}
-        })
         .on_tray_icon_event(|app, event| {
             if let TrayIconEvent::Click {
-                button: MouseButton::Left,
+                button,
                 button_state: MouseButtonState::Up,
+                position,
                 ..
             } = event
             {
-                log::info!(target: "desktop", "[tray.click] opening main window");
-                show_ready_main_window(app);
+                match button {
+                    MouseButton::Left => {
+                        log::info!(target: "desktop", "[tray.click] opening main window");
+                        show_ready_main_window(app);
+                    }
+                    MouseButton::Right => {
+                        log::info!(target: "desktop", "[tray.menu] opening custom tray menu");
+                        if let Err(error) = tray_menu::show(app, position) {
+                            log::error!(target: "desktop", "[tray.menu.failed] {error}");
+                        }
+                    }
+                    _ => {}
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
             desktop_frontend_ready,
+            tray_menu::desktop_update_tray_menu,
+            tray_menu::desktop_get_tray_menu,
+            tray_menu::desktop_resize_tray_menu,
+            tray_menu::desktop_tray_action,
             embedded_service::desktop_mail_service_call,
             embedded_service::desktop_start_embedded_events,
             embedded_service::desktop_stop_embedded_events,
@@ -132,18 +140,14 @@ pub fn run() {
                 app.handle().exit(0);
                 return Ok(());
             }
-            let show = MenuItem::with_id(app, "show", "打开 iMail", true, None::<&str>)?;
-            let compose = MenuItem::with_id(app, "compose", "写邮件", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "退出 iMail", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &compose, &quit])?;
             let mut tray = TrayIconBuilder::with_id("main")
-                .menu(&menu)
                 .tooltip("iMail")
                 .show_menu_on_left_click(false);
             if let Some(icon) = app.default_window_icon() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+            tray_menu::create_window(app.handle())?;
             log::info!(target: "desktop", "[tauri.ready] tray and desktop bridge initialized");
             Ok(())
         })

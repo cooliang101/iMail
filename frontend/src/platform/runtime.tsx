@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { DesktopNotification, DownloadRequest, PlatformRuntime } from './types';
+import type { DownloadRequest, PlatformRuntime, SystemNotification } from './types';
 import { desktopDownload } from '../desktop-http';
 import { isTauriRuntime } from './tauri-runtime';
 export { isTauriRuntime } from './tauri-runtime';
@@ -18,6 +18,13 @@ async function webDownload({ url, filename }: DownloadRequest) {
 }
 
 function createWebRuntime(): PlatformRuntime {
+  async function prepareNotifications() {
+    if (!('Notification' in window)) return false;
+    if (Notification.permission === 'granted') return true;
+    if (Notification.permission === 'denied') return false;
+    return await Notification.requestPermission() === 'granted';
+  }
+
   return {
     kind: 'web',
     async openExternal(value) {
@@ -25,14 +32,29 @@ function createWebRuntime(): PlatformRuntime {
       if (!opened) throw new Error('浏览器阻止了新窗口，请允许弹出窗口后重试');
     },
     saveDownload: webDownload,
-    async notify({ title, body }: DesktopNotification) {
-      if (!('Notification' in window)) return;
-      if (Notification.permission === 'granted') new Notification(title, { body });
+    prepareNotifications,
+    async notify({ title, body, tag }: SystemNotification) {
+      if (!await prepareNotifications()) throw new Error('系统通知权限未开启');
+      const options: NotificationOptions = { body, tag, icon: new URL('pwa-192.png', document.baseURI).href };
+      const registration = 'serviceWorker' in navigator
+        ? await navigator.serviceWorker.getRegistration().catch(() => undefined)
+        : undefined;
+      if (registration) {
+        await registration.showNotification(title, options);
+        return;
+      }
+      const notification = new Notification(title, options);
+      notification.onclick = () => { window.focus(); notification.close(); };
     },
   };
 }
 
 function createTauriRuntime(): PlatformRuntime {
+  async function prepareNotifications() {
+    const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
+    return await isPermissionGranted() || await requestPermission() === 'granted';
+  }
+
   return {
     kind: 'tauri',
     async openExternal(value) {
@@ -45,10 +67,11 @@ function createTauriRuntime(): PlatformRuntime {
       if (!target) return;
       await desktopDownload(url, target);
     },
+    prepareNotifications,
     async notify(input) {
-      const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');
-      const granted = await isPermissionGranted() || await requestPermission() === 'granted';
-      if (granted) sendNotification(input);
+      if (!await prepareNotifications()) throw new Error('系统通知权限未开启');
+      const { sendNotification } = await import('@tauri-apps/plugin-notification');
+      sendNotification({ title: input.title, body: input.body });
     },
   };
 }

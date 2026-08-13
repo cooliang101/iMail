@@ -1,6 +1,6 @@
 [package]
 name = "imail"
-version = "0.0.1"
+version = "0.0.2"
 description = "Local-first multi-account mail client and developer gateway"
 authors = ["iMail contributors"]
 license = ""
@@ -46,6 +46,7 @@ axum = { version = "=0.7.5", default-features = false }
 tower = { version = "=0.4.13", features = ["util"] }
 imail-http = { path = "../crates/imail-http" }
 imail-core = { path = "../crates/imail-core" }
+imail-oauth = { path = "../crates/imail-oauth" }
 imail-protocol = { path = "../crates/imail-protocol" }
 imail-security = { path = "../crates/imail-security" }
 imail-storage-sqlite = { path = "../crates/imail-storage-sqlite" }

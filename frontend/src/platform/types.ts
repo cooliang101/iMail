@@ -4,14 +4,16 @@ export type DownloadRequest = {
   url: string;
   filename: string;
 };
-export type DesktopNotification = {
+export type SystemNotification = {
   title: string;
   body?: string;
+  tag?: string;
 };
 
 export interface PlatformRuntime {
   kind: RuntimeKind;
   openExternal(url: string): Promise<void>;
   saveDownload(input: DownloadRequest): Promise<void>;
-  notify(input: DesktopNotification): Promise<void>;
+  prepareNotifications(): Promise<boolean>;
+  notify(input: SystemNotification): Promise<void>;
 }

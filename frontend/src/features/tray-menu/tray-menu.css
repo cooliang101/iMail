@@ -1,0 +1,29 @@
+html:has(.tray-menu-shell), body:has(.tray-menu-shell), #root:has(.tray-menu-shell) { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent !important; }
+.tray-menu-shell { box-sizing: border-box; width: 100%; height: 100%; padding: 8px; color: var(--color-text); background: transparent; font-family: var(--font-family-base, 'Segoe UI Variable Text', 'Segoe UI', sans-serif); }
+.tray-menu-panel { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid var(--color-dialog-border); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-dialog-surface) 96%, transparent); box-shadow: var(--shadow-dialog); backdrop-filter: blur(24px) saturate(1.25); }
+.tray-menu-header { display: flex; align-items: center; gap: 10px; padding: 2px 4px 12px; }
+.tray-menu-header > span:last-child, .tray-account > span:last-child { display: grid; min-width: 0; gap: 2px; text-align: left; }
+.tray-menu-header strong { font: 700 15px/1.2 var(--font-family-display); }
+.tray-menu-header small, .tray-account small { overflow: hidden; color: var(--color-text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.tray-menu-brand { display: grid; width: 34px; height: 34px; place-items: center; border-radius: var(--radius-md); color: var(--color-text-inverse); background: var(--color-accent); }
+.tray-menu-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.tray-menu-actions button, .tray-menu-more, .tray-menu-quit, .tray-account { box-sizing: border-box; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.tray-menu-actions button { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 11px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-dialog-control); }
+.tray-menu-actions button:hover { border-color: var(--color-accent); background: var(--color-dialog-control-hover); }
+.tray-menu-divider { height: 1px; margin: 10px 2px; background: var(--color-border); }
+.tray-menu-section-title { display: flex; align-items: center; justify-content: space-between; padding: 0 5px 6px; color: var(--color-text-secondary); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.tray-menu-section-title small { display: grid; min-width: 20px; height: 20px; place-items: center; border-radius: 99px; background: var(--color-accent-subtle); color: var(--color-accent); font-size: 10px; }
+.tray-account-list { display: grid; gap: 3px; max-height: 372px; overflow: auto; }
+.tray-account { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 9px; width: 100%; min-height: 48px; padding: 5px 7px; border-radius: var(--radius-md); background: transparent; }
+.tray-account:hover { background: var(--color-dialog-control-hover); }
+.tray-account strong { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.tray-provider { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-raised); color: var(--account-color); }
+.tray-provider svg { width: 20px; height: 20px; }
+.tray-provider.provider-outlook, .tray-provider.provider-hotmail { color: #0078d4; }
+.tray-provider.provider-yahoo { color: #6001d2; }
+.tray-provider.provider-custom { color: var(--account-color); }
+.tray-menu-more, .tray-menu-quit { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 32px; margin-top: 4px; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-secondary); font-size: 11px; }
+.tray-menu-more:hover { background: var(--color-dialog-control-hover); color: var(--color-accent); }
+.tray-menu-quit { justify-content: flex-start; margin: 0; padding: 0 8px; color: #c43b43; }
+.tray-menu-quit:hover { background: color-mix(in srgb, #c43b43 11%, transparent); }
+.tray-menu-empty { padding: 20px 8px; color: var(--color-text-secondary); text-align: center; font-size: 12px; }

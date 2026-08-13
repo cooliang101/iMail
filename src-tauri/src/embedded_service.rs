@@ -20,6 +20,7 @@ use imail_core::{
     ApplicationError, AuthRepository, ContentRepository,
 };
 use imail_http::{EmbeddedServiceHost, HttpAdapterConfig};
+use imail_oauth::OAuthEnvironment;
 use imail_protocol::{AccountMetadataPatch, AppPreferencesPatch};
 use imail_security::MasterKey;
 use imail_storage_sqlite::{migrate_database, SqliteAuthStore, SyncRuntimeStore};
@@ -40,6 +41,16 @@ use tokio::sync::OnceCell;
 use tower::ServiceExt;
 
 const MAX_REQUEST_BYTES: usize = 25 * 1024 * 1024;
+
+fn desktop_oauth_environment() -> OAuthEnvironment {
+    OAuthEnvironment {
+        callback_base_url: "http://127.0.0.1:0/api/oauth".into(),
+        google_client_id: option_env!("GOOGLE_OAUTH_DESKTOP_CLIENT_ID").map(str::to_owned),
+        google_client_secret: option_env!("GOOGLE_OAUTH_DESKTOP_CLIENT_SECRET").map(str::to_owned),
+        microsoft_client_id: option_env!("MICROSOFT_OAUTH_DESKTOP_CLIENT_ID").map(str::to_owned),
+        ..OAuthEnvironment::default()
+    }
+}
 
 #[derive(Debug)]
 struct EmbeddedServiceRequest {
@@ -560,8 +571,9 @@ impl EmbeddedMailServiceState {
         self.host
             .get_or_try_init(|| async move {
                 prepare_empty_data_dir(&host_data_dir)?;
-                let mut config =
-                    HttpAdapterConfig::production(host_data_dir).with_sync_worker(true);
+                let mut config = HttpAdapterConfig::production(host_data_dir)
+                    .with_sync_worker(true)
+                    .with_oauth_environment(desktop_oauth_environment());
                 config.gateway = true;
                 config.mcp = true;
                 EmbeddedServiceHost::start(config)

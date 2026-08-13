@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
   "description": "Only the bundled iMail client can use narrowly scoped desktop integrations.",
-  "windows": ["main"],
+  "windows": ["main", "tray-menu"],
   "local": true,
   "permissions": [
     "core:default",

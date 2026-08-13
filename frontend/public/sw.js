@@ -81,3 +81,16 @@ self.addEventListener('fetch', (event) => {
   }
   if (isStaticRequest(request, url)) event.respondWith(cacheFirstStatic(request));
 });
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = windows[0];
+    if (existing) {
+      await existing.focus();
+      return;
+    }
+    await self.clients.openWindow(self.registration.scope);
+  })());
+});
