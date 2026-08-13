@@ -16,3 +16,5 @@ src-tauri/icons/StoreLogo.png
 coverage/
 output/
 .playwright-cli/
+frontend/playwright-report/
+frontend/test-results/

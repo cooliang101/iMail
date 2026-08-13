@@ -17,6 +17,7 @@ export function VirtualMessageList({ messages, accounts, selectedId, ready, load
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
   const [rowPitch, setRowPitch] = useState(MESSAGE_ROW_HEIGHT);
+  const firstMessageId = messages[0]?.id;
 
   useEffect(() => {
     const update = () => setRowPitch(document.documentElement.dataset.theme === 'soft-neubrutalism' ? SOFT_NEUBRUTALISM_ROW_PITCH : MESSAGE_ROW_HEIGHT);
@@ -39,7 +40,7 @@ export function VirtualMessageList({ messages, accounts, selectedId, ready, load
   useEffect(() => {
     if (viewportRef.current) viewportRef.current.scrollTop = 0;
     setScrollTop(0);
-  }, [messages[0]?.id]);
+  }, [firstMessageId]);
 
   const { start, end } = virtualRange(messages.length, scrollTop, viewportHeight, rowPitch, MESSAGE_OVERSCAN);
 

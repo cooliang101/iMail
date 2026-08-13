@@ -407,6 +407,14 @@ impl MessageRepository for SqliteAuthStore {
             let pattern = SqlValue::Text(format!("%{text}%"));
             values.extend([pattern.clone(), pattern.clone(), pattern.clone(), pattern]);
         }
+        if let Some(cursor) = &query.cursor {
+            clauses.push("(m.received_at < ? OR (m.received_at = ? AND m.id < ?))".into());
+            values.extend([
+                SqlValue::Text(cursor.date.clone()),
+                SqlValue::Text(cursor.date.clone()),
+                SqlValue::Text(cursor.id.clone()),
+            ]);
+        }
         let from = format!(
             "FROM messages m JOIN accounts a ON a.id=m.account_id WHERE {}",
             clauses.join(" AND ")
@@ -416,7 +424,7 @@ impl MessageRepository for SqliteAuthStore {
             rusqlite::params_from_iter(values.iter()),
             |row| row.get(0),
         )?;
-        values.push(SqlValue::Integer(query.limit as i64));
+        values.push(SqlValue::Integer((query.limit + 1) as i64));
         values.push(SqlValue::Integer(query.offset as i64));
         let mut statement = self.connection.prepare(&format!(
             "SELECT m.id, m.account_id, m.mailbox, m.mailbox_role, m.uid, m.message_id,
@@ -428,12 +436,16 @@ impl MessageRepository for SqliteAuthStore {
         let rows = statement
             .query_map(rusqlite::params_from_iter(values.iter()), message_row)?
             .collect::<Result<Vec<_>, _>>()?;
+        let mut messages = rows
+            .into_iter()
+            .map(message_from_raw)
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_more = messages.len() > query.limit;
+        messages.truncate(query.limit);
         Ok(MessagePage {
-            messages: rows
-                .into_iter()
-                .map(message_from_raw)
-                .collect::<Result<_, _>>()?,
+            messages,
             total: usize::try_from(total).unwrap_or(usize::MAX),
+            has_more,
         })
     }
 

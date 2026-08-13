@@ -89,8 +89,8 @@
   --color-rail: #10231f;
   --color-text: var(--neutral-120);
   --color-text-strong: #17241f;
-  --color-text-secondary: var(--neutral-80);
-  --color-text-tertiary: var(--neutral-70);
+  --color-text-secondary: var(--neutral-90);
+  --color-text-tertiary: var(--neutral-90);
   --color-text-inverse: #f5fffc;
   --color-border: var(--neutral-50);
   --color-border-strong: var(--neutral-60);

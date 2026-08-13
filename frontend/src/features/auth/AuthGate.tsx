@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@fluentui/react-components';
 import { ArrowLeft, HardDrives, LockKey, UserCircle, UserPlus } from '@phosphor-icons/react';
 import { api } from '../../api';
@@ -24,7 +24,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [serviceSettingsOpen, setServiceSettingsOpen] = useState(false);
   const serviceCheckRunner = useRef(createLatestServiceCheckRunner()).current;
 
-  async function checkSession() {
+  const checkSession = useCallback(async () => {
     await serviceCheckRunner.run(() => runWithReadySelectedService({
         mode: configuredServiceMode(),
         serviceUrl: configuredServiceUrl(),
@@ -40,18 +40,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
       },
       onSettled() { setChecking(false); },
     });
-  }
-  useEffect(() => { void checkSession(); }, []);
+  }, [serviceCheckRunner]);
+  useEffect(() => { void checkSession(); }, [checkSession]);
   useEffect(() => {
     const serviceChanged = () => { setChecking(true); setUser(null); void checkSession(); };
     window.addEventListener('imail:service-changed', serviceChanged);
     return () => window.removeEventListener('imail:service-changed', serviceChanged);
-  }, []);
+  }, [checkSession]);
   useEffect(() => {
     const unauthorized = () => { serviceCheckRunner.cancel(); setChecking(false); setUser(null); setMode('login'); setError('登录已过期，请重新登录'); };
     window.addEventListener('imail:unauthorized', unauthorized);
     return () => window.removeEventListener('imail:unauthorized', unauthorized);
-  }, []);
+  }, [serviceCheckRunner]);
   useEffect(() => {
     if (checking || !isTauriRuntime()) return;
     void import('@tauri-apps/api/core')
@@ -59,11 +59,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
       .catch((reason) => console.error('[desktop-ready]', reason));
   }, [checking]);
 
-  async function logout() {
+  const logout = useCallback(async () => {
     serviceCheckRunner.cancel();
     await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     setUser(null); setMode('login'); setSelectedLogin(user?.login ?? ''); setError('');
-  }
+  }, [serviceCheckRunner, user?.login]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError('');
@@ -76,7 +76,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     finally { setBusy(false); }
   }
 
-  const context = useMemo(() => user ? { user, logout } : null, [user]);
+  const context = useMemo(() => user ? { user, logout } : null, [logout, user]);
   if (checking) return <main className="auth-loading"><BrandLogo label="iMail" /><span>正在检查登录状态…</span></main>;
   if (user && context) return <AuthContext.Provider value={context}>{children}</AuthContext.Provider>;
 

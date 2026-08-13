@@ -107,7 +107,7 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .sidebar-heading strong { font: 700 17px/1 var(--font-family-display); letter-spacing: -.03em; display: block; }
 .sidebar-heading span { display: block; color: var(--color-text-tertiary); font-size: 11px; margin-top: 6px; }
 .mobile-close { display: none; }
-.compose-button { width: 100%; min-height: 43px; border-radius: 12px !important; background: var(--accent) !important; font-weight: 600 !important; box-shadow: 0 8px 22px #168f7822; }
+.compose-button { width: 100%; min-height: 43px; border-radius: 12px !important; background: var(--accent-dark) !important; font-weight: 600 !important; box-shadow: 0 8px 22px #168f7822; }
 .mobile-account-controls { display: none; }
 .nav-block { margin-top: 19px; display: grid; gap: 4px; }
 .nav-block button, .developer-entry { width: 100%; border: 0; background: transparent; border-radius: 10px; min-height: 39px; padding: 0 10px; display: grid; grid-template-columns: 21px 1fr auto; gap: 9px; align-items: center; text-align: left; color: var(--color-text-secondary); cursor: pointer; font-size: 13px; }

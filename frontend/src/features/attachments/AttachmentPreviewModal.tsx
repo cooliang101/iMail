@@ -99,7 +99,7 @@ function ResourceViewer({ resource }: { resource: SelectedResource }) {
       .then((value) => { revoke = value.revoke; if (active) setSource(value.url); else revoke(); })
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : '附件内容读取失败'); });
     return () => { active = false; revoke(); };
-  }, [platform.kind, resource.contentType, resource.path]);
+  }, [platform.kind, resource.contentType, resource.kind, resource.path]);
 
   if (resource.kind === 'unsupported') return <PreviewUnsupported />;
   if (error) return <div className="attachment-preview-status error"><WarningCircle size={34} /><strong>附件内容读取失败</strong><span>{error}</span></div>;

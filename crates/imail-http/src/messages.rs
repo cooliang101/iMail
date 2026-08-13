@@ -12,12 +12,13 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::{SecondsFormat, Utc};
 use imail_core::contacts::{contact_logo_keys, PublicSuffixDomainResolver};
 use imail_core::{
     accounts::AccountSecretCodec,
     mail_operations::{MailApplicationError, MailApplicationService},
-    messages::{MessageQuery, MessageQueryService},
+    messages::{GatewayMessageCursor, MessageQuery, MessageQueryService},
     notifications::MailOverviewService,
     oauth_refresh::RefreshingConnectionService,
     ApplicationError, ContentRepository, LogoFetchAttemptRecord,
@@ -79,6 +80,7 @@ struct MessageQueryInput {
     label: Option<String>,
     limit: Option<String>,
     offset: Option<String>,
+    cursor: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -87,6 +89,7 @@ struct MessagesBody {
     messages: Vec<Value>,
     total: usize,
     next_offset: usize,
+    next_cursor: Option<String>,
     has_more: bool,
 }
 
@@ -112,6 +115,7 @@ pub fn embedded_message_query(
         label: fields.get("label").cloned(),
         limit: fields.get("limit").cloned(),
         offset: fields.get("offset").cloned(),
+        cursor: fields.get("cursor").cloned(),
     })
     .map_err(|_| "请求参数无效")
 }
@@ -122,6 +126,7 @@ pub fn embedded_message_page(
     contacts: &[ContactReadModel],
 ) -> Value {
     let logos = contact_map(contacts);
+    let has_more = page.has_more;
     let messages = page
         .messages
         .into_iter()
@@ -129,7 +134,8 @@ pub fn embedded_message_page(
         .collect::<Vec<_>>();
     json!({
         "nextOffset": query.offset.saturating_add(messages.len()),
-        "hasMore": query.offset.saturating_add(messages.len()) < page.total,
+        "nextCursor": if has_more { messages.last().and_then(message_cursor) } else { None },
+        "hasMore": has_more,
         "messages": messages,
         "total": page.total,
     })
@@ -235,6 +241,7 @@ async fn list(
             .list_contacts(&owner)
             .map_err(ApplicationError::Repository)?;
         let logos = contact_map(&contacts);
+        let has_more = page.has_more;
         let messages = page
             .messages
             .into_iter()
@@ -242,7 +249,12 @@ async fn list(
             .collect::<Vec<_>>();
         Ok(MessagesBody {
             next_offset: query.offset.saturating_add(messages.len()),
-            has_more: query.offset.saturating_add(messages.len()) < page.total,
+            next_cursor: if has_more {
+                messages.last().and_then(message_cursor)
+            } else {
+                None
+            },
+            has_more,
             messages,
             total: page.total,
         })
@@ -1151,6 +1163,11 @@ fn validate_query(input: MessageQueryInput) -> Result<MessageQuery, ()> {
         .ok()
         .filter(|value| i64::try_from(*value).is_ok())
         .ok_or(())?;
+    let cursor = input
+        .cursor
+        .as_deref()
+        .map(decode_message_cursor)
+        .transpose()?;
     let has_named_mailbox = input.mailbox.is_some() || input.mailbox_name.is_some();
     Ok(MessageQuery {
         account_id: input.account_id,
@@ -1170,7 +1187,39 @@ fn validate_query(input: MessageQueryInput) -> Result<MessageQuery, ()> {
         label: input.label,
         limit,
         offset,
+        cursor,
     })
+}
+
+#[derive(Serialize, Deserialize)]
+struct MessageCursorValue {
+    date: String,
+    id: String,
+}
+
+fn decode_message_cursor(value: &str) -> Result<GatewayMessageCursor, ()> {
+    if value.is_empty() || value.len() > 1000 {
+        return Err(());
+    }
+    let decoded = URL_SAFE_NO_PAD.decode(value).map_err(|_| ())?;
+    let value: MessageCursorValue = serde_json::from_slice(&decoded).map_err(|_| ())?;
+    if value.date.is_empty() || value.id.is_empty() {
+        return Err(());
+    }
+    Ok(GatewayMessageCursor {
+        date: value.date,
+        id: value.id,
+    })
+}
+
+fn message_cursor(message: &Value) -> Option<String> {
+    let value = MessageCursorValue {
+        date: message.get("date")?.as_str()?.to_string(),
+        id: message.get("id")?.as_str()?.to_string(),
+    };
+    serde_json::to_vec(&value)
+        .ok()
+        .map(|bytes| URL_SAFE_NO_PAD.encode(bytes))
 }
 
 fn query_bool(value: Option<String>) -> Result<bool, ()> {

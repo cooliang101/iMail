@@ -41,7 +41,12 @@
     "rust:mail-acceptance": "cd .. && cargo run --quiet --locked -p imail-mail-network --features acceptance-oauth --bin imail-mail-acceptance",
     "rust:http-contract": "cd .. && vitest run --config frontend/vite.config.ts scripts/application-http-routes.test.ts scripts/rust-server-host.test.ts scripts/mcp-rust-sdk-interop.test.ts",
     "typecheck": "tsc -b --pretty false",
-    "test": "cd .. && vitest run --config frontend/vite.config.ts"
+    "test": "cd .. && vitest run --config frontend/vite.config.ts",
+    "lint": "eslint src vite.config.ts",
+    "test:e2e": "playwright test",
+    "test:a11y": "playwright test --grep @a11y",
+    "analyze": "npm run build && node ../scripts/check-frontend-bundle.mjs",
+    "check:frontend": "npm run typecheck && npm run lint && npm test && npm run build && node ../scripts/check-frontend-bundle.mjs"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.69.0",
@@ -62,15 +67,22 @@
     "simple-icons": "^16.27.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@eslint/js": "^9.39.5",
     "@modelcontextprotocol/client": "^2.0.0",
+    "@playwright/test": "^1.62.1",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.0.3",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.5.2",
     "concurrently": "^9.1.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "linkedom": "^0.18.13",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.67.0",
     "vite": "^7.0.0",
     "vitest": "^3.2.4"
   }

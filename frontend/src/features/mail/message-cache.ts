@@ -2,6 +2,7 @@ import type { MessageStats } from '../../app-model';
 import type { Account, Message } from '../../types';
 
 export type MessageChange = { before?: Message; after?: Message };
+export const MAX_CACHED_MESSAGE_BODIES = 24;
 
 export function reconcileMessageCache(current: Message[], incoming: Message[]) {
   const currentById = new Map(current.map((message) => [message.id, message]));
@@ -12,6 +13,23 @@ export function reconcileMessageCache(current: Message[], incoming: Message[]) {
     return JSON.stringify(cached) === JSON.stringify(merged) ? cached : merged;
   });
   return current.length === reconciled.length && current.every((message, index) => message === reconciled[index]) ? current : reconciled;
+}
+
+export function appendMessagePage(current: Message[], incoming: Message[]) {
+  const existingIds = new Set(current.map((message) => message.id));
+  const additions = incoming.filter((message) => !existingIds.has(message.id));
+  return additions.length === 0 ? current : [...current, ...additions];
+}
+
+export function cacheMessageBody(current: Message[], loaded: Message, recentBodyIds: string[], maximum = MAX_CACHED_MESSAGE_BODIES) {
+  const nextRecentIds = [loaded.id, ...recentBodyIds.filter((id) => id !== loaded.id)].slice(0, maximum);
+  const retained = new Set(nextRecentIds);
+  return {
+    recentBodyIds: nextRecentIds,
+    messages: current.map((item) => item.id === loaded.id
+      ? { ...loaded, unread: item.unread, flagged: item.flagged }
+      : item.text !== undefined && !retained.has(item.id) ? { ...item, text: undefined, html: undefined } : item),
+  };
 }
 
 export function messageMatchesQuery(message: Message, query: string, accounts: Account[], now = new Date()) {

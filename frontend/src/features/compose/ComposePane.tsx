@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type FormEvent } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@fluentui/react-components';
 import { ArrowLeft, File, PaperPlaneTilt, Trash, WarningCircle } from '@phosphor-icons/react';
 import { api } from '../../api';
@@ -38,7 +38,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
   const queuedRef = useRef(false);
   const lastSavedPayloadRef = useRef(draft ? JSON.stringify({ accountId: draft.accountId, to: draft.to, cc: draft.cc, subject: draft.subject, text: draft.text, html: draft.html, attachments: draft.attachments }) : '');
   const [saveTick, setSaveTick] = useState(0);
-  const initialHtml = useMemo(() => html, []);
+  const initialHtml = useRef(html).current;
   const toFieldRef = useRef<AddressFieldHandle>(null);
   const ccFieldRef = useRef<AddressFieldHandle>(null);
 

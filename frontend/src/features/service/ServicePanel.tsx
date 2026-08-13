@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@fluentui/react-components';
 import { CheckCircle, Cloud, FolderOpen, HardDrives, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
 import type { ServiceInfo } from '../../types';
@@ -43,7 +43,7 @@ export function ServicePanel() {
     };
   }
 
-  async function inspect(url = configuredServiceUrl()) {
+  const inspect = useCallback(async (url = configuredServiceUrl()) => {
     setError('');
     try {
       setInfo(await testServiceConnection(url, { embeddedLocal: embeddedLocal && configuredServiceMode() === 'local' }));
@@ -52,9 +52,9 @@ export function ServicePanel() {
       setError(serviceErrorMessage(reason, '服务不可用'));
       void desktopLog('warn', 'service.inspect_failed', describeDesktopLogValue(reason));
     }
-  }
+  }, [embeddedLocal]);
 
-  useEffect(() => { void inspect(); }, []);
+  useEffect(() => { void inspect(); }, [inspect]);
 
   async function activateLocal() {
     setRemoteEditorOpen(false);

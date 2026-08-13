@@ -18,12 +18,14 @@ pub struct MessageQuery {
     pub label: Option<String>,
     pub limit: usize,
     pub offset: usize,
+    pub cursor: Option<GatewayMessageCursor>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessagePage {
     pub messages: Vec<MessageReadModel>,
     pub total: usize,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

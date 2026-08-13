@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, HardDrives, Keyboard, LockKey, Palette, X } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, HardDrives, Keyboard, LockKey, Palette, Pulse, X } from '@phosphor-icons/react';
 import type { Account } from '../../types';
 import type { AppPreferences, Notice, ShortcutBindings } from '../../app-model';
 import { Overlay } from '../../components/shared';
@@ -11,13 +11,15 @@ import { GeneralPanel } from './GeneralPanel';
 import { NotificationPanel } from './NotificationPanel';
 import { PrivacyPanel } from './PrivacyPanel';
 import { ShortcutPanel } from './ShortcutPanel';
+import { SyncHealthPanel } from './SyncHealthPanel';
 import { ServicePanel } from '../service';
 
-export type SettingsTab = 'general' | 'service' | 'appearance' | 'accounts' | 'shortcuts' | 'notifications' | 'display' | 'privacy';
+export type SettingsTab = 'general' | 'service' | 'sync' | 'appearance' | 'accounts' | 'shortcuts' | 'notifications' | 'display' | 'privacy';
 
 const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof Gear }> = [
   { id: 'general', label: '通用', detail: '启动与阅读行为', icon: Gear },
   { id: 'service', label: '服务连接', detail: '本地或远程服务', icon: HardDrives },
+  { id: 'sync', label: '同步健康', detail: '任务状态与故障恢复', icon: Pulse },
   { id: 'appearance', label: '主题', detail: '界面风格与色彩', icon: Palette },
   { id: 'accounts', label: '邮箱管理', detail: '授权、代理与工作空间', icon: Envelope },
   { id: 'shortcuts', label: '快捷键', detail: '键盘操作与绑定', icon: Keyboard },
@@ -52,6 +54,7 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
         </div>
         {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'service' && <ServicePanel />}
+        {activeTab === 'sync' && <SyncHealthPanel accounts={accounts} />}
         {activeTab === 'appearance' && <AppearancePanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'accounts' && <AccountSettingsPanel accounts={accounts} onAddAccount={onAddAccount} onReload={onReload} setNotice={setNotice} />}
         {activeTab === 'shortcuts' && <ShortcutPanel bindings={bindings} onChange={onBindingsChange} />}

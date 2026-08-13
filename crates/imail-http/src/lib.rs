@@ -1523,7 +1523,7 @@ mod tests {
         assert_eq!(response.headers()[CONTENT_TYPE], "application/json");
         let body = json(response).await;
         assert_eq!(body["service"], "imail");
-        assert_eq!(body["version"], "0.0.1");
+        assert_eq!(body["version"], env!("CARGO_PKG_VERSION"));
         assert_eq!(body["protocolVersion"], 1);
         assert_eq!(body["capabilities"]["gateway"], false);
         assert_eq!(body["capabilities"]["mcp"], false);
