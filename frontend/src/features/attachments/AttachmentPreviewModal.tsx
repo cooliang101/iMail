@@ -1,3 +1,4 @@
+import '../../styles/dialogs.css';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, File, FileArchive, Image as ImageIcon, SpinnerGap, WarningCircle, X } from '@phosphor-icons/react';
 import { Overlay } from '../../components/Overlay';

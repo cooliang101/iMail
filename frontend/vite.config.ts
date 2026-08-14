@@ -14,10 +14,8 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
           if (/[\\/]node_modules[\\/](@tiptap|prosemirror-)/.test(id)) return 'editor-vendor';
-          if (/[\\/]node_modules[\\/](@fluentui|@griffel|@floating-ui|tabster)/.test(id)) return 'ui-vendor';
           if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react-vendor';
-          if (/[\\/]node_modules[\\/](@phosphor-icons|simple-icons)[\\/]/.test(id)) return 'icon-vendor';
-          return 'vendor';
+          return undefined;
         },
       },
     },

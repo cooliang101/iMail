@@ -15,12 +15,13 @@ use imail_core::{
     },
     drafts::DraftService,
     maintenance::DataMaintenanceService,
+    messages::{GatewayMessageCursor, MessageQuery},
     notifications::{build_notifications, list_labels, MailOverviewService},
     preferences::PreferencesService,
     privacy::PrivacyService,
     theme::CustomThemeService,
     AccountRecord, AccountRepository, AuthRepository, ContentRepository, DeveloperTokenRepository,
-    LogoFetchAttemptRecord, ReadOnlyRepository,
+    LogoFetchAttemptRecord, MessageRepository, ReadOnlyRepository,
 };
 use imail_protocol::{
     AccountMetadataPatch, AccountProxyUpdate, AppPreferences, AppPreferencesPatch,
@@ -235,6 +236,121 @@ impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
+}
+
+#[test]
+fn message_pagination_uses_stable_composite_indexes_at_scale() {
+    let fixture = Fixture::new(6);
+    let database_path = fixture.root.join("imail.sqlite");
+    migrate_database(&database_path).unwrap();
+    let mut connection = Connection::open(&database_path).unwrap();
+    let transaction = connection.transaction().unwrap();
+    {
+        let mut insert = transaction
+            .prepare(
+                "INSERT INTO messages (id, account_id, mailbox, mailbox_role, uid, message_id,
+              from_json, to_json, subject, preview, text_body, html_body, received_at, unread,
+              flagged, has_attachments, attachments_json, labels_json, snoozed_until)
+             VALUES (?1, 'a-first', 'INBOX', 'inbox', ?2, NULL, ?3, '[]', ?4, ?5, '', NULL,
+                     ?6, ?7, 0, 0, '[]', '[]', NULL)",
+            )
+            .unwrap();
+        for index in 2..=100_000_u32 {
+            let timestamp = format!(
+                "2026-04-{:02}T{:02}:{:02}:{:02}Z",
+                1 + index / 86_400,
+                (index / 3_600) % 24,
+                (index / 60) % 60,
+                index % 60
+            );
+            insert
+                .execute((
+                    format!("bulk-{index:06}"),
+                    i64::from(index),
+                    r#"{"name":"Scale","address":"scale@example.test"}"#,
+                    format!("Scale subject {index}"),
+                    format!("Scale preview {index}"),
+                    timestamp,
+                    i64::from(index % 5 == 0),
+                ))
+                .unwrap();
+        }
+    }
+    transaction.commit().unwrap();
+
+    let plan = connection
+        .prepare(
+            "EXPLAIN QUERY PLAN SELECT m.id FROM messages m
+         JOIN accounts a ON a.id=m.account_id
+         WHERE a.user_id=?1 AND m.account_id=?2 AND m.mailbox_role='inbox' AND m.unread=1
+           AND (m.received_at < ?3 OR (m.received_at = ?3 AND m.id < ?4))
+         ORDER BY m.received_at DESC, m.id DESC LIMIT 61",
+        )
+        .unwrap()
+        .query_map(
+            ("user-1", "a-first", "2026-04-02T00:00:00Z", "bulk-086400"),
+            |row| row.get::<_, String>(3),
+        )
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(
+        plan.iter()
+            .any(|detail| detail.contains("messages_account_role_unread_date_id")),
+        "query plan did not use the pagination index: {plan:?}"
+    );
+    assert!(
+        !plan
+            .iter()
+            .any(|detail| detail.contains("USE TEMP B-TREE FOR ORDER BY")),
+        "query plan sorts outside the index: {plan:?}"
+    );
+
+    drop(connection);
+    let store = SqliteAuthStore::open_database(&database_path).unwrap();
+    let started = std::time::Instant::now();
+    let page = store
+        .query_messages(
+            "user-1",
+            &MessageQuery {
+                account_id: Some("a-first".into()),
+                mailbox_role: Some("inbox".into()),
+                unread: true,
+                cursor: Some(GatewayMessageCursor {
+                    date: "2026-04-02T00:00:00Z".into(),
+                    id: "bulk-086400".into(),
+                }),
+                limit: 60,
+                ..MessageQuery::default()
+            },
+            "2026-08-13T00:00:00Z",
+        )
+        .unwrap();
+    assert_eq!(page.messages.len(), 60);
+    assert!(page.has_more);
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "100k-message cursor page exceeded the deterministic 2s ceiling"
+    );
+
+    let search_started = std::time::Instant::now();
+    let search = store
+        .query_messages(
+            "user-1",
+            &MessageQuery {
+                text: Some("Scale subject 99999".into()),
+                limit: 60,
+                ..MessageQuery::default()
+            },
+            "2026-08-13T00:00:00Z",
+        )
+        .unwrap();
+    assert_eq!(search.messages.len(), 1);
+    assert_eq!(search.messages[0].subject, "Scale subject 99999");
+    assert!(
+        search_started.elapsed() < Duration::from_secs(2),
+        "100k-message substring search exceeded the deterministic 2s ceiling; reassess FTS5"
+    );
 }
 
 #[test]
@@ -2099,6 +2215,12 @@ fn rust_migrates_unversioned_legacy_columns_and_owner_data_to_v6() {
         )
         .unwrap();
     assert_eq!(message, ("inbox".into(), "[]".into(), None));
+    let pagination_index: i64 = connection.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type='index' AND name='messages_account_role_unread_date_id'",
+        [],
+        |row| row.get(0),
+    ).unwrap();
+    assert_eq!(pagination_index, 1);
     let draft: (String, String) = connection
         .query_row(
             "SELECT html_body,attachments_json FROM drafts WHERE id='legacy-draft'",

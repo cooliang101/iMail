@@ -22,10 +22,11 @@ type Options = {
   setSelectedId: Dispatch<SetStateAction<string | null>>;
   setContacts: Dispatch<SetStateAction<Contact[]>>;
   setNotice: Dispatch<SetStateAction<Notice>>;
+  isMessageActionActive?: (messageId: string) => boolean;
 };
 
 export function useMessageCollection(options: Options) {
-  const { accounts, view, accountFilter, groupFilter, search, mailFilter, activeLabel, activeMailbox, selectedId, setSelectedId, setContacts, setNotice } = options;
+  const { accounts, view, accountFilter, groupFilter, search, mailFilter, activeLabel, activeMailbox, selectedId, setSelectedId, setContacts, setNotice, isMessageActionActive } = options;
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageTotal, setMessageTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -39,13 +40,16 @@ export function useMessageCollection(options: Options) {
   const accountsRef = useRef(accounts);
   const implicitSelectedIdRef = useRef<string | null>(null);
   const recentBodyIdsRef = useRef<string[]>([]);
+  const actionActiveRef = useRef(isMessageActionActive);
 
   useEffect(() => { queryRef.current = query; }, [query]);
   useEffect(() => { accountsRef.current = accounts; }, [accounts]);
+  useEffect(() => { actionActiveRef.current = isMessageActionActive; }, [isMessageActionActive]);
 
   useEffect(() => subscribeSyncEvents(['sync.completed'], (event: MessageEvent) => {
     try {
-      const changes = (JSON.parse(event.data) as { payload?: { messageChanges?: MessageChange[] } }).payload?.messageChanges ?? [];
+      const changes = ((JSON.parse(event.data) as { payload?: { messageChanges?: MessageChange[] } }).payload?.messageChanges ?? [])
+        .filter((change) => !actionActiveRef.current?.(change.after?.id ?? change.before?.id ?? ''));
       if (changes.length === 0) return;
       const currentQuery = queryRef.current;
       const currentAccounts = accountsRef.current;

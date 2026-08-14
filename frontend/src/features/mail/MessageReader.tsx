@@ -1,10 +1,11 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
 import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowLeft, ArrowRight, Clock, Code, Envelope, Eye, Star, Tag, Trash } from '@phosphor-icons/react';
 import type { Account, Message } from '../../types';
 import type { MessageBodyView } from '../../app-model';
 import { AccountProviderMark, providerLabel, SenderAvatar } from '../../components/shared';
 import { MessageBody } from './MessageBody';
-import { AttachmentList } from '../attachments/AttachmentList';
+
+const AttachmentList = lazy(() => import('../attachments/AttachmentList').then((module) => ({ default: module.AttachmentList })));
 
 export function MessageReader({ message, account, defaultBodyView, onReply, onForward, onCloseMobile, onToggleFlag, onArchive, onDelete, onSnooze, onManageLabels, onMarkUnread, onPrevious, onNext, onContextMenu, hasPrevious, hasNext, actionBusy }: {
   message?: Message; account?: Account; defaultBodyView: MessageBodyView; onReply: () => void; onForward: () => void; onCloseMobile: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onSnooze: () => void; onManageLabels: () => void; onMarkUnread: () => void; onPrevious: () => void; onNext: () => void; onContextMenu?: (message: Message, point: { x: number; y: number }) => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
@@ -28,7 +29,7 @@ export function MessageReader({ message, account, defaultBodyView, onReply, onFo
           ? <p>正在从本地缓存加载正文…</p>
           : <MessageBody text={message.text} html={message.html} subject={message.subject} view={bodyView} />}
       </div>
-      {message.attachments.length > 0 && <AttachmentList messageId={message.id} attachments={message.attachments} />}
+      {message.attachments.length > 0 && <Suspense fallback={<p className="attachments-loading">正在加载附件…</p>}><AttachmentList messageId={message.id} attachments={message.attachments} /></Suspense>}
     </div></div>
   </article>;
 }

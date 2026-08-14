@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './theme.css';
@@ -9,14 +9,15 @@ import { PlatformProvider } from './platform/runtime';
 import { registerWebServiceWorker } from './service-worker-registration';
 import { DesktopFrame } from './components/DesktopFrame';
 import { desktopLog, installDesktopLogging } from './desktop-logging';
-import { TrayMenuApp } from './features/tray-menu';
+
+const TrayMenuApp = lazy(() => import('./features/tray-menu/TrayMenuApp').then((module) => ({ default: module.TrayMenuApp })));
 
 installDesktopLogging();
 registerWebServiceWorker();
 
 const trayMenu = new URLSearchParams(window.location.search).has('tray-menu');
 createRoot(document.getElementById('root')!).render(trayMenu
-  ? <StrictMode><TrayMenuApp /></StrictMode>
+  ? <StrictMode><Suspense fallback={null}><TrayMenuApp /></Suspense></StrictMode>
   : <StrictMode>
       <PlatformProvider>
         <AppThemeProvider>

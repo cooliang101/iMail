@@ -1,3 +1,4 @@
+import '../../styles/contacts.css';
 import { Button } from '@fluentui/react-components';
 import { AddressBook, EnvelopeSimple, MagnifyingGlass } from '@phosphor-icons/react';
 import type { Contact } from '../../types';

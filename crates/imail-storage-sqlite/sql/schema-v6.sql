@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS messages (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS messages_account_date ON messages(account_id, received_at DESC);
 CREATE INDEX IF NOT EXISTS messages_date ON messages(received_at DESC);
+CREATE INDEX IF NOT EXISTS messages_date_id ON messages(received_at DESC, id DESC);
 CREATE TABLE IF NOT EXISTS contacts (
   user_id TEXT NOT NULL DEFAULT '__legacy__', address TEXT NOT NULL COLLATE NOCASE, name TEXT NOT NULL,
   message_count INTEGER NOT NULL, last_contact_at TEXT NOT NULL, logo_key TEXT, logo_content_type TEXT,

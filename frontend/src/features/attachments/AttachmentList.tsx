@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import '../../styles/attachments.css';
 import { DownloadSimple, Eye, File } from '@phosphor-icons/react';
 import type { MessageAttachment } from '../../types';
 import { usePlatform } from '../../platform/runtime';

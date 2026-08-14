@@ -1,3 +1,4 @@
+import '../../styles/compose.css';
 import { PencilSimple } from '@phosphor-icons/react';
 
 export function DraftWelcome({ onCreate }: { onCreate: () => void }) {

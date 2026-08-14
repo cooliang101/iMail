@@ -98,6 +98,7 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
         migrate_push_first_policies(&transaction)?;
         applied_versions.push(6);
     }
+    ensure_message_query_indexes(&transaction)?;
     if from_version < CURRENT_SCHEMA_VERSION {
         transaction.execute(
             "INSERT INTO metadata (key, value) VALUES ('schema_version', ?1)
@@ -131,6 +132,17 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
     };
     transaction.commit()?;
     Ok(report)
+}
+
+fn ensure_message_query_indexes(transaction: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    transaction.execute_batch(
+        "CREATE INDEX IF NOT EXISTS messages_account_role_date_id
+           ON messages(account_id, mailbox_role, received_at DESC, id DESC);
+         CREATE INDEX IF NOT EXISTS messages_account_mailbox_date_id
+           ON messages(account_id, mailbox, received_at DESC, id DESC);
+         CREATE INDEX IF NOT EXISTS messages_account_role_unread_date_id
+           ON messages(account_id, mailbox_role, unread, received_at DESC, id DESC);",
+    )
 }
 
 fn schema_version(transaction: &Transaction<'_>) -> Result<u32, MigrationError> {

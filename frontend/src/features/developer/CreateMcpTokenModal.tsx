@@ -1,3 +1,4 @@
+import '../../styles/dialogs.css';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@fluentui/react-components';
 import { Code, WarningCircle, X } from '@phosphor-icons/react';

@@ -5,15 +5,11 @@ import { buildWorkspaceFolders } from './app-selectors';
 import type { Account, Contact, DeveloperToken, Draft, Message } from './types';
 import type { AppView, ContextTarget, MailNotification, MessageStats, Notice, WorkspaceFolder } from './app-model';
 import { AppAccountRail, AppSidebar, AppTopbar, useWorkspaceNavigation } from './features/navigation';
-import { MessagePane, MessageReader, type MailListFilter, useMessageCollection } from './features/mail';
-import { DraftWelcome, DraftWorkspace } from './features/compose';
+import { applyOptimisticMessageMutation, MessageActionCoordinator, MessagePane, MessageReader, rollbackOptimisticMessageMutation, type MailListFilter, useMessageCollection } from './features/mail';
 import type { ComposePaneHandle } from './features/compose/ComposePane';
-import { ContactsWorkspace } from './features/contacts';
-import { LabelModal, NotificationsModal, SnoozeModal, WorkspaceModal } from './features/organize';
-import { CreateApiTokenModal, CreateMcpTokenModal } from './features/developer';
 import { isBrowserRefreshShortcut, isEditableShortcutTarget, shortcutDefinitions, shortcutLabel, shortcutMatches } from './features/shortcuts';
-import { AppContextMenu } from './features/context-menu';
-import { type SettingsTab, useAppPreferences } from './features/settings';
+import type { SettingsTab } from './features/settings/SettingsModal';
+import { useAppPreferences } from './features/settings/useAppPreferences';
 import { useAuth } from './features/auth';
 import { useAppTheme } from './features/appearance';
 import { subscribeDesktopAccountSelection, subscribeDesktopCompose, updateDesktopTrayMenu } from './platform/desktop-events';
@@ -21,8 +17,18 @@ import { useNewMailNotifications } from './features/notifications';
 
 const AddAccountModal = lazy(() => import('./features/accounts/AddAccountModal').then((module) => ({ default: module.AddAccountModal })));
 const ComposePane = lazy(() => import('./features/compose/ComposePane').then((module) => ({ default: module.ComposePane })));
+const ContactsWorkspace = lazy(() => import('./features/contacts/ContactsWorkspace').then((module) => ({ default: module.ContactsWorkspace })));
+const CreateApiTokenModal = lazy(() => import('./features/developer/CreateApiTokenModal').then((module) => ({ default: module.CreateApiTokenModal })));
+const CreateMcpTokenModal = lazy(() => import('./features/developer/CreateMcpTokenModal').then((module) => ({ default: module.CreateMcpTokenModal })));
+const DraftWelcome = lazy(() => import('./features/compose/DraftWelcome').then((module) => ({ default: module.DraftWelcome })));
+const DraftWorkspace = lazy(() => import('./features/compose/DraftWorkspace').then((module) => ({ default: module.DraftWorkspace })));
+const LabelModal = lazy(() => import('./features/organize/LabelModal').then((module) => ({ default: module.LabelModal })));
+const NotificationsModal = lazy(() => import('./features/organize/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const SettingsModal = lazy(() => import('./features/settings/SettingsModal').then((module) => ({ default: module.SettingsModal })));
+const SnoozeModal = lazy(() => import('./features/organize/SnoozeModal').then((module) => ({ default: module.SnoozeModal })));
 const TokenWorkspace = lazy(() => import('./features/developer/TokenWorkspace').then((module) => ({ default: module.TokenWorkspace })));
+const WorkspaceModal = lazy(() => import('./features/organize/WorkspaceModal').then((module) => ({ default: module.WorkspaceModal })));
+const AppContextMenu = lazy(() => import('./features/context-menu/AppContextMenu').then((module) => ({ default: module.AppContextMenu })));
 
 function FeatureFallback({ label }: { label: string }) {
   return <div className="feature-loading" role="status">正在加载{label}…</div>;
@@ -63,6 +69,7 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const folderDiscoveryStarted = useRef(false);
   const composePaneRef = useRef<ComposePaneHandle | null>(null);
+  const messageActionsRef = useRef(new MessageActionCoordinator());
 
   const accounts = realAccounts;
   const { messages, setMessages: setRealMessages, messageTotal, setMessageTotal, hasMore: messagesHasMore, loading: messagesLoading, ready, setRevision: setMessageRevision, stats: messageStats, setStats: setMessageStats, selected, loadMore: loadMoreMessages } = useMessageCollection({
@@ -78,6 +85,7 @@ function App() {
     setSelectedId,
     setContacts,
     setNotice,
+    isMessageActionActive: (messageId) => messageActionsRef.current.isActive(messageId),
   });
   useNewMailNotifications(preferences.notificationKinds.unread);
 
@@ -176,34 +184,40 @@ function App() {
   }
 
   async function setMessageUnread(message: Message, unread: boolean) {
-    if (message.unread === unread) return;
-    setRealMessages((current) => current.map((item) => item.id === message.id ? { ...item, unread } : item));
-    if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current + (unread ? 1 : -1)));
-    if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, unread ? 1 : -1);
-    try {
-      await api(`/api/messages/${message.id}`, { method: 'PATCH', body: JSON.stringify({ unread }) });
-      setNotice({ kind: 'success', text: unread ? '邮件已标记为未读' : '邮件已标记为已读' });
-    } catch (error) {
-      setRealMessages((current) => current.map((item) => item.id === message.id ? { ...item, unread: !unread } : item));
-      if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current + (unread ? -1 : 1)));
-      if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, unread ? -1 : 1);
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '已读状态更新失败' });
-    }
+    if (message.unread === unread || messageActionsRef.current.isActive(message.id)) return;
+    await messageActionsRef.current.run(message.id, async () => {
+      setMessageActionBusy(true);
+      setRealMessages((current) => applyOptimisticMessageMutation(current, message.id, { unread }));
+      if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current + (unread ? 1 : -1)));
+      if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, unread ? 1 : -1);
+      try {
+        await api(`/api/messages/${message.id}`, { method: 'PATCH', body: JSON.stringify({ unread }) });
+        setNotice({ kind: 'success', text: unread ? '邮件已标记为未读' : '邮件已标记为已读' });
+      } catch (error) {
+        setRealMessages((current) => rollbackOptimisticMessageMutation(current, message.id, { unread }, { unread: message.unread }));
+        if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current + (unread ? -1 : 1)));
+        if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, unread ? -1 : 1);
+        setNotice({ kind: 'error', text: error instanceof Error ? error.message : '已读状态更新失败' });
+      } finally { setMessageRevision((value) => value + 1); setMessageActionBusy(false); }
+    });
   }
 
   async function markSelectedUnread() { if (selected) await setMessageUnread(selected, true); }
 
   async function toggleSelectedFlag(target = selected) {
-    if (!target) return;
+    if (!target || messageActionsRef.current.isActive(target.id)) return;
     const flagged = !target.flagged;
-    setRealMessages((current) => current.map((message) => message.id === target.id ? { ...message, flagged } : message));
-    try {
-      await api(`/api/messages/${target.id}`, { method: 'PATCH', body: JSON.stringify({ flagged }) });
-      if (view === 'starred' && !flagged) setMessageRevision((value) => value + 1);
-    } catch (error) {
-      setRealMessages((current) => current.map((message) => message.id === target.id ? { ...message, flagged: !flagged } : message));
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '星标更新失败' });
-    }
+    await messageActionsRef.current.run(target.id, async () => {
+      setMessageActionBusy(true);
+      setRealMessages((current) => applyOptimisticMessageMutation(current, target.id, { flagged }));
+      try {
+        await api(`/api/messages/${target.id}`, { method: 'PATCH', body: JSON.stringify({ flagged }) });
+        if (view === 'starred' && !flagged) setMessageRevision((value) => value + 1);
+      } catch (error) {
+        setRealMessages((current) => rollbackOptimisticMessageMutation(current, target.id, { flagged }, { flagged: target.flagged }));
+        setNotice({ kind: 'error', text: error instanceof Error ? error.message : '星标更新失败' });
+      } finally { setMessageRevision((value) => value + 1); setMessageActionBusy(false); }
+    });
   }
 
   function adjustMessageStats(accountId: string, totalDelta: number, unreadDelta: number) {
@@ -223,19 +237,11 @@ function App() {
     const message = messages.find((item) => item.id === id);
     if (!message?.unread || !preferences.markReadOnOpen) return;
 
-    setRealMessages((current) => current.map((item) => item.id === id ? { ...item, unread: false } : item));
-    if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current - 1));
-    if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, -1);
-    void api(`/api/messages/${id}`, { method: 'PATCH', body: JSON.stringify({ unread: false }) }).catch((error) => {
-      setRealMessages((current) => current.map((item) => item.id === id ? { ...item, unread: true } : item));
-      if (mailFilter === 'unread') setMessageTotal((current) => current + 1);
-      if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, 1);
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件已读状态更新失败' });
-    });
+    void setMessageUnread(message, false);
   }
 
   async function moveSelected(destination: 'archive' | 'trash', target = selected) {
-    if (!target || messageActionBusy) return;
+    if (!target || messageActionBusy || !messageActionsRef.current.begin(target.id)) return;
     const message = target;
     const index = messages.findIndex((item) => item.id === message.id);
     const nextId = messages[index + 1]?.id ?? messages[index - 1]?.id ?? null;
@@ -262,20 +268,20 @@ function App() {
 
   useEffect(() => {
     if (!pendingMove) return;
-    let cancelled = false;
     const timer = window.setTimeout(() => {
       const move = pendingMove;
       setPendingMove(null);
       void api(`/api/messages/${move.message.id}/move`, { method: 'POST', body: JSON.stringify({ destination: move.destination }) }).then(() => {
-        if (!cancelled) setNotice({ kind: 'success', text: move.destination === 'archive' ? '邮件已归档' : '邮件已移至垃圾箱' });
+        setNotice({ kind: 'success', text: move.destination === 'archive' ? '邮件已归档' : '邮件已移至垃圾箱' });
       }).catch((error) => {
-        if (!cancelled) {
-          restorePendingMove(move);
-          setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件移动失败' });
-        }
-      }).finally(() => { if (!cancelled) setMessageActionBusy(false); });
+        restorePendingMove(move);
+        setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件移动失败' });
+      }).finally(() => {
+        messageActionsRef.current.end(move.message.id);
+        setMessageRevision((value) => value + 1); setMessageActionBusy(false);
+      });
     }, 4500);
-    return () => { cancelled = true; window.clearTimeout(timer); };
+    return () => window.clearTimeout(timer);
   }, [pendingMove]);
 
   function undoPendingMove() {
@@ -283,6 +289,7 @@ function App() {
     const move = pendingMove;
     setPendingMove(null);
     restorePendingMove(move);
+    messageActionsRef.current.end(move.message.id);
     setNotice({ kind: 'success', text: '已撤销邮件移动' });
   }
 
@@ -368,10 +375,10 @@ function App() {
     <main className="workspace">
       <AppTopbar sidebarCollapsed={sidebarCollapsed} sidebarOpen={sidebarOpen} search={search} searchPlaceholder={view === 'contacts' ? '搜索联系人姓名或邮箱' : '搜索当前范围内的邮件'} searchShortcut={shortcutLabel(shortcutBindings.focusSearch)} searchInputRef={searchInputRef} onToggleSidebar={() => setSidebarCollapsed((current) => !current)} onOpenMobileSidebar={() => setSidebarOpen(true)} onSearchChange={setSearch} onNotifications={() => void openNotifications()} />
 
-      {view === 'contacts' ? <ContactsWorkspace contacts={contacts} search={search} onCompose={(contact) => openCompose(activeAccount?.id, [contact.address])} /> : view === 'tokens' ? <Suspense fallback={<FeatureFallback label="外部接入" />}><TokenWorkspace accounts={realAccounts} tokens={tokens} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /></Suspense> :
+      {view === 'contacts' ? <Suspense fallback={<FeatureFallback label="联系人" />}><ContactsWorkspace contacts={contacts} search={search} onCompose={(contact) => openCompose(activeAccount?.id, [contact.address])} /></Suspense> : view === 'tokens' ? <Suspense fallback={<FeatureFallback label="外部接入" />}><TokenWorkspace accounts={realAccounts} tokens={tokens} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /></Suspense> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
-          {view === 'drafts' ? <DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /> : <MessagePane title={groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddOpen(true)} />}
-          {composeMode ? <Suspense fallback={<FeatureFallback label="写信编辑器" />}><ComposePane ref={composePaneRef} key={`${composeMode}-${(activeDraft?.id ?? selected?.id ?? composeAccountId ?? composeInitialTo.join(',')) || 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} initialAccountId={composeAccountId} initialTo={composeInitialTo} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /></Suspense> : view === 'drafts' && !selected ? <DraftWelcome onCreate={() => openCompose(activeAccount?.id)} /> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} defaultBodyView={preferences.defaultMessageView} onReply={() => { setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
+          {view === 'drafts' ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /></Suspense> : <MessagePane title={groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddOpen(true)} />}
+          {composeMode ? <Suspense fallback={<FeatureFallback label="写信编辑器" />}><ComposePane ref={composePaneRef} key={`${composeMode}-${(activeDraft?.id ?? selected?.id ?? composeAccountId ?? composeInitialTo.join(',')) || 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} initialAccountId={composeAccountId} initialTo={composeInitialTo} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /></Suspense> : view === 'drafts' && !selected ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWelcome onCreate={() => openCompose(activeAccount?.id)} /></Suspense> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} defaultBodyView={preferences.defaultMessageView} onReply={() => { setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('forward'); }} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}
@@ -382,14 +389,14 @@ function App() {
     </main>
 
     {addOpen && <Suspense fallback={<FeatureFallback label="邮箱接入" />}><AddAccountModal accounts={accounts} onClose={() => setAddOpen(false)} onAdded={async (result) => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice(result?.warning ? { kind: 'error', text: `授权已保存，连接验证失败：${result.warning}` } : { kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} /></Suspense>}
-    {tokenOpen === 'api' && <CreateApiTokenModal accounts={realAccounts} onClose={() => setTokenOpen(null)} onCreated={load} />}
-    {tokenOpen === 'mcp' && <CreateMcpTokenModal onClose={() => setTokenOpen(null)} onCreated={load} />}
+    {tokenOpen === 'api' && <Suspense fallback={<FeatureFallback label="访问令牌" />}><CreateApiTokenModal accounts={realAccounts} onClose={() => setTokenOpen(null)} onCreated={load} /></Suspense>}
+    {tokenOpen === 'mcp' && <Suspense fallback={<FeatureFallback label="MCP 令牌" />}><CreateMcpTokenModal onClose={() => setTokenOpen(null)} onCreated={load} /></Suspense>}
     {settingsTab && <Suspense fallback={<FeatureFallback label="设置" />}><SettingsModal initialTab={settingsTab} accounts={realAccounts} preferences={preferences} bindings={shortcutBindings} onPreferencesChange={savePreferences} onBindingsChange={saveShortcutBindings} onAddAccount={() => { setSettingsTab(null); setAddOpen(true); }} onClose={() => setSettingsTab(null)} onReload={load} setNotice={setNotice} /></Suspense>}
-    {notificationsOpen && <NotificationsModal notifications={notifications} accounts={accounts} onClose={() => setNotificationsOpen(false)} onOpenMessage={(notification) => { setNotificationsOpen(false); if (notification.accountId) setAccountFilter(notification.accountId); setView('inbox'); setSelectedId(notification.messageId ?? null); }} />}
-    {labelOpen && selected && <LabelModal message={selected} knownLabels={labels} onClose={() => setLabelOpen(false)} onSave={(next) => { setLabelOpen(false); void updateSelectedLocal({ labels: next }, '邮件标签已更新'); }} />}
-    {snoozeOpen && selected && <SnoozeModal onClose={() => setSnoozeOpen(false)} onSave={(until) => { setSnoozeOpen(false); void updateSelectedLocal({ snoozedUntil: until }, until ? '邮件已移到稍后处理' : '邮件已返回收件箱'); }} />}
-    {workspaceOpen !== undefined && <WorkspaceModal accounts={accounts} workspace={workspaceOpen ?? undefined} onClose={() => setWorkspaceOpen(undefined)} onSaved={async () => { setWorkspaceOpen(undefined); await load(); setNotice({ kind: 'success', text: '工作空间已更新' }); }} />}
-    {contextTarget && <AppContextMenu target={contextTarget} bindings={shortcutBindings} messages={messages} accounts={accounts} activeAccountId={activeAccount?.id} onClose={() => setContextTarget(null)} actions={{
+    {notificationsOpen && <Suspense fallback={<FeatureFallback label="通知" />}><NotificationsModal notifications={notifications} accounts={accounts} onClose={() => setNotificationsOpen(false)} onOpenMessage={(notification) => { setNotificationsOpen(false); if (notification.accountId) setAccountFilter(notification.accountId); setView('inbox'); setSelectedId(notification.messageId ?? null); }} /></Suspense>}
+    {labelOpen && selected && <Suspense fallback={<FeatureFallback label="标签" />}><LabelModal message={selected} knownLabels={labels} onClose={() => setLabelOpen(false)} onSave={(next) => { setLabelOpen(false); void updateSelectedLocal({ labels: next }, '邮件标签已更新'); }} /></Suspense>}
+    {snoozeOpen && selected && <Suspense fallback={<FeatureFallback label="稍后处理" />}><SnoozeModal onClose={() => setSnoozeOpen(false)} onSave={(until) => { setSnoozeOpen(false); void updateSelectedLocal({ snoozedUntil: until }, until ? '邮件已移到稍后处理' : '邮件已返回收件箱'); }} /></Suspense>}
+    {workspaceOpen !== undefined && <Suspense fallback={<FeatureFallback label="工作空间" />}><WorkspaceModal accounts={accounts} workspace={workspaceOpen ?? undefined} onClose={() => setWorkspaceOpen(undefined)} onSaved={async () => { setWorkspaceOpen(undefined); await load(); setNotice({ kind: 'success', text: '工作空间已更新' }); }} /></Suspense>}
+    {contextTarget && <Suspense fallback={null}><AppContextMenu target={contextTarget} bindings={shortcutBindings} messages={messages} accounts={accounts} activeAccountId={activeAccount?.id} onClose={() => setContextTarget(null)} actions={{
       openMessage: (id) => void selectMessage(id),
       reply: () => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); },
       forward: () => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); },
@@ -398,7 +405,7 @@ function App() {
       openAccount: (id) => selectScope('inbox', id), compose: openCompose, syncAccount: (id) => void syncAccount(id), accountSettings: () => setSettingsTab('accounts'),
       openWorkspace: (group) => selectScope('inbox', 'all', group), syncWorkspace: (group) => void syncWorkspace(group), editWorkspace: setWorkspaceOpen,
       openFolder: selectMailbox, syncFolder: (folder) => void syncFolder(folder), syncCurrent: () => void syncAll(), shortcutSettings: () => setSettingsTab('shortcuts'),
-    }} />}
+    }} /></Suspense>}
   </div>;
 }
 

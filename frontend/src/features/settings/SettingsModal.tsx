@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import '../../styles/dialogs.css';
+import '../../styles/settings.css';
 import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, HardDrives, Keyboard, LockKey, Palette, Pulse, X } from '@phosphor-icons/react';
 import type { Account } from '../../types';
 import type { AppPreferences, Notice, ShortcutBindings } from '../../app-model';
