@@ -7,7 +7,7 @@ import { CustomThemeEditor } from './CustomThemeEditor';
 
 export function AppearancePanel({ preferences, onChange }: { preferences: AppPreferences; onChange: (value: AppPreferences) => void }) {
   return <section className="settings-feature-panel">
-    <PanelHeading eyebrow="界面个性" title="主题" description="选择一套完整视觉语言并立即应用。自定义主题只保存在当前设备。" syncNote={false} />
+    <PanelHeading eyebrow="界面个性" title="主题" description="选择一套完整视觉语言并立即应用；内置主题和安全自定义主题都会同步到服务端。" />
     <div className="settings-panel-body">
       <div className="theme-choice-grid" role="radiogroup" aria-label="应用主题">
         {themeOptions.map((theme) => {

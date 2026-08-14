@@ -57,6 +57,13 @@ export const themeOptions: Array<{
     colors: ['#34303a', '#c891c8', '#a9ddcf', '#fff4d6'],
   },
   {
+    id: 'constructivist-red',
+    name: '构成红',
+    eyebrow: '苏联构成主义',
+    description: '革命红、宣纸米白与煤黑形成强烈对照，以斜切几何、硬边框和工业排版强化秩序感。',
+    colors: ['#24201e', '#c42a22', '#e9c9bf', '#f5eedb'],
+  },
+  {
     id: 'custom',
     name: '自定义主题',
     eyebrow: '你的配色',

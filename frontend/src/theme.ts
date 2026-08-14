@@ -29,6 +29,12 @@ const brands: Record<BuiltInThemeId, BrandVariants> = {
     90: '#c794c8', 100: '#d3a8d3', 110: '#debade', 120: '#e7cce7',
     130: '#efddef', 140: '#f5eaf5', 150: '#faf4fa', 160: '#fdfafd',
   },
+  'constructivist-red': {
+    10: '#230505', 20: '#3a0808', 30: '#560d0c', 40: '#721110',
+    50: '#8f1715', 60: '#aa201c', 70: '#c42a22', 80: '#d63a2f',
+    90: '#e05245', 100: '#e96f60', 110: '#ef8d7d', 120: '#f4aa9d',
+    130: '#f7c5bb', 140: '#faded7', 150: '#fcefeb', 160: '#fff9f7',
+  },
 };
 
 export const imailFontFamily = "'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif";

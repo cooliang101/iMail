@@ -32,7 +32,7 @@
     {
       "name": "settings_update",
       "title": "更新 iMail 设置",
-      "description": "更新主题、启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。",
+      "description": "更新内置或安全自定义主题、启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -43,8 +43,30 @@
               "mint-fresh",
               "tech",
               "business-blue",
-              "soft-neubrutalism"
+              "soft-neubrutalism",
+              "constructivist-red",
+              "custom"
             ]
+          },
+          "customTheme": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "canvas": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "surface": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "surfaceSubtle": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "rail": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "text": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "textSecondary": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "border": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "accent": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "accentSubtle": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "radius": { "type": "string", "enum": ["compact", "balanced", "rounded"] },
+              "shadow": { "type": "string", "enum": ["none", "soft", "offset"] },
+              "typography": { "type": "string", "enum": ["system", "technical", "rounded"] }
+            },
+            "required": ["name", "canvas", "surface", "surfaceSubtle", "rail", "text", "textSecondary", "border", "accent", "accentSubtle", "radius", "shadow", "typography"],
+            "additionalProperties": false
           },
           "startupView": {
             "type": "string",
@@ -139,7 +161,7 @@
     {
       "name": "theme_custom_get",
       "title": "读取自定义主题",
-      "description": "读取当前应用账号由 MCP 保存的安全自定义主题令牌，可复制到 iMail 自定义主题编辑器中。",
+      "description": "读取当前应用账号保存的安全自定义主题令牌，与 iMail 设置偏好共用同一份用户数据。",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -153,7 +175,7 @@
     {
       "name": "theme_custom_update",
       "title": "保存自定义主题",
-      "description": "校验并保存颜色、圆角、阴影和字体令牌；不接受 CSS、URL 或可执行内容，也不经过 HTTP 网关。",
+      "description": "校验并保存颜色、圆角、阴影和字体令牌；与 iMail 设置偏好共用用户数据，不接受 CSS、URL 或可执行内容。",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",

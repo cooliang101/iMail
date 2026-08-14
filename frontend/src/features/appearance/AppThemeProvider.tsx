@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useLayoutEffect, useMemo, useState } from 'react';
 import { FluentProvider } from '@fluentui/react-components';
 import type { AppThemeId, CustomThemeDefinition } from '../../app-model';
 import { appThemes } from '../../theme';
@@ -27,17 +27,17 @@ function readInitialCustomTheme() {
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const [themeId, setThemeState] = useState<AppThemeId>(readInitialTheme);
   const [customTheme, setCustomTheme] = useState<CustomThemeDefinition>(readInitialCustomTheme);
-
-  const setTheme = (next: AppThemeId, nextCustomTheme: CustomThemeDefinition) => {
+  const setTheme = useCallback((next: AppThemeId, nextCustomTheme: CustomThemeDefinition) => {
     const normalized = normalizeThemeId(next);
     const normalizedCustomTheme = normalizeCustomTheme(nextCustomTheme);
-    setThemeState(normalized);
-    setCustomTheme(normalizedCustomTheme);
+    const serializedCustomTheme = JSON.stringify(normalizedCustomTheme);
     localStorage.setItem(themeStorageKey, normalized);
-    localStorage.setItem(customThemeStorageKey, JSON.stringify(normalizedCustomTheme));
-  };
+    localStorage.setItem(customThemeStorageKey, serializedCustomTheme);
+    setThemeState((current) => current === normalized ? current : normalized);
+    setCustomTheme((current) => JSON.stringify(current) === serializedCustomTheme ? current : normalizedCustomTheme);
+  }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const customVariables = customThemeCssVariables(customTheme);
     document.documentElement.dataset.theme = themeId;
     document.documentElement.dataset.customShadow = customTheme.shadow;

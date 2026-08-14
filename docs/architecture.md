@@ -30,7 +30,7 @@ HTTP 会话、API 网关 Token 与 MCP 授权码都会恢复同一个服务端�
 
 用户作用域存储门面缺少上下文时直接失败，不再回退到全量数据。Worker、调度器和 IDLE 监听必须通过名称明确的 `readAllStore` 进入全局读取作用域；后台 OAuth 刷新只允许按全局唯一账户 ID 定向更新状态或密钥，不提供通用全局快照写入，避免普通请求因上下文遗漏跨租户读取。
 
-设置中心使用同一用户上下文，将 `app_preferences_v1` 保存为 `metadata` 中的用户命名空间键。HTTP `preferences` 路由和 MCP `settings_get` / `settings_update` 继续负责内置主题、启动、阅读、通知、邮件展示与快捷键设置。自定义主题不扩展 HTTP schema：客户端以用户作用域的本地偏好保存完整安全令牌，向 `/api/preferences` 发送时剔除 `customTheme`，选择 `custom` 时也不发送主题 ID。MCP 的 `theme_custom_get` / `theme_custom_update` 使用独立的用户命名空间键 `mcp_custom_theme_v1`，返回的 JSON 可导入客户端，但不会经 HTTP 网关自动下发。
+设置中心使用同一用户上下文，将 `app_preferences_v1` 保存为 `metadata` 中的用户命名空间键。HTTP `preferences` 路由和 MCP `settings_get` / `settings_update` 负责主题、启动、阅读、通知、邮件展示与快捷键设置。`customTheme` 只接受九个 `#RRGGBB` 安全颜色和受限的圆角、阴影、字体枚举；客户端保留用户作用域本地缓存，同时通过偏好接口同步。MCP 的 `theme_custom_get` / `theme_custom_update` 与偏好接口共用用户命名空间键 `mcp_custom_theme_v1`，两条控制面读取同一份安全主题令牌。
 
 “设置 → 隐私与数据”的敏感操作只走登录会话保护的应用入口：本地模式使用类型化 Tauri command，远程/Web 模式使用应用 HTTP API。授权导出必须先用当前 iMail 密码重新验证身份，再以用户单独提供的导出密码通过 scrypt 派生密钥，并使用 AES-256-GCM 加密当前用户的邮箱连接配置、应用专用密码/OAuth Token 和代理凭据。服务只在内存中保留与该用户绑定的单次下载两分钟；文件不包含邮件、附件、草稿、联系人或 iMail 登录密码。该导出能力不出现在 API Gateway 或 MCP 中。
 
@@ -92,7 +92,7 @@ Agent
 - `imail-core`、`imail-mail` 与 `imail-storage-sqlite`：HTTP、MCP 与 Tauri 共用的领域行为。
 
 账户可选的 `http`、`https`、`socks5` 代理由 `imail-mail-network` 统一注入 IMAP 与 SMTP 连接，因此连接测试、同步、远程邮件操作、附件下载和发信遵循同一邮箱配置。SQLite schema v5 为 `accounts` 增加可空的 `proxy_json`，持久化协议、主机、端口和可选用户名；v4 升级只添加该列，不改写已有账户。代理密码继续合并进加密凭据载荷，公开账户视图和 MCP 输出不返回密码。关闭代理时同时清除 `proxy_json` 和加密载荷中的代理密码，备份/恢复按 schema v5 保留两部分。
-- `crates/imail-core/src/theme.rs` 与 `crates/imail-http/src/mcp.rs`：校验并按应用用户保存 MCP 自定义主题令牌；与 HTTP preferences schema 隔离。
+- `crates/imail-core/src/theme.rs`、`crates/imail-core/src/preferences.rs` 与 `crates/imail-http/src/mcp.rs`：校验并按应用用户保存自定义主题令牌，供 HTTP preferences 与 MCP 控制面共同使用。
 - `crates/imail-core/src/developer_tokens.rs`、`crates/imail-storage-sqlite/src/developer_tokens.rs` 与 `imail-security`：生成和验证高熵授权码、SHA-256 哈希、过期、撤销与用户作用域。
 
 ### 权限模型

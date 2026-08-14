@@ -72,11 +72,11 @@ Authorization: Bearer imail_mcp_xxx
 | 草稿 | `draft_save` / `draft_delete` | 新建、覆盖或删除本地草稿 |
 | 整理 | `labels_list` / `notifications_list` | 标签与连接/未读/稍后通知 |
 
-`settings_update.theme` 接受 `mint-fresh`、`tech`、`business-blue` 或 `soft-neubrutalism`；未提供该字段时保持当前主题。
+`settings_update.theme` 接受 `mint-fresh`、`tech`、`business-blue`、`soft-neubrutalism` 或 `constructivist-red`；未提供该字段时保持当前主题。
 
 应用界面的图片、PDF、视频和 ZIP 安全预览使用短期登录会话 API，不属于 MCP 控制面。MCP 调用方继续使用 `attachment_download` 获取原始 Base64 内容，并自行决定后续展示方式。
 
-`theme_custom_update` 接受 9 个 `#RRGGBB` 颜色字段以及受限的圆角、阴影和字体枚举。它使用独立的 MCP 用户存储，不扩展 `/api/preferences` HTTP 网关；返回的 `theme` JSON 可直接粘贴到“设置 → 主题 → 自定义主题”。完整生成约束见 [`custom-theme.md`](custom-theme.md)。
+`theme_custom_update` 接受 9 个 `#RRGGBB` 颜色字段以及受限的圆角、阴影和字体枚举。它与 `/api/preferences` 的 `customTheme` 共用用户级安全主题存储；返回的 `theme` JSON 可直接粘贴到“设置 → 主题 → 自定义主题”。两条控制面都拒绝任意 CSS、URL、透明色与额外字段。完整生成约束见 [`custom-theme.md`](custom-theme.md)。
 
 ## 4. 推荐工作流
 

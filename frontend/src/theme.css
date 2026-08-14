@@ -262,6 +262,52 @@
   --shadow-lg: 0 28px 80px rgb(11 18 23 / 32%);
 }
 
+[data-theme='constructivist-red'] {
+  --font-family-display: 'Arial Narrow', 'Bahnschrift SemiCondensed', 'Segoe UI Variable Display', 'Microsoft YaHei UI', sans-serif;
+  --letter-spacing-heading: -0.045em;
+  --letter-spacing-label: 0.09em;
+  --brand-10: #230505; --brand-20: #3a0808; --brand-30: #560d0c; --brand-40: #721110;
+  --brand-50: #8f1715; --brand-60: #aa201c; --brand-70: #c42a22; --brand-80: #d63a2f;
+  --brand-90: #e05245; --brand-100: #e96f60; --brand-110: #ef8d7d; --brand-120: #f4aa9d;
+  --brand-130: #f7c5bb; --brand-140: #faded7; --brand-150: #fcefeb; --brand-160: #fff9f7;
+  --neutral-0: #fff9e9; --neutral-10: #f8f1df; --neutral-20: #eee5d1; --neutral-30: #ddd4c1;
+  --neutral-40: #cec4b1; --neutral-50: #b9ae9d; --neutral-60: #91877b; --neutral-70: #756d64;
+  --neutral-80: #5e5751; --neutral-90: #4a4540; --neutral-100: #3a3532; --neutral-110: #2d2927; --neutral-120: #24201e;
+  --color-canvas: #d8d0be; --color-surface: #f5eedb; --color-surface-subtle: #eee5d1;
+  --color-surface-raised: #fff9e9; --color-surface-sunken: #d2c9b6; --color-rail: #24201e;
+  --color-text: #24201e; --color-text-strong: #191615; --color-text-secondary: #5e5751;
+  --color-text-tertiary: #756d64; --color-text-inverse: #fff7e5;
+  --color-border: #b9ae9d; --color-border-strong: #4a4540;
+  --color-accent: #c42a22; --color-accent-hover: #aa201c; --color-accent-pressed: #8f1715;
+  --color-accent-subtle: #e9c9bf; --color-accent-subtle-hover: #e2b5aa;
+  --color-focus: #d63a2f; --color-focus-ring: rgb(196 42 34 / 18%);
+  --color-info: #3e6370; --color-info-subtle: #dce6e4;
+  --color-warning: #8a6418; --color-warning-subtle: #efe1b9;
+  --color-danger: #b12620; --color-danger-strong: #861713; --color-danger-subtle: #f2d1c8;
+  --color-success: #496a43; --color-success-subtle: #dce5d2;
+  --color-message-hover: #ebe0ca; --color-message-selected: #e9c9bf;
+  --color-reader-surface: #fbf3df; --color-reader-toolbar: #e9dfcb;
+  --color-mail-body: #f1e6cf; --color-mail-body-border: #91877b;
+  --color-rail-text: #fff7e5; --color-rail-muted: #c2b7a5;
+  --color-rail-control: #3a3430; --color-rail-control-hover: #514843;
+  --color-rail-control-active: #c42a22; --color-rail-control-active-text: #fff7e5;
+  --color-rail-accent: #e05245; --color-rail-border: #5d1f1b;
+  --color-brand-logo: #e05245;
+  --shadow-rail-control: 3px 3px 0 rgb(9 8 7 / 48%);
+  --color-overlay-scrim: rgb(36 32 30 / 52%);
+  --color-dialog-surface: #f8f1df; --color-dialog-border: #4a4540;
+  --color-dialog-control: #fff9e9; --color-dialog-control-hover: #eee5d1;
+  --color-dialog-control-selected: #e9c9bf; --color-dialog-control-selected-text: #721110;
+  --color-dialog-callout: #e9c9bf; --color-dialog-callout-text: #721110;
+  --shadow-dialog: 8px 8px 0 rgb(36 32 30 / 78%); --shadow-dialog-control: 2px 2px 0 rgb(36 32 30 / 52%);
+  --radius-xs: 0.0625rem; --radius-sm: 0.125rem; --radius-md: 0.1875rem;
+  --radius-lg: 0.25rem; --radius-xl: 0.375rem;
+  --shadow-sm: 2px 2px 0 rgb(36 32 30 / 34%);
+  --shadow-md: 4px 4px 0 rgb(36 32 30 / 48%);
+  --shadow-lg: 8px 8px 0 rgb(36 32 30 / 72%);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
 [data-theme='soft-neubrutalism'] {
   --font-family-display: 'Arial Rounded MT Bold', 'Segoe UI Variable Display', 'Microsoft YaHei UI', sans-serif;
   --brand-10: #201421; --brand-20: #342036; --brand-30: #4b2e4c; --brand-40: #633d65;

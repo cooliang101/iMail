@@ -48,6 +48,7 @@
 | `tech` | 琥珀终端 | 冷峻石墨、工业灰、琥珀信号灯、细网格与利落几何 |
 | `business-blue` | 深海蓝图 | 海军蓝、清晰操作层级和克制阴影 |
 | `soft-neubrutalism` | 柔和撞色 | 奶油底、粉彩、深色描边和轻微错位阴影 |
+| `constructivist-red` | 构成红 | 革命红、宣纸米白、煤黑、斜切几何和硬边工业排版 |
 | `custom` | 自定义主题 | 用户提供安全颜色令牌和受限形态枚举，运行时派生完整视觉变量 |
 
 主题元数据与安全归一化放在 `frontend/src/features/appearance/theme-model.ts`，内置 Fluent 色阶放在 `frontend/src/theme.ts`，完整 CSS token 契约放在 `frontend/src/theme.css`。新增内置主题必须同时补齐这三处，并为无效或已移除的主题 ID 保留安全回退。

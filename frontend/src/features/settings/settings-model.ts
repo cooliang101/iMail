@@ -4,7 +4,7 @@ import { defaultShortcutBindings } from '../shortcuts/shortcut-model';
 
 export const preferencesStorageKey = 'imail.preferences.v1';
 export function preferencesStorageKeyFor(userId: string) { return `${preferencesStorageKey}:${userId}`; }
-export type GatewayPreferences = Omit<AppPreferences, 'customTheme' | 'theme'> & { theme: Exclude<AppPreferences['theme'], 'custom'> };
+export type GatewayPreferences = AppPreferences;
 
 export const defaultAppPreferences: AppPreferences = {
   theme: defaultThemeId,
@@ -41,15 +41,18 @@ export function saveAppPreferences(preferences: AppPreferences, storage: Pick<St
   storage.setItem(preferencesStorageKey, JSON.stringify(preferences));
 }
 
-export function gatewayPreferencesPayload(preferences: AppPreferences): Omit<GatewayPreferences, 'theme'> & { theme?: GatewayPreferences['theme'] } {
-  const { customTheme: _customTheme, theme, ...shared } = preferences;
-  return theme === 'custom' ? shared : { ...shared, theme };
+export function gatewayPreferencesPayload(preferences: AppPreferences): GatewayPreferences {
+  return { ...preferences, customTheme: normalizeCustomTheme(preferences.customTheme) };
 }
 
 export function mergeGatewayPreferences(local: AppPreferences, remote: GatewayPreferences): AppPreferences {
+  const remoteCustomTheme = normalizeCustomTheme(remote.customTheme);
+  const migrateLocalCustomTheme = local.theme === 'custom'
+    && remote.theme !== 'custom'
+    && JSON.stringify(remoteCustomTheme) === JSON.stringify(defaultCustomTheme);
   return {
     ...remote,
-    theme: local.theme === 'custom' ? 'custom' : normalizeThemeId(remote.theme),
-    customTheme: normalizeCustomTheme(local.customTheme),
+    theme: migrateLocalCustomTheme ? 'custom' : normalizeThemeId(remote.theme),
+    customTheme: migrateLocalCustomTheme ? normalizeCustomTheme(local.customTheme) : remoteCustomTheme,
   };
 }

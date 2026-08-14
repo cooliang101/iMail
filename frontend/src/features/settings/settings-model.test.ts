@@ -25,13 +25,16 @@ describe('settings model', () => {
     expect(loadAppPreferences(legacy).theme).toBe('mint-fresh');
   });
 
-  it('keeps custom appearance data out of the HTTP gateway payload', () => {
+  it('sends and restores safe custom appearance data through the HTTP gateway', () => {
     const custom = { ...defaultAppPreferences, theme: 'custom' as const, customTheme: { ...defaultAppPreferences.customTheme, accent: '#123456' } };
     const payload = gatewayPreferencesPayload(custom);
-    expect(payload).not.toHaveProperty('customTheme');
-    expect(payload).not.toHaveProperty('theme');
-    const remote = { ...defaultAppPreferences, theme: 'tech' as const };
-    const { customTheme: _customTheme, ...gateway } = remote;
-    expect(mergeGatewayPreferences(custom, gateway)).toMatchObject({ theme: 'custom', customTheme: { accent: '#123456' }, startupView: remote.startupView });
+    expect(payload).toMatchObject({ theme: 'custom', customTheme: { accent: '#123456' } });
+    const remote = { ...defaultAppPreferences, theme: 'custom' as const, customTheme: { ...defaultAppPreferences.customTheme, accent: '#654321' } };
+    expect(mergeGatewayPreferences(custom, remote)).toMatchObject({ theme: 'custom', customTheme: { accent: '#654321' }, startupView: remote.startupView });
+  });
+
+  it('preserves an existing local custom theme while an older server record is migrated', () => {
+    const local = { ...defaultAppPreferences, theme: 'custom' as const, customTheme: { ...defaultAppPreferences.customTheme, accent: '#123456' } };
+    expect(mergeGatewayPreferences(local, defaultAppPreferences)).toMatchObject({ theme: 'custom', customTheme: { accent: '#123456' } });
   });
 });

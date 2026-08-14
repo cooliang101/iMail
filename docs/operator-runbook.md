@@ -136,7 +136,7 @@ docker compose --env-file .env.remote -f http-service/compose.https.example.yml 
 7. 请求 `GET /api/sync-status`，确认 `worker.workers` 至少有一个十秒内更新的心跳。
 8. 向测试邮箱发送一封新邮件，在不点击“立即同步”的情况下确认数秒内出现；服务日志不应持续出现 `[sync-idle]` 重连错误。
 9. 关闭浏览器，等待一个同步周期后再次查询，确认 `lastSuccessAt` 和 `nextSyncAt` 继续推进。
-10. 调用 `theme_custom_update` 写入测试主题，再用 `theme_custom_get` 读取并确认相等；`GET /api/preferences` 不应出现 `customTheme`。
+10. 调用 `theme_custom_update` 写入测试主题，再用 `theme_custom_get` 读取并确认相等；`GET /api/preferences` 应返回相同的 `customTheme`，且不得包含任意 CSS 或额外字段。
 
 仓库级自动验证：
 

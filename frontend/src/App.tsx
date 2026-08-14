@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowCounterClockwise, Check, WarningCircle } from '@phosphor-icons/react';
 import { api } from './api';
 import { buildWorkspaceFolders } from './app-selectors';
@@ -25,6 +25,7 @@ const DraftWorkspace = lazy(() => import('./features/compose/DraftWorkspace').th
 const LabelModal = lazy(() => import('./features/organize/LabelModal').then((module) => ({ default: module.LabelModal })));
 const NotificationsModal = lazy(() => import('./features/organize/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const SettingsModal = lazy(() => import('./features/settings/SettingsModal').then((module) => ({ default: module.SettingsModal })));
+const PreferencesSyncErrorDialog = lazy(() => import('./features/settings/PreferencesSyncErrorDialog').then((module) => ({ default: module.PreferencesSyncErrorDialog })));
 const SnoozeModal = lazy(() => import('./features/organize/SnoozeModal').then((module) => ({ default: module.SnoozeModal })));
 const TokenWorkspace = lazy(() => import('./features/developer/TokenWorkspace').then((module) => ({ default: module.TokenWorkspace })));
 const WorkspaceModal = lazy(() => import('./features/organize/WorkspaceModal').then((module) => ({ default: module.WorkspaceModal })));
@@ -45,7 +46,7 @@ function App() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [labels, setLabels] = useState<string[]>([]);
   const [notice, setNotice] = useState<Notice>(null);
-  const { preferences, shortcutBindings, savePreferences, saveShortcutBindings } = useAppPreferences(user.id, setNotice);
+  const { preferences, shortcutBindings, preferencesSyncIssue, dismissPreferencesSyncIssue, savePreferences, saveShortcutBindings } = useAppPreferences(user.id, setNotice);
   const { view, setView, accountFilter, setAccountFilter, groupFilter, setGroupFilter, search, setSearch, activeLabel, activeMailbox, sidebarOpen, setSidebarOpen, sidebarCollapsed, setSidebarCollapsed, selectScope: selectNavigationScope, selectMailbox: selectNavigationMailbox, selectLabel: selectNavigationLabel } = useWorkspaceNavigation(preferences.startupView);
   const [mailFilter, setMailFilter] = useState<MailListFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -118,7 +119,7 @@ function App() {
     selectScope('inbox', accountId);
   // Account selection reads the current account snapshot through realAccountsRef.
   }), []);
-  useEffect(() => { setTheme(preferences.theme, preferences.customTheme); }, [preferences.customTheme, preferences.theme, setTheme]);
+  useLayoutEffect(() => { setTheme(preferences.theme, preferences.customTheme); }, [preferences.customTheme, preferences.theme, setTheme]);
   useEffect(() => {
     void updateDesktopTrayMenu(accounts, preferences.theme, preferences.customTheme).catch(() => undefined);
   }, [accounts, preferences.customTheme, preferences.theme]);
@@ -406,6 +407,7 @@ function App() {
       openWorkspace: (group) => selectScope('inbox', 'all', group), syncWorkspace: (group) => void syncWorkspace(group), editWorkspace: setWorkspaceOpen,
       openFolder: selectMailbox, syncFolder: (folder) => void syncFolder(folder), syncCurrent: () => void syncAll(), shortcutSettings: () => setSettingsTab('shortcuts'),
     }} /></Suspense>}
+    {preferencesSyncIssue && <Suspense fallback={null}><PreferencesSyncErrorDialog message={preferencesSyncIssue.message} onClose={dismissPreferencesSyncIssue} /></Suspense>}
   </div>;
 }
 

@@ -59,6 +59,8 @@ pub enum ThemeId {
     Tech,
     BusinessBlue,
     SoftNeubrutalism,
+    ConstructivistRed,
+    Custom,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,6 +106,7 @@ pub struct ShortcutBindings {
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
     pub theme: ThemeId,
+    pub custom_theme: CustomTheme,
     pub startup_view: StartupView,
     pub mark_read_on_open: bool,
     pub default_message_view: MessageView,
@@ -115,6 +118,7 @@ impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             theme: ThemeId::MintFresh,
+            custom_theme: CustomTheme::default(),
             startup_view: StartupView::Inbox,
             mark_read_on_open: true,
             default_message_view: MessageView::Source,
@@ -170,6 +174,7 @@ pub struct ShortcutBindingsPatch {
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferencesPatch {
     pub theme: Option<ThemeId>,
+    pub custom_theme: Option<CustomTheme>,
     pub startup_view: Option<StartupView>,
     pub mark_read_on_open: Option<bool>,
     pub default_message_view: Option<MessageView>,

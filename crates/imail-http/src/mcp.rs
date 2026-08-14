@@ -1153,19 +1153,14 @@ fn tool_schema(name: &str) -> Value {
             empty()
         }
         "settings_update" => json!({"type":"object","properties":{
-            "theme":{"type":"string","enum":["mint-fresh","tech","business-blue","soft-neubrutalism"]},
+            "theme":{"type":"string","enum":["mint-fresh","tech","business-blue","soft-neubrutalism","constructivist-red","custom"]},
+            "customTheme":custom_theme_schema(),
             "startupView":{"type":"string","enum":["inbox","starred"]},"markReadOnOpen":{"type":"boolean"},
             "defaultMessageView":{"type":"string","enum":["source","rendered"]},
             "notificationKinds":{"type":"object","properties":{"unread":{"type":"boolean"},"snooze":{"type":"boolean"},"error":{"type":"boolean"}},"additionalProperties":false},
             "shortcutBindings":{"type":"object","properties":shortcut_properties(),"additionalProperties":false}
         },"additionalProperties":false,"minProperties":1}),
-        "theme_custom_update" => json!({"type":"object","properties":{
-            "name":{"type":"string","minLength":1,"maxLength":40},
-            "canvas":color_schema(),"surface":color_schema(),"surfaceSubtle":color_schema(),"rail":color_schema(),"text":color_schema(),
-            "textSecondary":color_schema(),"border":color_schema(),"accent":color_schema(),"accentSubtle":color_schema(),
-            "radius":{"type":"string","enum":["compact","balanced","rounded"]},"shadow":{"type":"string","enum":["none","soft","offset"]},
-            "typography":{"type":"string","enum":["system","technical","rounded"]}
-        },"required":["name","canvas","surface","surfaceSubtle","rail","text","textSecondary","border","accent","accentSubtle","radius","shadow","typography"],"additionalProperties":false}),
+        "theme_custom_update" => custom_theme_schema(),
         "account_add_with_code" => json!({"type":"object","properties":{
             "provider":{"type":"string","enum":["outlook","gmail","qq","yahoo","hotmail","icloud","custom"]},"email":email_schema(),
             "displayName":{"type":"string","minLength":1,"maxLength":80},"authorizationCode":{"type":"string","minLength":1,"maxLength":512},
@@ -1237,6 +1232,15 @@ fn email_array(minimum: usize) -> Value {
 }
 fn color_schema() -> Value {
     json!({"type":"string","pattern":"^#[0-9A-Fa-f]{6}$"})
+}
+fn custom_theme_schema() -> Value {
+    json!({"type":"object","properties":{
+        "name":{"type":"string","minLength":1,"maxLength":40},
+        "canvas":color_schema(),"surface":color_schema(),"surfaceSubtle":color_schema(),"rail":color_schema(),"text":color_schema(),
+        "textSecondary":color_schema(),"border":color_schema(),"accent":color_schema(),"accentSubtle":color_schema(),
+        "radius":{"type":"string","enum":["compact","balanced","rounded"]},"shadow":{"type":"string","enum":["none","soft","offset"]},
+        "typography":{"type":"string","enum":["system","technical","rounded"]}
+    },"required":["name","canvas","surface","surfaceSubtle","rail","text","textSecondary","border","accent","accentSubtle","radius","shadow","typography"],"additionalProperties":false})
 }
 fn mailbox_role_schema() -> Value {
     json!({"type":"string","enum":["inbox","sent","archive","drafts","trash","junk","custom"]})

@@ -7,6 +7,7 @@ describe('theme model', () => {
     expect(normalizeThemeId('tech')).toBe('tech');
     expect(normalizeThemeId('business-blue')).toBe('business-blue');
     expect(normalizeThemeId('soft-neubrutalism')).toBe('soft-neubrutalism');
+    expect(normalizeThemeId('constructivist-red')).toBe('constructivist-red');
     expect(normalizeThemeId('custom')).toBe('custom');
   });
 

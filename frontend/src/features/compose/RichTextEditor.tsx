@@ -6,6 +6,7 @@ import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
 import { ArrowClockwise, ArrowCounterClockwise, ImageSquare, LinkSimple, ListBullets, ListNumbers, Paperclip, Quotes, TextAlignCenter, TextAlignLeft, TextB, TextHTwo, TextItalic, TextStrikethrough, TextUnderline } from '@phosphor-icons/react';
+import { selectRichTextToolbarState } from './rich-text-toolbar-state';
 
 function fileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -40,11 +41,7 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
   });
   const state = useEditorState({
     editor,
-    selector: ({ editor: current }) => current ? {
-      bold: current.isActive('bold'), italic: current.isActive('italic'), underline: current.isActive('underline'), strike: current.isActive('strike'),
-      heading: current.isActive('heading', { level: 2 }), bullet: current.isActive('bulletList'), ordered: current.isActive('orderedList'), quote: current.isActive('blockquote'),
-      alignCenter: current.isActive({ textAlign: 'center' }), link: current.isActive('link'), canUndo: current.can().undo(), canRedo: current.can().redo(),
-    } : null,
+    selector: selectRichTextToolbarState,
   });
 
   async function addInlineImage(event: ChangeEvent<HTMLInputElement>) {

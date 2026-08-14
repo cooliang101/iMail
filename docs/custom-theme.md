@@ -43,6 +43,6 @@
 
 ## 使用方式
 
-在 iMail 的“设置 → 主题 → 自定义主题”中，将 AI 返回的 JSON 粘贴到“导入 AI 主题 JSON”，然后点击“校验并应用”。
+在 iMail 的“设置 → 主题 → 自定义主题”中，将 AI 返回的 JSON 粘贴到“导入 AI 主题 JSON”，然后点击“校验并应用”。通过登录会话保存后，安全主题令牌会同步到服务端，并继续在当前设备保留本地缓存。
 
-MCP 客户端可以调用 `theme_custom_update` 保存同一结构，调用 `theme_custom_get` 读取；这两项能力独立于 HTTP 网关。
+MCP 客户端可以调用 `theme_custom_update` 保存同一结构，调用 `theme_custom_get` 读取；它与 `/api/preferences` 共用同一份用户级安全主题存储。

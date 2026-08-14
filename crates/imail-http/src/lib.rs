@@ -3447,7 +3447,7 @@ mod tests {
                     .header(CONTENT_TYPE, "application/json")
                     .header("cookie", format!("imail_session={owner_session}"))
                     .body(Body::from(format!(
-                        r#"{{"userId":"{}","theme":"tech","startupView":"starred","defaultMessageView":"rendered","notificationKinds":{{"snooze":false}}}}"#,
+                        r##"{{"userId":"{}","theme":"constructivist-red","customTheme":{{"name":"服务端构成","canvas":"#d8d0be","surface":"#f5eedb","surfaceSubtle":"#eee5d1","rail":"#24201e","text":"#24201e","textSecondary":"#5e5751","border":"#b9ae9d","accent":"#c42a22","accentSubtle":"#e9c9bf","radius":"compact","shadow":"offset","typography":"technical"}},"startupView":"starred","defaultMessageView":"rendered","notificationKinds":{{"snooze":false}}}}"##,
                         other.id
                     )))
                     .unwrap(),
@@ -3456,7 +3456,9 @@ mod tests {
             .unwrap();
         assert_eq!(updated.status(), StatusCode::OK);
         let updated = json(updated).await;
-        assert_eq!(updated["preferences"]["theme"], "tech");
+        assert_eq!(updated["preferences"]["theme"], "constructivist-red");
+        assert_eq!(updated["preferences"]["customTheme"]["name"], "服务端构成");
+        assert_eq!(updated["preferences"]["customTheme"]["accent"], "#c42a22");
         assert_eq!(updated["preferences"]["startupView"], "starred");
         assert_eq!(updated["preferences"]["defaultMessageView"], "rendered");
         assert_eq!(updated["preferences"]["notificationKinds"]["unread"], true);
@@ -3497,6 +3499,24 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+        let invalid_custom_theme = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::PATCH)
+                    .uri("/api/preferences")
+                    .header(HOST, "127.0.0.1:8787")
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("cookie", format!("imail_session={owner_session}"))
+                    .body(Body::from(
+                        r#"{"customTheme":{"name":"unsafe","canvas":"red"}}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid_custom_theme.status(), StatusCode::BAD_REQUEST);
 
         let persisted = router
             .oneshot(

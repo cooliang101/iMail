@@ -4,6 +4,7 @@ use imail_protocol::{
 };
 use serde::Deserialize;
 
+use crate::theme::{read_custom_theme, update_custom_theme};
 use crate::{AccountRepository, ApplicationError};
 
 const METADATA_KEY: &str = "app_preferences_v1";
@@ -22,10 +23,12 @@ impl<'a, R: AccountRepository> PreferencesService<'a, R> {
             .repository
             .user_metadata(user_id, METADATA_KEY)
             .map_err(ApplicationError::Repository)?;
-        Ok(raw
+        let mut preferences = raw
             .as_deref()
             .and_then(parse_stored)
-            .unwrap_or_else(AppPreferences::default))
+            .unwrap_or_else(AppPreferences::default);
+        preferences.custom_theme = read_custom_theme(self.repository, user_id)?;
+        Ok(preferences)
     }
 
     pub fn update(
@@ -54,6 +57,9 @@ impl<'a, R: AccountRepository> PreferencesService<'a, R> {
         let mut next = self.read(user_id)?;
         if let Some(value) = patch.theme {
             next.theme = value;
+        }
+        if let Some(value) = patch.custom_theme {
+            next.custom_theme = update_custom_theme(self.repository, user_id, value)?;
         }
         if let Some(value) = patch.startup_view {
             next.startup_view = value;
@@ -130,6 +136,7 @@ fn parse_stored(raw: &str) -> Option<AppPreferences> {
 
 fn patch_is_empty(patch: &AppPreferencesPatch) -> bool {
     patch.theme.is_none()
+        && patch.custom_theme.is_none()
         && patch.startup_view.is_none()
         && patch.mark_read_on_open.is_none()
         && patch.default_message_view.is_none()
