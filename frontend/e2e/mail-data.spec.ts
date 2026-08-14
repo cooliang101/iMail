@@ -100,6 +100,33 @@ test('mail pagination loads stable fixture pages and reads full bodies', async (
   await expect(page.locator('.message-row').filter({ hasText: 'Fixture subject 70' })).toBeVisible();
 });
 
+test('narrow desktop keeps the reader inside the viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 937, height: 817 });
+  await installMailFixture(page);
+  await expect(page.getByText('Full fixture body for', { exact: false })).toBeVisible();
+  const geometry = await page.locator('.mail-layout').evaluate((layout) => {
+    const reader = layout.querySelector<HTMLElement>('.reader');
+    const content = layout.querySelector<HTMLElement>('.reader-content');
+    if (!reader || !content) throw new Error('Reader layout is missing');
+    const layoutRect = layout.getBoundingClientRect();
+    const readerRect = reader.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    return {
+      layoutRight: layoutRect.right,
+      readerRight: readerRect.right,
+      readerWidth: readerRect.width,
+      contentLeft: contentRect.left,
+      contentRight: contentRect.right,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(geometry.readerWidth).toBeGreaterThanOrEqual(320);
+  expect(geometry.readerRight).toBeLessThanOrEqual(geometry.layoutRight + 1);
+  expect(geometry.layoutRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+  expect(geometry.contentLeft).toBeGreaterThanOrEqual(0);
+  expect(geometry.contentRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+});
+
 test('compose autosaves recipients, body and uploaded attachments', async ({ page }) => {
   const state = await installMailFixture(page);
   await page.getByRole('button', { name: '写邮件' }).click();

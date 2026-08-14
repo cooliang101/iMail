@@ -1,7 +1,7 @@
 {
   "$schema": "../frontend/node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "iMail",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "identifier": "com.cooliang.imail",
   "build": {
     "frontendDist": "../frontend/dist",

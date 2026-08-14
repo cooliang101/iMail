@@ -73,6 +73,13 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .rail-avatar:active { transform: translateY(1px) scale(.98); }
 .rail-avatar.active::before { content: ''; position: absolute; left: -13px; width: 3px; height: 21px; border-radius: 3px; background: var(--color-rail-accent); }
 .rail-account { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 15%); }
+.rail-account.provider-gmail { background: #fff0ef; color: #d93025; }
+.rail-account.provider-outlook,
+.rail-account.provider-hotmail { background: #e8f3fb; color: #0078d4; }
+.rail-account.provider-qq { background: #e8f7fb; color: #1686b7; }
+.rail-account.provider-yahoo { background: #f0e9fa; color: #6001d2; }
+.rail-account.provider-icloud { background: #edf5ff; color: #3693f3; }
+.rail-account.provider-custom { background: color-mix(in srgb, var(--avatar-color, #789) 75%, #fff 25%); color: white; }
 .rail-account svg { width: 21px; height: 21px; }
 .rail-account .provider-yahoo-glyph { font-size: 13px; }
 .rail-account.active { box-shadow: 0 0 0 2px var(--color-rail-accent), var(--shadow-rail-control); }

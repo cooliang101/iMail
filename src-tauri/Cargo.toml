@@ -1,6 +1,6 @@
 [package]
 name = "imail"
-version = "0.0.2"
+version = "0.0.3"
 description = "Local-first multi-account mail client and developer gateway"
 authors = ["iMail contributors"]
 license = ""
