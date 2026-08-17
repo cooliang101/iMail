@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
-import { Dropdown, Option, type DropdownProps } from '@fluentui/react-components';
+import { useState, type SelectHTMLAttributes } from 'preact/compat';
 
 export type AppSelectOption = { value: string; label: string; disabled?: boolean };
 
-type AppSelectProps = Omit<DropdownProps, 'children' | 'value' | 'defaultValue' | 'selectedOptions' | 'defaultSelectedOptions' | 'onOptionSelect'> & {
+type AppSelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children' | 'value' | 'defaultValue' | 'onChange'> & {
   name?: string;
   value?: string;
   defaultValue?: string;
@@ -15,22 +14,20 @@ export function AppSelect({ name, value, defaultValue, options, onValueChange, c
   const initialValue = defaultValue ?? options.find((option) => !option.disabled)?.value ?? '';
   const [internalValue, setInternalValue] = useState(initialValue);
   const selectedValue = value ?? internalValue;
-  const selectedLabel = useMemo(() => options.find((option) => option.value === selectedValue)?.label ?? '', [options, selectedValue]);
 
   return <span className="app-select-wrap">
-    <Dropdown
+    <select
       {...props}
+      name={name}
       className={className ? `app-select ${className}` : 'app-select'}
-      selectedOptions={selectedValue ? [selectedValue] : []}
-      value={selectedLabel}
-      onOptionSelect={(_, data) => {
-        const next = String(data.optionValue ?? '');
+      value={selectedValue}
+      onChange={(event) => {
+        const next = event.currentTarget.value;
         if (value === undefined) setInternalValue(next);
         onValueChange?.(next);
       }}
     >
-      {options.map((option) => <Option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</Option>)}
-    </Dropdown>
-    {name && <input type="hidden" name={name} value={selectedValue} />}
+      {options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
+    </select>
   </span>;
 }

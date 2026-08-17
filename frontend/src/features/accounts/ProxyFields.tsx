@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from 'preact/compat';
 import { AppCheckbox, AppInput, AppSelect } from '../../components/form-controls';
 import type { MailProxySettings } from '../../types';
 

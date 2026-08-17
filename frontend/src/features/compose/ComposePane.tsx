@@ -1,6 +1,6 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type FormEvent } from 'react';
-import { Button } from '@fluentui/react-components';
-import { ArrowLeft, File, PaperPlaneTilt, Trash, WarningCircle } from '@phosphor-icons/react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type FormEvent } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { ArrowLeft, File, PaperPlaneTilt, Trash, WarningCircle } from '../../components/icons';
 import { api } from '../../api';
 import type { Account, Contact, Draft, DraftAttachment, Message } from '../../types';
 import { AppInput } from '../../components/form-controls';
@@ -114,14 +114,14 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
     <header className="composer-header">
       <button className="composer-close" type="button" title="关闭写信" aria-label="关闭写信" onClick={() => void close()}><ArrowLeft size={19} /></button>
       <div className="composer-heading"><span>{mode === 'new' ? '新邮件' : '邮件操作'}</span><strong>{heading}</strong></div>
-      <div className="composer-header-actions"><small className={`compose-save-status is-${saveStatus}`}>{statusLabel}</small>{accounts.length > 0 && <Button className="compose-header-send" appearance="primary" icon={<PaperPlaneTilt size={16} />} type="submit" form="compose-message-form" disabled={sending}>{sending ? '发送中…' : '发送'}</Button>}</div>
+      <div className="composer-header-actions"><small className={`compose-save-status is-${saveStatus}`}>{statusLabel}</small>{accounts.length > 0 && <AppButton className="compose-header-send" appearance="primary" icon={<PaperPlaneTilt size={16} />} type="submit" form="compose-message-form" disabled={sending}>{sending ? '发送中…' : '发送'}</AppButton>}</div>
     </header>
     {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={34} /><h3>先接入一个真实邮箱</h3><p>接入邮箱后即可发送邮件。</p></div> : <form id="compose-message-form" className="composer-form" onSubmit={submit}>
       <div className="composer-fields">
         <SenderField accounts={accounts} value={accountId} onChange={(value) => { setAccountId(value); markDirty(); }} />
         <AddressField ref={toFieldRef} label="收件人" value={to} contacts={contacts} onChange={(value) => { setTo(value); markDirty(); }} placeholder="输入姓名或邮箱" />
         <AddressField ref={ccFieldRef} label="抄送" value={cc} contacts={contacts} onChange={(value) => { setCc(value); markDirty(); }} placeholder="输入姓名或邮箱（可选）" />
-        <label className="compose-row"><span>主题</span><AppInput value={subject} onChange={(event) => { setSubject(event.target.value); markDirty(); }} placeholder="邮件主题" /></label>
+        <label className="compose-row"><span>主题</span><AppInput value={subject} onChange={(event) => { setSubject(event.currentTarget.value); markDirty(); }} placeholder="邮件主题" /></label>
       </div>
       <RichTextEditor initialHtml={initialHtml} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); markDirty(); }} onAddAttachments={(files) => void addAttachments(files)} onError={setError} />
       {attachments.length > 0 && <div className="composer-attachments">{attachments.map((attachment) => <span key={attachment.id}><File size={18} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.size)}</small></span><button type="button" title={`移除 ${attachment.filename}`} aria-label={`移除附件 ${attachment.filename}`} onClick={() => { setAttachments((current) => current.filter((item) => item.id !== attachment.id)); markDirty(); }}><Trash size={15} /></button></span>)}</div>}

@@ -1,10 +1,10 @@
 # 部署模式
 
-iMail 当前只交付 Windows x64 桌面端和服务端 Docker 镜像。两种交付共用根 Cargo workspace 中的 Rust 领域能力和 `frontend/` 中的 React 前端，不维护第二套业务实现。
+iMail 当前只交付 Windows x64 桌面端和服务端 Docker 镜像。两种交付共用根 Cargo workspace 中的 Rust 领域能力和 `frontend/` 中的 Preact 前端，不维护第二套业务实现。
 
 ## Windows 桌面本地模式
 
-- React WebView 通过类型化 Tauri command/event 直接调用同进程 Rust 服务。
+- Preact WebView 通过类型化 Tauri command/event 直接调用同进程 Rust 服务。
 - 本地模式不配置服务 URL，也不绑定常驻业务 HTTP 端口。
 - Rust host 持有登录上下文、SQLite、同步 worker、scheduler、IDLE watcher 和二进制读取能力。
 - 关闭窗口只隐藏到托盘并继续同步；显式退出才停止运行时。

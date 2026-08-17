@@ -1,5 +1,5 @@
-import type { CSSProperties } from 'react';
-import { Check, Palette } from '@phosphor-icons/react';
+import type { CSSProperties } from 'preact/compat';
+import { Check, Palette } from '../../components/icons';
 import type { AppPreferences } from '../../app-model';
 import { themeOptions } from '../appearance';
 import { PanelHeading } from './PanelHeading';

@@ -1,4 +1,4 @@
-import react from '@vitejs/plugin-react';
+import preact from '@preact/preset-vite';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
@@ -7,14 +7,14 @@ const frontendRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   root: frontendRoot,
-  plugins: [react()],
+  plugins: [preact()],
   build: {
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
           if (/[\\/]node_modules[\\/](@tiptap|prosemirror-)/.test(id)) return 'editor-vendor';
-          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react-vendor';
+          if (/[\\/]node_modules[\\/]preact[\\/]/.test(id)) return 'preact-vendor';
           return undefined;
         },
       },

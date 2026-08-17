@@ -1,5 +1,5 @@
-import { useEffect, useState, type KeyboardEvent } from 'react';
-import { Keyboard } from '@phosphor-icons/react';
+import { useEffect, useState, type KeyboardEvent } from 'preact/compat';
+import { Keyboard } from '../../components/icons';
 import type { ShortcutActionId, ShortcutBindings } from '../../app-model';
 import { shortcutConflict, shortcutDefinitions, shortcutFromEvent, shortcutLabel } from '../shortcuts';
 
@@ -14,7 +14,7 @@ export function ShortcutPanel({ bindings, onChange }: { bindings: ShortcutBindin
     event.preventDefault(); event.stopPropagation();
     if (event.key === 'Escape') { setRecording(null); setError(''); return; }
     if (event.key === 'Backspace' || event.key === 'Delete') { save({ ...draft, [actionId]: '' }); setRecording(null); setError(''); return; }
-    const candidate = shortcutFromEvent(event.nativeEvent);
+    const candidate = shortcutFromEvent(event);
     if (!candidate) return;
     const conflict = shortcutConflict(draft, actionId, candidate);
     if (conflict) { setError(`“${shortcutLabel(candidate)}”已用于“${conflict.label}”`); return; }

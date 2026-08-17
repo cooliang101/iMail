@@ -1,4 +1,4 @@
-import { EnvelopeSimple, MicrosoftOutlookLogo } from '@phosphor-icons/react';
+import { EnvelopeSimple, MicrosoftOutlookLogo } from './icons';
 import { siGmail, siIcloud, siQq } from 'simple-icons';
 import type { ProviderId } from '../types';
 

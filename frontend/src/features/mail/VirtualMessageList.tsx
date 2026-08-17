@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Button } from '@fluentui/react-components';
-import { Archive, ArrowLeft, ArrowRight, CaretDown, Clock, Envelope, File, Star, Tag, Trash, Tray } from '@phosphor-icons/react';
+import { useEffect, useRef, useState, type CSSProperties } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { Archive, ArrowLeft, ArrowRight, CaretDown, Clock, Envelope, File, Star, Tag, Trash, Tray } from '../../components/icons';
 import type { Account, Message } from '../../types';
 import { virtualRange } from '../../virtual';
 import { AccountProviderMark, providerLabel, relativeTime, SenderAvatar } from '../../components/shared';

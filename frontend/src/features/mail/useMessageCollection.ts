@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'preact/compat';
 import { api } from '../../api';
 import { buildMessageQuery } from '../../app-selectors';
 import { subscribeSyncEvents } from '../../sync-events';

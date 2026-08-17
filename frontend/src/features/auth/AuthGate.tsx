@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Button } from '@fluentui/react-components';
-import { ArrowLeft, HardDrives, LockKey, UserCircle, UserPlus } from '@phosphor-icons/react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { ArrowLeft, HardDrives, LockKey, UserCircle, UserPlus } from '../../components/icons';
 import { api } from '../../api';
 import { AppInput } from '../../components/form-controls';
 import { BrandLogo } from '../../components/brand-logo';
@@ -109,7 +109,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <label><span>登录名</span><AppInput name="login" autoComplete="username" defaultValue={selectedLogin === '__manual__' ? '' : selectedLogin} placeholder="用户名或邮箱" required /></label>
           <label><span>密码</span><AppInput name="password" type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} placeholder="至少 8 个字符" required /></label>
           {error && <div className="auth-error" role="alert">{error}</div>}
-          <Button appearance="primary" type="submit" disabled={busy} icon={<LockKey size={18} />}>{busy ? '请稍候…' : mode === 'register' ? '创建并进入 iMail' : '登录 iMail'}</Button>
+          <AppButton appearance="primary" type="submit" disabled={busy} icon={<LockKey size={18} />}>{busy ? '请稍候…' : mode === 'register' ? '创建并进入 iMail' : '登录 iMail'}</AppButton>
         </form>}
 
         {serviceSettingsOpen && <ServiceAddressEditor compact onSaved={() => setServiceSettingsOpen(false)} />}

@@ -9,7 +9,7 @@ iMail 的 Node 服务迁移与 Windows Rust-only 桌面升级已经完成。当�
 - `crates/` 提供账户、存储、邮件、OAuth、同步、Web API、Gateway 与 MCP 等共享 Rust 能力。
 - `src-tauri/` 是桌面适配层，本地模式通过类型化 command/event 进程内调用共享 Rust 服务，不开放常驻业务 HTTP 端口。
 - `http-service/` 是独立 HTTP 部署入口，只负责装配监听器和容器部署，不复制领域实现。
-- `frontend/` 是所有交付模式共用的 React/Vite 前端。
+- `frontend/` 是所有交付模式共用的 Preact/Vite 前端。
 
 当前正式支持矩阵如下：
 

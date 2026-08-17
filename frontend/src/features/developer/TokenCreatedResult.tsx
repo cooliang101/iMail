@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Button } from '@fluentui/react-components';
-import { Check, Copy, WarningCircle } from '@phosphor-icons/react';
+import { useState } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { Check, Copy, WarningCircle } from '../../components/icons';
 
 export function TokenCreatedResult({ raw, kind, onClose }: { raw: string; kind: 'API Token' | 'MCP 授权码'; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -15,6 +15,6 @@ export function TokenCreatedResult({ raw, kind, onClose }: { raw: string; kind: 
       catch { setError('复制失败，请手动选择授权码'); }
     }}><Copy size={17} />{copied ? '已复制' : '复制'}</button></div>
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
-    <Button appearance="primary" onClick={onClose}>完成</Button>
+    <AppButton appearance="primary" onClick={onClose}>完成</AppButton>
   </div>;
 }

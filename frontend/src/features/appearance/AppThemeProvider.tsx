@@ -1,8 +1,6 @@
-import { createContext, type ReactNode, useCallback, useContext, useLayoutEffect, useMemo, useState } from 'react';
-import { FluentProvider } from '@fluentui/react-components';
+import { createContext, type ReactNode, useCallback, useContext, useLayoutEffect, useMemo, useState } from 'preact/compat';
 import type { AppThemeId, CustomThemeDefinition } from '../../app-model';
-import { appThemes } from '../../theme';
-import { createCustomFluentTheme, customThemeCssVariables } from './theme-runtime';
+import { customThemeCssVariables } from './theme-runtime';
 import { customThemeStorageKey, defaultCustomTheme, defaultThemeId, normalizeCustomTheme, normalizeThemeId, themeStorageKey } from './theme-model';
 
 type ThemeContextValue = {
@@ -52,13 +50,12 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     });
   }, [customTheme, themeId]);
 
-  const fluentTheme = useMemo(() => themeId === 'custom' ? createCustomFluentTheme(customTheme) : appThemes[themeId], [customTheme, themeId]);
   const providerStyle = useMemo(() => themeId === 'custom' ? customThemeCssVariables(customTheme) : undefined, [customTheme, themeId]);
   const value = useMemo(() => ({ themeId, customTheme, setTheme }), [customTheme, setTheme, themeId]);
   return <ThemeContext.Provider value={value}>
-    <FluentProvider theme={fluentTheme} style={providerStyle} className="fluent-root" data-theme={themeId}>
+    <div style={providerStyle} className="app-theme-root" data-theme={themeId}>
       {children}
-    </FluentProvider>
+    </div>
   </ThemeContext.Provider>;
 }
 

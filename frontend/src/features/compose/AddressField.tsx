@@ -1,5 +1,5 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { X } from '@phosphor-icons/react';
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent } from 'preact/compat';
+import { X } from '../../components/icons';
 import type { Contact } from '../../types';
 import { AppInput } from '../../components/form-controls';
 import { SenderAvatar } from '../../components/shared';
@@ -83,7 +83,7 @@ export const AddressField = forwardRef<AddressFieldHandle, {
           <button type="button" aria-label={`移除 ${address}`} onClick={(event) => { event.stopPropagation(); onChange(value.filter((item) => item !== address)); }}><X size={12} /></button>
         </span>;
       })}
-      <AppInput ref={inputRef} type="text" inputMode="email" autoComplete="off" value={query} onChange={(event) => { setQuery(event.target.value); setInvalid(false); setActiveIndex(0); }} onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => { setFocused(false); if (query.trim()) commit(); }, 120)} onKeyDown={onKeyDown} placeholder={value.length === 0 ? placeholder : '继续添加'} aria-label={label} aria-autocomplete="list" aria-expanded={open} aria-invalid={invalid} />
+      <AppInput ref={inputRef} type="text" inputMode="email" autoComplete="off" value={query} onChange={(event) => { setQuery(event.currentTarget.value); setInvalid(false); setActiveIndex(0); }} onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => { setFocused(false); if (query.trim()) commit(); }, 120)} onKeyDown={onKeyDown} placeholder={value.length === 0 ? placeholder : '继续添加'} aria-label={label} aria-autocomplete="list" aria-expanded={open} aria-invalid={invalid} />
     </span>
     {invalid && <small className="compose-address-error">邮箱格式不正确，修改后按空格、Tab 或分号确认</small>}
     {open && <span className="contact-suggestions" role="listbox" aria-label={`${label}联系人`}>

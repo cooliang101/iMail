@@ -1,4 +1,4 @@
-import { Check } from '@phosphor-icons/react';
+import { Check } from '../../components/icons';
 import type { ProviderId } from '../../types';
 import { ProviderIcon, providers } from '../../components/shared';
 

@@ -1,6 +1,6 @@
 # iMail frontend
 
-该目录是完整的 React/Vite/npm 前端工程边界：
+该目录是完整的 Preact/Vite/npm 前端工程边界：
 
 - `src/`：界面、客户端 adapter、领域 feature 与测试。
 - `public/`：图标、Web Manifest 和 Service Worker 等静态资源。

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState } from 'preact/compat';
 import type { AppView, WorkspaceFolder } from '../../app-model';
 
 export function useWorkspaceNavigation(initialView: AppView) {

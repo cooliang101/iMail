@@ -1,12 +1,12 @@
-import { useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
-import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'preact/compat';
+import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
-import { ArrowClockwise, ArrowCounterClockwise, ImageSquare, LinkSimple, ListBullets, ListNumbers, Paperclip, Quotes, TextAlignCenter, TextAlignLeft, TextB, TextHTwo, TextItalic, TextStrikethrough, TextUnderline } from '@phosphor-icons/react';
-import { selectRichTextToolbarState } from './rich-text-toolbar-state';
+import { ArrowClockwise, ArrowCounterClockwise, ImageSquare, LinkSimple, ListBullets, ListNumbers, Paperclip, Quotes, TextAlignCenter, TextAlignLeft, TextB, TextHTwo, TextItalic, TextStrikethrough, TextUnderline } from '../../components/icons';
+import { selectRichTextToolbarState, type RichTextToolbarState } from './rich-text-toolbar-state';
 
 function fileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -25,27 +25,47 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
 }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkValue, setLinkValue] = useState('');
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [state, setState] = useState<RichTextToolbarState | null>(null);
+  const initialHtmlRef = useRef(initialHtml);
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ link: false }),
-      Link.configure({ openOnClick: false, defaultProtocol: 'https' }),
-      Image.configure({ allowBase64: true }),
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Placeholder.configure({ placeholder: '写下邮件内容…' }),
-    ],
-    content: initialHtml,
-    editorProps: { attributes: { class: 'composer-editor-content', 'aria-label': '邮件正文' } },
-    onUpdate: ({ editor: current }) => onChange(current.getHTML(), current.getText({ blockSeparator: '\n' })),
-  });
-  const state = useEditorState({
-    editor,
-    selector: selectRichTextToolbarState,
-  });
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    const element = editorContainerRef.current;
+    if (!element) return;
+
+    const currentEditor = new Editor({
+      element,
+      extensions: [
+        StarterKit.configure({ link: false }),
+        Link.configure({ openOnClick: false, defaultProtocol: 'https' }),
+        Image.configure({ allowBase64: true }),
+        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        Placeholder.configure({ placeholder: '写下邮件内容…' }),
+      ],
+      content: initialHtmlRef.current,
+      editorProps: { attributes: { class: 'composer-editor-content', 'aria-label': '邮件正文' } },
+      onUpdate: ({ editor: current }) => onChangeRef.current(current.getHTML(), current.getText({ blockSeparator: '\n' })),
+    });
+    const updateToolbarState = () => setState(selectRichTextToolbarState({ editor: currentEditor }));
+
+    currentEditor.on('transaction', updateToolbarState);
+    setEditor(currentEditor);
+    updateToolbarState();
+
+    return () => {
+      currentEditor.off('transaction', updateToolbarState);
+      currentEditor.destroy();
+    };
+    // The editor owns its initial document. Draft switches remount this component.
+  }, []);
 
   async function addInlineImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]; event.target.value = '';
+    const file = event.currentTarget.files?.[0]; event.currentTarget.value = '';
     if (!file || !editor) return;
     if (file.size > 3 * 1024 * 1024) { onError('正文图片不能超过 3 MB'); return; }
     try { editor.chain().focus().setImage({ src: await fileAsDataUrl(file), alt: file.name }).run(); }
@@ -87,9 +107,9 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
         <button type="button" title="重做" aria-label="重做" disabled={!state?.canRedo} onClick={() => command(() => editor?.chain().focus().redo().run())}><ArrowClockwise size={17} /></button>
       </div>
       <input ref={imageInputRef} className="sr-only" type="file" accept="image/*" onChange={(event) => void addInlineImage(event)} />
-      <input ref={attachmentInputRef} className="sr-only" type="file" multiple onChange={(event) => { onAddAttachments(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
-      {linkOpen && <div className="composer-link-popover"><input autoFocus value={linkValue} onChange={(event) => setLinkValue(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') { event.preventDefault(); applyLink(); } }} placeholder="https://example.com" aria-label="链接地址" /><button type="button" onClick={applyLink}>应用</button></div>}
+      <input ref={attachmentInputRef} className="sr-only" type="file" multiple onChange={(event) => { onAddAttachments(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ''; }} />
+      {linkOpen && <div className="composer-link-popover"><input autoFocus value={linkValue} onChange={(event) => setLinkValue(event.currentTarget.value)} onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') { event.preventDefault(); applyLink(); } }} placeholder="https://example.com" aria-label="链接地址" /><button type="button" onClick={applyLink}>应用</button></div>}
     </div>
-    <EditorContent editor={editor} />
+    <div ref={editorContainerRef} />
   </section>;
 }

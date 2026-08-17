@@ -1,7 +1,7 @@
 import '../../styles/dialogs.css';
-import { useState, type FormEvent } from 'react';
-import { Button } from '@fluentui/react-components';
-import { ArrowRight, Bell, Check, Clock, Envelope, Tag, WarningCircle, X } from '@phosphor-icons/react';
+import { useState, type FormEvent } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { ArrowRight, Bell, Check, Clock, Envelope, Tag, WarningCircle, X } from '../../components/icons';
 import { api } from '../../api';
 import type { Account, Message } from '../../types';
 import type { MailNotification } from '../../app-model';

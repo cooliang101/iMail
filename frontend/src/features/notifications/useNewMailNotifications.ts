@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'preact/compat';
 import { usePlatform } from '../../platform/runtime';
 import { subscribeSyncEvents } from '../../sync-events';
 import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';

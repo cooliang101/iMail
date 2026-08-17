@@ -70,7 +70,7 @@ export default tseslint.config(
   {
     files: ['src/App.tsx'],
     rules: {
-      // Desktop event subscriptions are intentionally registered once and use React setters/ref snapshots.
+      // Desktop event subscriptions are intentionally registered once and use state setters/ref snapshots.
       'react-hooks/exhaustive-deps': 'off',
     },
   },

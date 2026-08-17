@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
-import { Button } from '@fluentui/react-components';
-import { Cloud, HardDrives, PlugsConnected } from '@phosphor-icons/react';
+import { useState, type FormEvent } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { Cloud, HardDrives, PlugsConnected } from '../../components/icons';
 import { AppInput } from '../../components/form-controls';
 import {
   configuredLocalServiceUrl,
@@ -62,7 +62,7 @@ export function ServiceAddressEditor({ compact = false, onCancel, onSaved }: { c
   return <div className={`service-address-editor ${compact ? 'is-compact' : ''}`}>
     {compact && desktop && <section className="service-local-choice">
       <div className="service-choice-summary"><HardDrives size={21} weight="duotone" /><span><strong>本地服务</strong><small>Rust 直接嵌入应用，不开放本地 HTTP 端口</small></span></div>
-      <Button appearance="secondary" type="button" onClick={() => void activateLocal()} disabled={Boolean(busy)}>{busy === 'local' ? '正在启动…' : '使用本地服务'}</Button>
+      <AppButton appearance="secondary" type="button" onClick={() => void activateLocal()} disabled={Boolean(busy)}>{busy === 'local' ? '正在启动…' : '使用本地服务'}</AppButton>
     </section>}
     {compact && desktop && <div className="service-choice-divider"><span>或</span></div>}
     <form className="service-remote-form" onSubmit={submit}>
@@ -72,7 +72,7 @@ export function ServiceAddressEditor({ compact = false, onCancel, onSaved }: { c
       {error && <div className="auth-error" role="alert">{error}</div>}
       <div className="service-address-actions">
         {onCancel && <button type="button" onClick={onCancel}>取消</button>}
-        <Button appearance="primary" type="submit" disabled={Boolean(busy)} icon={<PlugsConnected size={16} />}>{busy === 'remote' ? '正在验证…' : '连接远程服务'}</Button>
+        <AppButton appearance="primary" type="submit" disabled={Boolean(busy)} icon={<PlugsConnected size={16} />}>{busy === 'remote' ? '正在验证…' : '连接远程服务'}</AppButton>
       </div>
     </form>
   </div>;

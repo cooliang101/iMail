@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'preact/compat';
 import type { ContactLogo } from '../types';
 import { desktopReadBinary } from '../desktop-http';
 import { isTauriRuntime } from '../platform/tauri-runtime';

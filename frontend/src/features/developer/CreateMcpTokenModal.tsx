@@ -1,7 +1,7 @@
 import '../../styles/dialogs.css';
-import { useState, type FormEvent } from 'react';
-import { Button } from '@fluentui/react-components';
-import { Code, WarningCircle, X } from '@phosphor-icons/react';
+import { useState, type FormEvent } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { Code, WarningCircle, X } from '../../components/icons';
 import { api } from '../../api';
 import { Overlay } from '../../components/shared';
 import { AppInput, AppSelect } from '../../components/form-controls';
@@ -31,6 +31,6 @@ export function CreateMcpTokenModal({ onClose, onCreated }: { onClose: () => voi
     <label><span>有效时间</span><AppSelect name="ttlSeconds" defaultValue="3600" options={[{ value: '1800', label: '30 分钟' }, { value: '3600', label: '1 小时' }, { value: '21600', label: '6 小时' }, { value: '86400', label: '24 小时' }, { value: '604800', label: '7 天' }]} /></label>
     <div className="inline-warning"><WarningCircle size={18} /><span><strong>仅签发给可信 Agent</strong> MCP 授权码以 <code>imail_mcp_</code> 开头，不要用于 REST API 请求。</span></div>
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
-    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy}>{busy ? '创建中…' : '创建 MCP 授权码'}</Button></div>
+    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><AppButton appearance="primary" type="submit" disabled={busy}>{busy ? '创建中…' : '创建 MCP 授权码'}</AppButton></div>
   </form>}</Overlay>;
 }

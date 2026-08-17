@@ -1,5 +1,5 @@
-import type { IconProps } from '@phosphor-icons/react';
-import { Briefcase, Buildings, Code, FolderSimple, Heart, House, Star, UsersThree } from '@phosphor-icons/react';
+import type { IconProps } from '../../components/icons';
+import { Briefcase, Buildings, Code, FolderSimple, Heart, House, Star, UsersThree } from '../../components/icons';
 import type { WorkspaceIconId } from '../../types';
 
 export const workspaceIconOptions: Array<{ id: WorkspaceIconId; label: string }> = [

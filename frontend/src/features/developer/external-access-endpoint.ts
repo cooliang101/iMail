@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'preact/compat';
 import { absoluteServiceUrl, configuredServiceMode } from '../../service-config';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
 import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';

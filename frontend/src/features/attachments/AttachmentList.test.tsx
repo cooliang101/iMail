@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup } from 'preact-render-to-string';
 import { PlatformProvider } from '../../platform/runtime';
 import type { PlatformRuntime } from '../../platform/types';
 import { AttachmentList } from './AttachmentList';

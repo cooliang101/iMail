@@ -1,4 +1,4 @@
-import { ArrowRight, CaretDown, Gear, Key, WarningCircle } from '@phosphor-icons/react';
+import { ArrowRight, CaretDown, Gear, Key, WarningCircle } from '../../components/icons';
 import type { CredentialGuide } from '../../provider-guides';
 import type { ProviderId } from '../../types';
 import { providerLabel } from '../../components/shared';

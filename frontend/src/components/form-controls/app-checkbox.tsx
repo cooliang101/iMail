@@ -1,7 +1,14 @@
-import { Checkbox, type CheckboxProps } from '@fluentui/react-components';
+import type { ChangeEvent, InputHTMLAttributes, ReactNode } from 'preact/compat';
 
-export function AppCheckbox({ className, ...props }: CheckboxProps) {
-  const hasLabel = props.label !== undefined && props.label !== null && props.label !== '';
+type AppCheckboxProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> & {
+  label?: ReactNode;
+  onChange?: (event: ChangeEvent<HTMLInputElement>, data: { checked: boolean }) => void;
+};
+
+export function AppCheckbox({ className, label, onChange, ...props }: AppCheckboxProps) {
+  const hasLabel = label !== undefined && label !== null && label !== '';
   const base = `app-checkbox${hasLabel ? ' has-label' : ''}`;
-  return <Checkbox className={className ? `${base} ${className}` : base} {...props} />;
+  const control = <input {...props} type="checkbox" onChange={(event) => onChange?.(event, { checked: event.currentTarget.checked })} />;
+  if (hasLabel) return <label className={className ? `${base} ${className}` : base}>{control}<span>{label}</span></label>;
+  return <span className={className ? `${base} ${className}` : base}>{control}</span>;
 }

@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CaretDown, CaretUp, EnvelopeSimple, PencilSimple, Power, Tray } from '@phosphor-icons/react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'preact/compat';
+import { CaretDown, CaretUp, EnvelopeSimple, PencilSimple, Power, Tray } from '../../components/icons';
 import type { AppThemeId, CustomThemeDefinition } from '../../app-model';
 import { ProviderIcon } from '../../components/provider-icons';
 import { customThemeCssVariables } from '../appearance/theme-runtime';
@@ -87,7 +87,7 @@ export function TrayMenuApp() {
       <div className="tray-menu-section-title"><span>邮箱</span><small>{data.accounts.length}</small></div>
       <div className="tray-account-list">
         {visibleAccounts.map((account) => <button className="tray-account" type="button" key={account.id} onClick={() => action('account', account.id)}>
-          <span className={`tray-provider provider-${account.provider}`} style={{ '--account-color': account.color } as React.CSSProperties}><ProviderIcon provider={account.provider} /></span>
+          <span className={`tray-provider provider-${account.provider}`} style={{ '--account-color': account.color } as CSSProperties}><ProviderIcon provider={account.provider} /></span>
           <span><strong>{account.displayName || account.email}</strong><small>{account.email}</small></span>
         </button>)}
         {data.accounts.length === 0 && <div className="tray-menu-empty">暂未添加邮箱</div>}

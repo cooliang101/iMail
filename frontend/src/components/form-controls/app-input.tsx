@@ -1,12 +1,21 @@
-import { forwardRef, type CSSProperties, type InputHTMLAttributes } from 'react';
-import { Input, type InputProps } from '@fluentui/react-components';
+import { forwardRef, type ChangeEvent, type CSSProperties, type InputHTMLAttributes, type ReactNode } from 'preact/compat';
 
-function classes(base: string, className?: string) {
-  return className ? `${base} ${className}` : base;
+function classes(base: string, className: unknown) {
+  return typeof className === 'string' && className ? `${base} ${className}` : base;
 }
 
-export const AppInput = forwardRef<HTMLInputElement, InputProps>(function AppInput({ className, ...props }, ref) {
-  return <Input ref={ref} appearance="outline" className={classes('app-input', className)} {...props} />;
+type AppInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'onChange'> & {
+  contentBefore?: ReactNode;
+  contentAfter?: ReactNode;
+  onChange?: (event: ChangeEvent<HTMLInputElement>, data: { value: string }) => void;
+};
+
+export const AppInput = forwardRef<HTMLInputElement, AppInputProps>(function AppInput({ className, contentBefore, contentAfter, onChange, ...props }, ref) {
+  return <span className={classes('app-input', className)}>
+    {contentBefore && <span className="app-input-decoration" aria-hidden="true">{contentBefore}</span>}
+    <input ref={ref} {...props} onChange={(event) => onChange?.(event, { value: event.currentTarget.value })} />
+    {contentAfter && <span className="app-input-decoration app-input-decoration-after">{contentAfter}</span>}
+  </span>;
 });
 
 type AppColorInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> & {

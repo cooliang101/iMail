@@ -25,3 +25,4 @@
 
 - [样式系统](style-system.md)：主题令牌、排版、布局、组件和响应式维护规则。
 - [自定义主题](custom-theme.md)：安全主题 JSON 的字段和生成约束。
+- [Preact 迁移方案](preact-migration.md)：从 React 渐进迁移到 Preact 的阶段、门禁、性能指标与回滚策略。

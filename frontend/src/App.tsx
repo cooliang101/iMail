@@ -1,5 +1,5 @@
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowCounterClockwise, Check, WarningCircle } from '@phosphor-icons/react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/compat';
+import { ArrowCounterClockwise, Check, WarningCircle } from './components/icons';
 import { api } from './api';
 import { buildWorkspaceFolders } from './app-selectors';
 import type { Account, Contact, DeveloperToken, Draft, Message } from './types';
@@ -58,7 +58,7 @@ function App() {
   const [messageActionBusy, setMessageActionBusy] = useState(false);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const realAccountsRef = useRef<Account[]>([]);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const folderDiscoveryStarted = useRef(false);
   const composePaneRef = useRef<ComposePaneHandle | null>(null);
   const messageActionsRef = useRef(new MessageActionCoordinator());
@@ -119,7 +119,7 @@ function App() {
     if (!ready) return;
     return preloadDeferredFeaturesDuringIdle();
   }, [ready]);
-  // Desktop callbacks are registered once and only use React setters/ref-backed state.
+  // Desktop callbacks are registered once and only use state setters/ref-backed snapshots.
   useEffect(() => subscribeDesktopCompose(() => openCompose()), []);
   useEffect(() => subscribeDesktopAccountSelection((accountId) => {
     if (!realAccountsRef.current.some((account) => account.id === accountId)) return;

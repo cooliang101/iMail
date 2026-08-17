@@ -1,12 +1,12 @@
-import type { CSSProperties, MouseEvent } from 'react';
-import { ArrowsLeftRight, Gear, Plus, Tray, UserCircle } from '@phosphor-icons/react';
+import type { CSSProperties, MouseEvent } from 'preact/compat';
+import { ArrowsLeftRight, Gear, Plus, Tray, UserCircle } from '../../components/icons';
 import type { Account } from '../../types';
 import { BrandLogo } from '../../components/brand-logo';
 import { ProviderIcon, providerLabel } from '../../components/provider-icons';
 
 export function AppAccountRail({ user, accounts, accountFilter, onSelect, onAdd, onSettings, onSwitchAccount, onContextMenu }: {
   user: { login: string; displayName: string }; accounts: Account[]; accountFilter: string; onSelect: (accountId?: string) => void; onAdd: () => void; onSettings: () => void; onSwitchAccount: () => void;
-  onContextMenu: (event: MouseEvent, accountId?: string) => void;
+  onContextMenu: (event: MouseEvent<HTMLButtonElement>, accountId?: string) => void;
 }) {
   return <aside className="account-rail" aria-label="邮箱账户">
     <button className="brand-mark" aria-label="iMail"><BrandLogo /></button>

@@ -39,6 +39,10 @@ async function json(route: Route, body: unknown, status = 200) {
 }
 
 async function installMailFixture(page: Page) {
+  // Keep lazy-module resource entries available even when the dev server emits
+  // many fine-grained icon modules. Chromium's default buffer can evict the
+  // first preload entries before the warmup assertion observes them.
+  await page.addInitScript(() => performance.setResourceTimingBufferSize(2_000));
   const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
   await page.route('**/api/**', async (route) => {
     const request = route.request();

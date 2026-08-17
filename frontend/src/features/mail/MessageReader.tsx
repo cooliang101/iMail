@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
-import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowLeft, ArrowRight, Clock, Code, Envelope, Eye, Star, Tag, Trash } from '@phosphor-icons/react';
+import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'preact/compat';
+import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowLeft, ArrowRight, Clock, Code, Envelope, Eye, Star, Tag, Trash } from '../../components/icons';
 import type { Account, Message } from '../../types';
 import type { MessageBodyView } from '../../app-model';
 import { AccountProviderMark, providerLabel, SenderAvatar } from '../../components/shared';

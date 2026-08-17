@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from 'preact/compat';
 import type { AppPreferences } from '../../app-model';
 import { AppCheckbox } from '../../components/form-controls';
 import { usePlatform } from '../../platform/runtime';

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { CaretDown, Check } from '@phosphor-icons/react';
+import { useState } from 'preact/compat';
+import { CaretDown, Check } from '../../components/icons';
 import type { Account } from '../../types';
 import { AccountProviderMark, providerLabel } from '../../components/shared';
 

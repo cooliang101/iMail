@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState } from 'preact/compat';
 import '../../styles/attachments.css';
-import { DownloadSimple, Eye, File, WarningCircle } from '@phosphor-icons/react';
+import { DownloadSimple, Eye, File, WarningCircle } from '../../components/icons';
 import type { MessageAttachment } from '../../types';
 import { usePlatform } from '../../platform/runtime';
 import { absoluteServiceUrl } from '../../service-config';

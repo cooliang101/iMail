@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Button } from '@fluentui/react-components';
-import { CheckCircle, Cloud, FolderOpen, HardDrives, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
+import { useCallback, useEffect, useState } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { CheckCircle, Cloud, FolderOpen, HardDrives, SpinnerGap, WarningCircle } from '../../components/icons';
 import type { ServiceInfo } from '../../types';
 import {
   configuredLocalServiceUrl,
@@ -92,13 +92,13 @@ export function ServicePanel() {
       <div><small>{embeddedLocal && mode === 'local' ? '当前服务形态' : '当前服务地址'}</small><strong>{embeddedLocal && mode === 'local' ? '进程内 Rust · 无 HTTP' : address}</strong>
         {info ? <p>实例 {info.instanceId.slice(0, 8)} · 服务 {info.version} · 协议 v{info.protocolVersion}</p> : <p>{error || '正在检查服务身份…'}</p>}
       </div>
-      <Button appearance="subtle" type="button" onClick={() => void inspect()} disabled={busy}>重新检查</Button>
+      <AppButton appearance="subtle" type="button" onClick={() => void inspect()} disabled={busy}>重新检查</AppButton>
     </section>
 
     {(!desktop || mode === 'remote' || remoteEditorOpen) && <ServiceAddressEditor onCancel={remoteEditorOpen && mode !== 'remote' ? () => setRemoteEditorOpen(false) : undefined} onSaved={() => { setMode('remote'); setRemoteEditorOpen(false); void inspect(); }} />}
     {desktop && <div className="service-local-lifecycle"><p className="service-rollout-note">{localServiceNote(mode)}</p>
       <div className="service-lifecycle-actions">
-        <Button appearance="subtle" icon={<FolderOpen size={16} />} onClick={() => void desktopOpenAppLogs().catch((reason) => setError(serviceErrorMessage(reason, '打开应用日志失败')))} disabled={busy}>应用日志</Button>
+        <AppButton appearance="subtle" icon={<FolderOpen size={16} />} onClick={() => void desktopOpenAppLogs().catch((reason) => setError(serviceErrorMessage(reason, '打开应用日志失败')))} disabled={busy}>应用日志</AppButton>
       </div>
     </div>}
     </div>

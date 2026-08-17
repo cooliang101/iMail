@@ -1,4 +1,4 @@
-import { Tag } from '@phosphor-icons/react';
+import { Tag } from '../../components/icons';
 import type { Account, Message } from '../../types';
 import { AccountProviderMark, providerLabel } from '../../components/shared';
 import { VirtualMessageList } from './VirtualMessageList';

@@ -1,4 +1,4 @@
-import { createElement, forwardRef, type ComponentPropsWithoutRef, type ElementType } from 'react';
+import { createElement, forwardRef, type ComponentPropsWithoutRef, type ElementType } from 'preact/compat';
 
 function createPreloadableComponent<T extends ElementType>(loader: () => Promise<{ default: T }>) {
   let loaded: T | undefined;

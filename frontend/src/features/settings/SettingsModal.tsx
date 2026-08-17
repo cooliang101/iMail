@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState } from 'preact/compat';
 import '../../styles/dialogs.css';
 import '../../styles/settings.css';
-import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, HardDrives, Keyboard, LockKey, Palette, X } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, Bell, Envelope, Eye, Gear, HardDrives, Keyboard, LockKey, Palette, X } from '../../components/icons';
 import type { Account } from '../../types';
 import type { AppPreferences, Notice, ShortcutBindings } from '../../app-model';
 import { Overlay } from '../../components/shared';

@@ -10,12 +10,12 @@
 - 三栏桌面结构适合多账户邮件工作流；在平板收窄，在手机切换为列表/详情单页，响应策略符合任务模型。
 - 邮件列表保持紧凑，阅读器留出更宽松的行高和内容宽度，信息密度有清晰分区。
 - 状态、空状态、加载骨架、键盘焦点和 `prefers-reduced-motion` 已有实现基础。
-- 图标统一使用 Phosphor；Fluent UI 负责基础交互控件，业务组件复用统一表单封装。
+- 图标统一使用 Phosphor；基础交互控件由 iMail 自有组件提供，业务组件复用统一表单封装。
 
 ### 当前技术债
 
 - 原 `styles.css` 中存在数百个直接色值，同一层级出现大量肉眼几乎相同的灰绿，修改主题需要逐个选择器排查。
-- Fluent UI 品牌色阶原来写在 `main.tsx`，CSS 变量写在 `styles.css`，两个控制面没有共同的维护入口。
+- 主题色阶与 CSS 变量已经收敛到 appearance feature 和 `theme.css`；后续不得在入口或业务组件中建立第二套主题控制面。
 - 字号经过多轮可读性补丁后形成了有效层级，但命名只有局部别名，组件仍可继续写任意字号。
 - 间距、圆角、阴影、动效和 z-index 多数是裸值，缺少尺度与选择依据。
 - `styles.css` 同时承担基础样式、业务组件和响应式覆盖；在不拆动现有 feature 结构的前提下，需要先建立主题边界，再逐步按领域拆分。
@@ -33,12 +33,12 @@
 
 样式入口顺序如下：
 
-1. `frontend/src/theme.ts`：生成 Fluent UI 的 `Theme`，只维护 Fluent 品牌色阶和基础字体。
+1. `frontend/src/theme.ts`：维护跨主题使用的基础字体常量；主题 ID、回退和运行时派生由 appearance feature 负责。
 2. `frontend/src/theme.css`：产品主题 token，是颜色、排版、间距、形状、阴影、动效、层级和布局尺寸的唯一入口。
 3. `frontend/src/styles.css`：组件和响应式规则，只消费语义 token，不定义主题。
-4. `frontend/src/features/appearance/theme-runtime.ts`：仅为经过校验的 `custom` 主题派生 Fluent 色阶与语义 CSS token。
+4. `frontend/src/features/appearance/theme-runtime.ts`：仅为经过校验的 `custom` 主题派生安全色阶与语义 CSS token。
 
-`main.tsx` 必须先导入 `theme.css`，再导入 `styles.css`。`AppThemeProvider` 同时切换根 `FluentProvider` 品牌色和 `data-theme` 语义 token；不要在业务组件中判断主题并切换 class。
+`main.tsx` 必须先导入 `theme.css`，再导入 `styles.css`。`AppThemeProvider` 在应用根节点切换 `data-theme` 与语义 token；不要在业务组件中判断主题并切换 class。
 
 当前主题 ID 与定位：
 
@@ -51,7 +51,7 @@
 | `constructivist-red` | 构成红 | 革命红、宣纸米白、煤黑、斜切几何和硬边工业排版 |
 | `custom` | 自定义主题 | 用户提供安全颜色令牌和受限形态枚举，运行时派生完整视觉变量 |
 
-主题元数据与安全归一化放在 `frontend/src/features/appearance/theme-model.ts`，内置 Fluent 色阶放在 `frontend/src/theme.ts`，完整 CSS token 契约放在 `frontend/src/theme.css`。新增内置主题必须同时补齐这三处，并为无效或已移除的主题 ID 保留安全回退。
+主题元数据与安全归一化放在 `frontend/src/features/appearance/theme-model.ts`，运行时安全色阶放在 `frontend/src/features/appearance/theme-runtime.ts`，完整 CSS token 契约放在 `frontend/src/theme.css`。新增内置主题必须同步检查 `frontend/src/theme.ts` 与 `frontend/src/theme.css`，并为无效或已移除的主题 ID 保留安全回退。
 
 自定义主题是受限数据协议，不是 CSS 编辑器。输入只允许 `docs/custom-theme.md` 定义的九个 `#RRGGBB` 颜色和三个形态枚举；客户端与 MCP 分别校验，`theme-runtime.ts` 再派生中性色、品牌色、圆角和阴影。禁止把任意 CSS、渐变、URL、透明色或脚本加入这一协议。
 

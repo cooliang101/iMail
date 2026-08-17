@@ -1,4 +1,4 @@
-import { LockKey } from '@phosphor-icons/react';
+import { LockKey } from '../../components/icons';
 import type { Notice } from '../../app-model';
 import { PanelHeading } from './PanelHeading';
 import { AuthorizationExport } from './AuthorizationExport';

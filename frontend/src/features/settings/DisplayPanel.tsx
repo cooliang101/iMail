@@ -1,4 +1,4 @@
-import { Check, Database, Eye } from '@phosphor-icons/react';
+import { Check, Database, Eye } from '../../components/icons';
 import type { AppPreferences } from '../../app-model';
 import { PanelHeading } from './PanelHeading';
 

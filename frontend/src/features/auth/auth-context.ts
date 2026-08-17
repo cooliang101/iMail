@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext } from 'preact/compat';
 
 export type AppUser = { id: string; login: string; displayName: string };
 export type AuthContextValue = { user: AppUser; logout: () => Promise<void> };

@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Copy, Minus, Square, X } from '@phosphor-icons/react';
+import { useEffect, useState, type ReactNode } from 'preact/compat';
+import { Copy, Minus, Square, X } from './icons';
 import { BrandLogo } from './brand-logo';
 import { isTauriRuntime } from '../platform/tauri-runtime';
 
@@ -30,14 +30,14 @@ function DesktopTitlebar() {
   const toggleMaximize = () => run((window) => window.toggleMaximize());
 
   return <header className="desktop-titlebar">
-    <div className="desktop-titlebar-brand" data-tauri-drag-region onDoubleClick={toggleMaximize}>
+    <div className="desktop-titlebar-brand" data-tauri-drag-region onDblClick={toggleMaximize}>
       <BrandLogo className="desktop-titlebar-logo" />
     </div>
-    <div className="desktop-titlebar-name" data-tauri-drag-region onDoubleClick={toggleMaximize}>
+    <div className="desktop-titlebar-name" data-tauri-drag-region onDblClick={toggleMaximize}>
       <strong>iMail</strong>
       <span>统一通信工作台</span>
     </div>
-    <div className="desktop-titlebar-drag" data-tauri-drag-region onDoubleClick={toggleMaximize} />
+    <div className="desktop-titlebar-drag" data-tauri-drag-region onDblClick={toggleMaximize} />
     <nav className="desktop-window-controls" aria-label="窗口控制">
       <button type="button" aria-label="最小化" title="最小化" onClick={() => run((window) => window.minimize())}><Minus size={14} weight="bold" /></button>
       <button type="button" aria-label={maximized ? '还原窗口' : '最大化'} title={maximized ? '还原窗口' : '最大化'} onClick={() => run((window) => window.toggleMaximize())}>

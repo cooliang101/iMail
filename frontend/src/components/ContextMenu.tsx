@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'preact/compat';
 
 export type ContextMenuItem = { id: string; label: string; icon?: ReactNode; shortcut?: string; danger?: boolean; disabled?: boolean; separatorBefore?: boolean; onSelect: () => void };
 

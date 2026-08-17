@@ -1,4 +1,4 @@
-import { CloudSlash, X } from '@phosphor-icons/react';
+import { CloudSlash, X } from '../../components/icons';
 import { Overlay } from '../../components/Overlay';
 import '../../styles/dialogs.css';
 import '../../styles/settings.css';

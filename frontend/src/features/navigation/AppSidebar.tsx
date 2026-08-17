@@ -1,5 +1,5 @@
-import { Button } from '@fluentui/react-components';
-import { AddressBook, Archive, ArrowRight, ArrowsLeftRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Trash, Tray, WarningCircle, X } from '@phosphor-icons/react';
+import { AppButton } from '../../components/AppButton';
+import { AddressBook, Archive, ArrowRight, ArrowsLeftRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Trash, Tray, WarningCircle, X } from '../../components/icons';
 import type { Account } from '../../types';
 import type { AppView, ContextTarget, MessageStats, WorkspaceFolder } from '../../app-model';
 import { WorkspaceFolderItem, WorkspaceIcon } from '../organize';
@@ -16,7 +16,7 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
   const activeAccount = accountFilter === 'all' ? undefined : accounts.find((account) => account.id === accountFilter);
   return <aside className={`primary-sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
     <div className="sidebar-heading"><div><strong>iMail</strong><span>统一通信工作台</span></div><button className="mobile-close" aria-label="关闭侧栏" onClick={onClose}><X size={20} /></button></div>
-    <Button appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => onCompose(activeAccount?.id)}>写邮件</Button>
+    <AppButton appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => onCompose(activeAccount?.id)}>写邮件</AppButton>
     <div className="mobile-account-controls" aria-label="移动端邮箱账户">
       <button className={accountFilter === 'all' ? 'active' : ''} onClick={() => onSelectScope('inbox')}><Tray size={18} /><span><strong>全部邮箱</strong><small>{accounts.length} 个账户</small></span></button>
       {accounts.map((account) => <button key={account.id} className={accountFilter === account.id ? 'active' : ''} onClick={() => onSelectScope('inbox', account.id)}><AccountProviderMark provider={account.provider} /><span><strong>{account.displayName}</strong><small>{account.email}</small></span></button>)}

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Check, ClipboardText, Code, WarningCircle } from '@phosphor-icons/react';
+import { useEffect, useState } from 'preact/compat';
+import { Check, ClipboardText, Code, WarningCircle } from '../../components/icons';
 import type { AppPreferences, CustomThemeDefinition } from '../../app-model';
 import { AppColorInput, AppInput, AppSelect, AppTextarea } from '../../components/form-controls';
 import { parseCustomThemeJson } from '../appearance';

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { BookOpen, Code, Copy, Terminal, WarningCircle } from '@phosphor-icons/react';
+import { useState } from 'preact/compat';
+import { BookOpen, Code, Copy, Terminal, WarningCircle } from '../../components/icons';
 import type { Notice } from '../../app-model';
 import mcpGuideMarkdown from '../../../../docs/mcp-integration.md?raw';
 

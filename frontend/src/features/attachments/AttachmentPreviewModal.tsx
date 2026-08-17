@@ -1,6 +1,6 @@
 import '../../styles/dialogs.css';
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, File, FileArchive, Image as ImageIcon, SpinnerGap, WarningCircle, X } from '@phosphor-icons/react';
+import { useEffect, useMemo, useState } from 'preact/compat';
+import { ArrowLeft, File, FileArchive, Image as ImageIcon, SpinnerGap, WarningCircle, X } from '../../components/icons';
 import { Overlay } from '../../components/Overlay';
 import type { MessageAttachment } from '../../types';
 import { usePlatform } from '../../platform/runtime';

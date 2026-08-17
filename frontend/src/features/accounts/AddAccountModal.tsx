@@ -1,7 +1,7 @@
 import '../../styles/dialogs.css';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Button } from '@fluentui/react-components';
-import { WarningCircle, X } from '@phosphor-icons/react';
+import { useEffect, useRef, useState, type FormEvent } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { WarningCircle, X } from '../../components/icons';
 import { api } from '../../api';
 import { credentialGuideFor, oauthCallbackOrigins } from '../../provider-guides';
 import type { Account, ProviderId } from '../../types';
@@ -157,6 +157,6 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
     <ProviderPicker value={provider} busy={busy} onChange={(nextProvider) => { const item = providers.find((candidate) => candidate.id === nextProvider)!; const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(nextProvider); setManualMode(nextProvider === 'yahoo' && status?.configured === false); setError(''); }} />
     <AccountConnectionFields provider={provider} usesOAuth={usesOAuth} oauthConfigured={oauthStatus?.configured} credentialGuide={credentialGuide} workspaceOptions={workspaceOptions} busy={busy} advanced={advanced} onAdvancedChange={setAdvanced} onManualModeChange={setManualMode} onCancelOAuth={cancelOAuth} />
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
-    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy || (usesOAuth && !oauthStatus?.configured)}>{busy ? (usesOAuth ? '等待授权…' : '正在验证连接…') : error && usesOAuth ? `重新使用 ${providerLabel[provider]} 登录` : usesOAuth ? `使用 ${providerLabel[provider]} 登录` : '验证并添加'}</Button></div>
+    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><AppButton appearance="primary" type="submit" disabled={busy || (usesOAuth && !oauthStatus?.configured)}>{busy ? (usesOAuth ? '等待授权…' : '正在验证连接…') : error && usesOAuth ? `重新使用 ${providerLabel[provider]} 登录` : usesOAuth ? `使用 ${providerLabel[provider]} 登录` : '验证并添加'}</AppButton></div>
   </form></Overlay>;
 }

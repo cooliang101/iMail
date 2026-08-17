@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'preact/compat';
 
 export function Overlay({ children, onClose, wide = false, dialogClassName = '' }: { children: ReactNode; onClose: () => void; wide?: boolean; dialogClassName?: string }) {
   const dialogRef = useRef<HTMLElement | null>(null);

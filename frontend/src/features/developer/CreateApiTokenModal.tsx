@@ -1,7 +1,7 @@
 import '../../styles/dialogs.css';
-import { useState, type FormEvent } from 'react';
-import { Button } from '@fluentui/react-components';
-import { Check, WarningCircle, X } from '@phosphor-icons/react';
+import { useState, type FormEvent } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { Check, WarningCircle, X } from '../../components/icons';
 import { api } from '../../api';
 import type { Account } from '../../types';
 import { Overlay, ProviderIcon, providerLabel } from '../../components/shared';
@@ -34,6 +34,6 @@ export function CreateApiTokenModal({ accounts, onClose, onCreated }: { accounts
     <fieldset><legend>API 权限</legend><label className="scope-row"><AppCheckbox name="scopes" value="messages:read" defaultChecked /><span><strong>读取邮件</strong><small>获取正文、发件人与附件元数据</small></span></label><label className="scope-row"><AppCheckbox name="scopes" value="messages:send" /><span><strong>发送邮件</strong><small>通过选定邮箱发送新邮件</small></span></label><label className="scope-row"><AppCheckbox name="scopes" value="accounts:read" /><span><strong>读取账户</strong><small>获取邮箱列表和连接状态</small></span></label></fieldset>
     <label><span>有效时间</span><AppSelect name="ttlSeconds" defaultValue="3600" options={[{ value: '1800', label: '30 分钟' }, { value: '3600', label: '1 小时' }, { value: '21600', label: '6 小时' }, { value: '86400', label: '24 小时' }, { value: '604800', label: '7 天' }]} /></label>
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
-    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><Button appearance="primary" type="submit" disabled={busy}>{busy ? '创建中…' : '创建 API Token'}</Button></div>
+    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><AppButton appearance="primary" type="submit" disabled={busy}>{busy ? '创建中…' : '创建 API Token'}</AppButton></div>
   </form>}</Overlay>;
 }

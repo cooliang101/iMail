@@ -1,6 +1,6 @@
 import '../../styles/contacts.css';
-import { Button } from '@fluentui/react-components';
-import { AddressBook, EnvelopeSimple, MagnifyingGlass } from '@phosphor-icons/react';
+import { AppButton } from '../../components/AppButton';
+import { AddressBook, EnvelopeSimple, MagnifyingGlass } from '../../components/icons';
 import type { Contact } from '../../types';
 import { SenderAvatar } from '../../components/SenderAvatar';
 import { contactAccent, contactRecency, filterContacts } from './contacts-model';
@@ -18,7 +18,7 @@ export function ContactsWorkspace({ contacts, search, onCompose }: { contacts: C
         <SenderAvatar logo={contact.logo} name={contact.name || contact.address} color={contactAccent(contact.address)} large />
         <div className="contact-identity"><strong title={contact.name || contact.address}>{contact.name || contact.address}</strong><span title={contact.address}>{contact.address}</span></div>
         <div className="contact-meta"><span>{contact.messageCount} 封往来邮件</span><time dateTime={contact.lastContactAt}>{contactRecency(contact.lastContactAt)}</time></div>
-        <Button appearance="subtle" icon={<EnvelopeSimple size={17} />} aria-label={`给 ${contact.name || contact.address} 写邮件`} onClick={() => onCompose(contact)}>写邮件</Button>
+        <AppButton appearance="subtle" icon={<EnvelopeSimple size={17} />} aria-label={`给 ${contact.name || contact.address} 写邮件`} onClick={() => onCompose(contact)}>写邮件</AppButton>
       </article>)}
     </div> : <div className="contacts-empty">
       {search.trim() ? <><MagnifyingGlass size={34} /><h2>没有匹配的联系人</h2><p>换个姓名或邮箱地址再试试。</p></> : <><AddressBook size={38} /><h2>联系人会自动出现在这里</h2><p>同步邮件后，发件人与收件人会被整理到通讯录。</p></>}

@@ -1,8 +1,8 @@
-import type { CSSProperties } from 'react';
-import type { BrandVariants, Theme } from '@fluentui/react-components';
-import { createLightTheme } from '@fluentui/react-components';
+import type { CSSProperties } from 'preact/compat';
 import type { CustomThemeDefinition } from '../../app-model';
-import { imailFontFamily } from '../../theme';
+
+type BrandStep = 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 | 110 | 120 | 130 | 140 | 150 | 160;
+export type BrandVariants = Record<BrandStep, string>;
 
 function rgb(hex: string) {
   return [Number.parseInt(hex.slice(1, 3), 16), Number.parseInt(hex.slice(3, 5), 16), Number.parseInt(hex.slice(5, 7), 16)] as const;
@@ -33,10 +33,6 @@ export function customBrandVariants(accent: string): BrandVariants {
     110: mixHex(accent, '#ffffff', .46), 120: mixHex(accent, '#ffffff', .57), 130: mixHex(accent, '#ffffff', .67),
     140: mixHex(accent, '#ffffff', .77), 150: mixHex(accent, '#ffffff', .87), 160: mixHex(accent, '#ffffff', .94),
   };
-}
-
-export function createCustomFluentTheme(customTheme: CustomThemeDefinition): Theme {
-  return { ...createLightTheme(customBrandVariants(customTheme.accent)), fontFamilyBase: imailFontFamily };
 }
 
 const radiusScale = {

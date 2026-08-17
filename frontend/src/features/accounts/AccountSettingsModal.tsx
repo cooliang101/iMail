@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Envelope, WarningCircle } from '@phosphor-icons/react';
+import { useEffect, useRef, useState, type FormEvent } from 'preact/compat';
+import { Envelope, WarningCircle } from '../../components/icons';
 import { api } from '../../api';
 import { oauthCallbackOrigins } from '../../provider-guides';
 import type { Account } from '../../types';

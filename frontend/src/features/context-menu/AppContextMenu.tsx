@@ -1,4 +1,4 @@
-import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowClockwise, Clock, Envelope, FolderOpen, Gear, Keyboard, PencilSimple, Star, Tag, Trash, Tray } from '@phosphor-icons/react';
+import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowClockwise, Clock, Envelope, FolderOpen, Gear, Keyboard, PencilSimple, Star, Tag, Trash, Tray } from '../../components/icons';
 import type { ContextTarget, ShortcutBindings, WorkspaceFolder } from '../../app-model';
 import type { Account, Message } from '../../types';
 import { ContextMenu, type ContextMenuItem } from '../../components/ContextMenu';

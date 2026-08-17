@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Button } from '@fluentui/react-components';
-import { AddressBook, ArrowRight, Code, Copy, Key, Plus, WarningCircle } from '@phosphor-icons/react';
+import { useEffect, useState } from 'preact/compat';
+import { AppButton } from '../../components/AppButton';
+import { AddressBook, ArrowRight, Code, Copy, Key, Plus, WarningCircle } from '../../components/icons';
 import { api } from '../../api';
 import type { Account, DeveloperToken, ExternalAccessSettings } from '../../types';
 import type { Notice } from '../../app-model';
@@ -65,7 +65,7 @@ export function TokenWorkspace({ accounts, tokens, onCreateApi, onCreateMcp, onR
   }
 
   return <section className="token-workspace">
-    <header><div><span>外部接入</span><h1>{activeTab === 'mcp' ? 'MCP Agent 接入' : '邮件 API 网关'}</h1><p>{activeTab === 'mcp' ? '为可信 Agent 创建独立授权码，通过标准 MCP 工具安全管理邮箱。' : '为项目创建细粒度 API Token，通过 REST 接口读取或发送邮件。'}</p></div><Button appearance="primary" icon={<Plus size={17} />} onClick={activeTab === 'mcp' ? onCreateMcp : onCreateApi} disabled={!available || !activeEnabled || (activeTab === 'api' && accounts.length === 0)}>{activeTab === 'mcp' ? '创建 MCP 授权码' : '创建 API Token'}</Button></header>
+    <header><div><span>外部接入</span><h1>{activeTab === 'mcp' ? 'MCP Agent 接入' : '邮件 API 网关'}</h1><p>{activeTab === 'mcp' ? '为可信 Agent 创建独立授权码，通过标准 MCP 工具安全管理邮箱。' : '为项目创建细粒度 API Token，通过 REST 接口读取或发送邮件。'}</p></div><AppButton appearance="primary" icon={<Plus size={17} />} onClick={activeTab === 'mcp' ? onCreateMcp : onCreateApi} disabled={!available || !activeEnabled || (activeTab === 'api' && accounts.length === 0)}>{activeTab === 'mcp' ? '创建 MCP 授权码' : '创建 API Token'}</AppButton></header>
 
     <nav className="access-tabs" role="tablist" aria-label="外部接入方式"><button role="tab" aria-selected={activeTab === 'mcp'} className={activeTab === 'mcp' ? 'active' : ''} onClick={() => setActiveTab('mcp')}><Code size={18} /><span><strong>MCP</strong><small>Agent 工具调用</small></span></button><button role="tab" aria-selected={activeTab === 'api'} className={activeTab === 'api' ? 'active' : ''} onClick={() => setActiveTab('api')}><AddressBook size={18} /><span><strong>API 网关</strong><small>REST 接口调用</small></span></button></nav>
 

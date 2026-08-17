@@ -1,4 +1,4 @@
-import { Folder } from '@phosphor-icons/react';
+import { Folder } from '../../components/icons';
 import type { WorkspaceFolder } from '../../app-model';
 
 export function WorkspaceFolderItem({ folder, active, onSelect, onContextMenu }: {

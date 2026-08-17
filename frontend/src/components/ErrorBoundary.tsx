@@ -1,5 +1,5 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { ArrowCounterClockwise, WarningCircle, X } from '@phosphor-icons/react';
+import { Component, type ErrorInfo, type ReactNode } from 'preact/compat';
+import { ArrowCounterClockwise, WarningCircle, X } from './icons';
 import { desktopLog, describeDesktopLogValue } from '../desktop-logging';
 
 type ErrorBoundaryProps = {

@@ -1,5 +1,12 @@
-import { Textarea, type TextareaProps } from '@fluentui/react-components';
+import type { ChangeEvent, CSSProperties, TextareaHTMLAttributes } from 'preact/compat';
 
-export function AppTextarea({ className, ...props }: TextareaProps) {
-  return <Textarea appearance="outline" className={className ? `app-textarea ${className}` : 'app-textarea'} {...props} />;
+type AppTextareaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange'> & {
+  resize?: CSSProperties['resize'];
+  onChange?: (event: ChangeEvent<HTMLTextAreaElement>, data: { value: string }) => void;
+};
+
+export function AppTextarea({ className, resize, style, onChange, ...props }: AppTextareaProps) {
+  return <span className={className ? `app-textarea ${className}` : 'app-textarea'}>
+    <textarea {...props} style={{ ...(style as CSSProperties | undefined), resize }} onChange={(event) => onChange?.(event, { value: event.currentTarget.value })} />
+  </span>;
 }

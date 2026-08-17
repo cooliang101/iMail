@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo } from 'preact/compat';
 import { sanitizeEmailHtml } from './sanitize-email-html';
 
 export { sanitizeEmailHtml } from './sanitize-email-html';

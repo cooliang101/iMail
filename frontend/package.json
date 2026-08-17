@@ -1,6 +1,6 @@
 {
   "name": "imail",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "imail": {
     "schemaVersion": 6
   },
@@ -49,21 +49,19 @@
     "check:frontend": "npm run typecheck && npm run lint && npm test && npm run build && node ../scripts/check-frontend-bundle.mjs"
   },
   "dependencies": {
-    "@fluentui/react-components": "^9.69.0",
-    "@phosphor-icons/react": "^2.1.10",
+    "@iconify-icons/ph": "^1.2.5",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.4",
+    "@tiptap/core": "^3.29.2",
     "@tiptap/extension-image": "^3.29.2",
     "@tiptap/extension-link": "^3.29.2",
     "@tiptap/extension-placeholder": "^3.29.2",
     "@tiptap/extension-text-align": "^3.29.2",
     "@tiptap/pm": "^3.29.2",
-    "@tiptap/react": "^3.29.2",
     "@tiptap/starter-kit": "^3.29.2",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "preact": "^10.29.8",
     "simple-icons": "^16.27.1"
   },
   "devDependencies": {
@@ -71,16 +69,15 @@
     "@eslint/js": "^9.39.5",
     "@modelcontextprotocol/client": "^2.0.0",
     "@playwright/test": "^1.62.1",
+    "@preact/preset-vite": "^2.10.6",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.0.3",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^4.5.2",
     "concurrently": "^9.1.2",
     "eslint": "^9.39.5",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
     "linkedom": "^0.18.13",
+    "preact-render-to-string": "^6.7.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.67.0",
     "vite": "^7.0.0",
