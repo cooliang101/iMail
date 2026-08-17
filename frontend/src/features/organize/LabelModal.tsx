@@ -2,7 +2,7 @@ import '../../styles/dialogs.css';
 import { useState, type FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { ArrowRight, Bell, Check, Clock, Envelope, Tag, WarningCircle, X } from '../../components/icons';
-import { api } from '../../api';
+import { api } from '../../services';
 import type { Account, Message } from '../../types';
 import type { MailNotification } from '../../app-model';
 import { Overlay, ProviderIcon, providerLabel, relativeTime } from '../../components/shared';

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'preact/compat';
 import { Envelope, WarningCircle } from '../../components/icons';
-import { api } from '../../api';
-import { oauthCallbackOrigins } from '../../provider-guides';
+import { api } from '../../services';
+import { oauthCallbackOrigins } from '../../config/provider-guides';
 import type { Account } from '../../types';
 import type { Notice } from '../../app-model';
 import { AccountSettingsCard } from './AccountSettingsCard';

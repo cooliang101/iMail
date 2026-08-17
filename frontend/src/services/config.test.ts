@@ -12,7 +12,7 @@ import {
   saveServiceUrl,
   SERVICE_MODE_STORAGE_KEY,
   SERVICE_URL_STORAGE_KEY,
-} from './service-config';
+} from './config';
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));

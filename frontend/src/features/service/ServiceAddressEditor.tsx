@@ -7,7 +7,7 @@ import {
   configuredRemoteServiceUrl,
   normalizeServiceUrl,
   saveServiceSelection,
-} from '../../service-config';
+} from '../../services';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
 import { serviceErrorMessage, testServiceConnection } from './service-connection';
 import { switchToLocalService, switchToRemoteService, type ServiceTransitionDependencies } from './service-transition';

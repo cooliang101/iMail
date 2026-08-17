@@ -3,7 +3,7 @@ import '../../styles/attachments.css';
 import { DownloadSimple, Eye, File, WarningCircle } from '../../components/icons';
 import type { MessageAttachment } from '../../types';
 import { usePlatform } from '../../platform/runtime';
-import { absoluteServiceUrl } from '../../service-config';
+import { absoluteServiceUrl } from '../../services';
 import { AttachmentPreviewModal } from './AttachmentPreviewModal';
 import { canPreviewAttachment, formatAttachmentSize } from './attachment-api';
 

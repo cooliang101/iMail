@@ -6,10 +6,10 @@ import './styles.css';
 import { AuthGate } from './features/auth';
 import { AppThemeProvider } from './features/appearance';
 import { PlatformProvider } from './platform/runtime';
-import { registerWebServiceWorker } from './service-worker-registration';
+import { registerWebServiceWorker } from './platform/service-worker';
 import { DesktopFrame } from './components/DesktopFrame';
 import { AppErrorBoundary } from './components/ErrorBoundary';
-import { desktopLog, installDesktopLogging } from './desktop-logging';
+import { desktopLog, installDesktopLogging } from './services';
 import { preventBrowserRefresh } from './features/shortcuts';
 
 const TrayMenuApp = lazy(() => import('./features/tray-menu/TrayMenuApp').then((module) => ({ default: module.TrayMenuApp })));

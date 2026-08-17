@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { ArrowLeft, Trash, WarningCircle } from '../../components/icons';
-import { api } from '../../api';
+import { api } from '../../services';
 import type { Notice } from '../../app-model';
 import { AppInput } from '../../components/form-controls';
 import { CLEAR_USER_DATA_CONFIRMATION, clearUserDataReady } from './privacy-actions';

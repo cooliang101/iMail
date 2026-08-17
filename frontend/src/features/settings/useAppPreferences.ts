@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'preact/compat';
-import { api } from '../../api';
+import { api } from '../../services';
 import type { AppPreferences, Notice, ShortcutBindings } from '../../app-model';
 import {
   gatewayPreferencesPayload,

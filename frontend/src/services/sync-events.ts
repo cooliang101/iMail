@@ -1,8 +1,8 @@
 export type SyncEventType = 'connected' | 'sync.status' | 'sync.started' | 'sync.completed' | 'sync.failed' | 'message.created';
 
-import { configuredServiceMode, configuredServiceUrl, serviceUrl, type ServiceMode } from './service-config';
-import { isTauriRuntime } from './platform/tauri-runtime';
-import { embeddedTauriServiceEnabled } from './mail-service';
+import { configuredServiceMode, configuredServiceUrl, serviceUrl, type ServiceMode } from './config';
+import { isTauriRuntime } from '../platform/tauri-runtime';
+import { embeddedTauriServiceEnabled } from './mail';
 
 const eventTypes: SyncEventType[] = ['connected', 'sync.status', 'sync.started', 'sync.completed', 'sync.failed', 'message.created'];
 

@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { AddressBook, ArrowRight, Code, Copy, Key, Plus, WarningCircle } from '../../components/icons';
-import { api } from '../../api';
+import { api, desktopLog, describeDesktopLogValue } from '../../services';
 import type { Account, DeveloperToken, ExternalAccessSettings } from '../../types';
 import type { Notice } from '../../app-model';
 import { providerLabel } from '../../components/shared';
 import { AppCheckbox, AppSelect } from '../../components/form-controls';
 import { McpIntegrationGuide } from './McpIntegrationGuide';
 import { useExternalAccessBaseUrl } from './external-access-endpoint';
-import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';
 
 type AccessTab = 'api' | 'mcp';
 

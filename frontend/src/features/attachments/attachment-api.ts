@@ -1,6 +1,4 @@
-import { api } from '../../api';
-import { desktopReadBinary } from '../../desktop-http';
-import { absoluteServiceUrl } from '../../service-config';
+import { absoluteServiceUrl, api, desktopReadBinary } from '../../services';
 import type { MessageAttachment } from '../../types';
 
 export type PreviewKind = 'image' | 'pdf' | 'video' | 'archive' | 'text' | 'unsupported';

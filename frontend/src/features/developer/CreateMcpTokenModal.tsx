@@ -2,7 +2,7 @@ import '../../styles/dialogs.css';
 import { useState, type FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { Code, WarningCircle, X } from '../../components/icons';
-import { api } from '../../api';
+import { api } from '../../services';
 import { Overlay } from '../../components/shared';
 import { AppInput, AppSelect } from '../../components/form-controls';
 import { TokenCreatedResult } from './TokenCreatedResult';

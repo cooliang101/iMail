@@ -1,5 +1,5 @@
-import type { DesktopHttpInvoker } from './desktop-http';
-import { isTauriRuntime } from './platform/tauri-runtime';
+import type { DesktopHttpInvoker } from './http';
+import { isTauriRuntime } from '../../platform/tauri-runtime';
 
 export type DesktopLogLevel = 'info' | 'warn' | 'error';
 

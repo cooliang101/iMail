@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { ArrowLeft, HardDrives, LockKey, UserCircle, UserPlus } from '../../components/icons';
-import { api } from '../../api';
+import { api, configuredServiceMode, configuredServiceUrl, describeDesktopLogValue, desktopLog } from '../../services';
 import { AppInput } from '../../components/form-controls';
 import { BrandLogo } from '../../components/brand-logo';
 import { AuthContext, type AppUser } from './auth-context';
 import { loadRememberedUsers, rememberUser } from './remembered-users';
 import { createLatestServiceCheckRunner, runWithReadySelectedService, serviceErrorMessage, ServiceAddressEditor, testServiceConnection } from '../service';
-import { configuredServiceMode, configuredServiceUrl } from '../../service-config';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
-import { describeDesktopLogValue, desktopLog } from '../../desktop-logging';
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);

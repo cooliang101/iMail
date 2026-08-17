@@ -5,7 +5,7 @@
 - 客户端组件按领域放入 `frontend/src/features/<domain>/`，跨领域 UI 与纯展示工具放入 `frontend/src/components/`。
 - 表单统一使用 `frontend/src/components/form-controls.tsx` 的 `AppInput`、`AppSelect`、`AppTextarea` 和 `AppCheckbox`；不要在业务组件中直接新增原生表单控件。
 - 跨 feature 的客户端类型放入 `frontend/src/app-model.ts`；邮件领域共享的数据结构继续使用 `frontend/src/types.ts`。
-- feature 可以依赖 `api.ts`、`types.ts` 和 `components/`，不要反向依赖 `App.tsx`。
+- feature 可以依赖 `services/`、`types.ts` 和 `components/`，不要反向依赖 `App.tsx`。环境相关服务统一从 `frontend/src/services/` 导出，桌面、HTTP 等实现放入对应子目录，不要把 service 文件放回 `frontend/src/` 根目录。
 - 主题 ID 与回退由 `frontend/src/features/appearance/` 维护；新增内置主题必须同步 `frontend/src/theme.ts` 和 `frontend/src/theme.css`。自定义主题只接受安全令牌，字段变更须同步 `theme-runtime.ts`、`crates/imail-core/src/theme.rs`、`crates/imail-http/src/mcp.rs` 与 `docs/custom-theme.md`，不得扩展为任意 CSS，也不得加入 HTTP 网关。
 - 保持现有本地优先、安全边界和响应式行为；结构重构不得改变 API 协议。
 - 通用 Web API、MCP 与 Gateway 能力统一放在 `crates/imail-http/`，由 Tauri 应用和 `http-service/` 共同复用；账户管理只允许 `mcp:full` 授权码，任何响应都不得暴露邮箱凭据、OAuth Token 或加密字段。

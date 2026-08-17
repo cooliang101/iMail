@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'preact/compat';
 import { usePlatform } from '../../platform/runtime';
-import { subscribeSyncEvents } from '../../sync-events';
-import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';
+import { desktopLog, describeDesktopLogValue, subscribeSyncEvents } from '../../services';
 import { newMailNotificationFromEvent } from './new-mail-notifications';
 
 const MAX_REMEMBERED_EVENTS = 200;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'preact/compat';
 import type { ContactLogo } from '../types';
-import { desktopReadBinary } from '../desktop-http';
+import { desktopReadBinary } from '../services';
 import { isTauriRuntime } from '../platform/tauri-runtime';
 
 const desktopLogoSources = new Map<string, Promise<string>>();

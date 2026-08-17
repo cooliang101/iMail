@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { DownloadSimple, FileLock, WarningCircle } from '../../components/icons';
-import { api } from '../../api';
+import { api } from '../../services';
 import type { Notice } from '../../app-model';
 import { AppCheckbox, AppInput } from '../../components/form-controls';
 import { usePlatform } from '../../platform/runtime';

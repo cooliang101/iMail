@@ -1,4 +1,4 @@
-import type { ProviderId } from './types';
+import type { ProviderId } from '../types';
 
 export type CredentialGuide = {
   title: string;

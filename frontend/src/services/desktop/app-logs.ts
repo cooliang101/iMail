@@ -1,4 +1,4 @@
-import type { DesktopHttpInvoker } from './desktop-http';
+import type { DesktopHttpInvoker } from './http';
 
 async function tauriInvoke<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import('@tauri-apps/api/core');

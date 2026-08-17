@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'preact/compat';
-import { absoluteServiceUrl, configuredServiceMode } from '../../service-config';
+import { absoluteServiceUrl, configuredServiceMode, desktopLog, describeDesktopLogValue } from '../../services';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
-import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';
 
 type ExternalHttpEndpoint = { baseUrl: string };
 type DesktopInvoker = (command: string) => Promise<ExternalHttpEndpoint>;

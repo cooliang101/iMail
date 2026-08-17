@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
-import { desktopOpenAppLogs } from './local-service';
-import type { DesktopHttpInvoker } from './desktop-http';
+import { desktopOpenAppLogs } from './app-logs';
+import type { DesktopHttpInvoker } from './http';
 
 it('opens only the desktop application logs', async () => {
   const calls: unknown[][] = [];

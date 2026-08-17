@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -25,6 +25,36 @@ describe('frontend workspace layout', () => {
     }
     for (const forbidden of ['src', 'public', 'package.json', 'package-lock.json', 'node_modules', 'dist']) {
       expect(await exists(forbidden), forbidden).toBe(false);
+    }
+  });
+
+  it('keeps the frontend source root limited to application entry contracts', async () => {
+    const sourceRoot = path.join(workspaceRoot, 'frontend', 'src');
+    const entries = await readdir(sourceRoot, { withFileTypes: true });
+    const rootFiles = entries.filter((entry) => entry.isFile()).map((entry) => entry.name).sort();
+    expect(rootFiles).toEqual([
+      'App.tsx',
+      'app-model.ts',
+      'main.tsx',
+      'raw-imports.d.ts',
+      'styles.css',
+      'theme.css',
+      'theme.ts',
+      'types.ts',
+      'vite-env.d.ts',
+    ]);
+    for (const required of [
+      'frontend/src/app',
+      'frontend/src/components',
+      'frontend/src/config',
+      'frontend/src/features',
+      'frontend/src/platform',
+      'frontend/src/services',
+      'frontend/src/services/desktop',
+      'frontend/src/services/mail',
+      'frontend/src/utils',
+    ]) {
+      expect(await exists(required), required).toBe(true);
     }
   });
 

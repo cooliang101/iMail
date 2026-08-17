@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'preact/compat';
 import { ArrowCounterClockwise, WarningCircle, X } from './icons';
-import { desktopLog, describeDesktopLogValue } from '../desktop-logging';
+import { desktopLog, describeDesktopLogValue } from '../services';
 
 type ErrorBoundaryProps = {
   children: ReactNode;

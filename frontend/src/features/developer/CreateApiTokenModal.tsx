@@ -2,7 +2,7 @@ import '../../styles/dialogs.css';
 import { useState, type FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { Check, WarningCircle, X } from '../../components/icons';
-import { api } from '../../api';
+import { api } from '../../services';
 import type { Account } from '../../types';
 import { Overlay, ProviderIcon, providerLabel } from '../../components/shared';
 import { AppCheckbox, AppInput, AppSelect } from '../../components/form-controls';

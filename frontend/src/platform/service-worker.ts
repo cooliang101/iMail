@@ -1,4 +1,4 @@
-import { isTauriRuntime } from './platform/tauri-runtime';
+import { isTauriRuntime } from './tauri-runtime';
 
 type RegistrationEnvironment = {
   production: boolean;

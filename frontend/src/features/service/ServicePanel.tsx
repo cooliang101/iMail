@@ -8,11 +8,12 @@ import {
   configuredServiceUrl,
   saveServiceSelection,
   embeddedTauriServiceEnabled,
+  desktopOpenAppLogs,
+  describeDesktopLogValue,
+  desktopLog,
   type ServiceMode,
-} from '../../service-config';
+} from '../../services';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
-import { desktopOpenAppLogs } from '../../local-service';
-import { describeDesktopLogValue, desktopLog } from '../../desktop-logging';
 import { ServiceAddressEditor } from './ServiceAddressEditor';
 import { serviceErrorMessage, testServiceConnection } from './service-connection';
 import { switchToLocalService, type ServiceTransitionDependencies } from './service-transition';

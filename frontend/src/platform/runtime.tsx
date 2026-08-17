@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'preact/compat';
 import type { DownloadRequest, NotificationTarget, PlatformRuntime, SystemNotification } from './types';
-import { desktopDownload } from '../desktop-http';
+import { desktopDownload } from '../services';
 import { isTauriRuntime } from './tauri-runtime';
 export { isTauriRuntime } from './tauri-runtime';
 export function externalHttpUrl(value: string) {

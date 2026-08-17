@@ -1,5 +1,5 @@
 import type { ServiceInfo } from '../../types';
-import { secureRemoteServiceUrl, type ServiceMode, type ServiceSelection } from '../../service-config';
+import { secureRemoteServiceUrl, type ServiceMode, type ServiceSelection } from '../../services';
 
 export type ServiceTransitionDependencies = {
   testConnection: (url: string) => Promise<ServiceInfo>;

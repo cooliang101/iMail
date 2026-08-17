@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { Archive, ArrowLeft, ArrowRight, CaretDown, Clock, Envelope, File, Star, Tag, Trash, Tray } from '../../components/icons';
 import type { Account, Message } from '../../types';
-import { virtualRange } from '../../virtual';
+import { virtualRange } from '../../utils/virtual';
 import { AccountProviderMark, providerLabel, relativeTime, SenderAvatar } from '../../components/shared';
 import { useAppTheme } from '../appearance';
 

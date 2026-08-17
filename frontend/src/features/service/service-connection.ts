@@ -1,8 +1,6 @@
 import type { ServiceInfo } from '../../types';
-import { desktopTestService, type DesktopHttpInvoker } from '../../desktop-http';
+import { configuredServiceMode, createMailService, desktopTestService, embeddedTauriServiceEnabled, type DesktopHttpInvoker } from '../../services';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
-import { configuredServiceMode, embeddedTauriServiceEnabled } from '../../service-config';
-import { createMailService } from '../../mail-service';
 
 export const SUPPORTED_SERVICE_PROTOCOL_VERSION = 1;
 

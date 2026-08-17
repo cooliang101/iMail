@@ -2,7 +2,7 @@ import type { FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { ArrowClockwise, Globe, Key, PencilSimple, Trash } from '../../components/icons';
 import type { Account } from '../../types';
-import { credentialGuideFor } from '../../provider-guides';
+import { credentialGuideFor } from '../../config/provider-guides';
 import { AppInput, AppSelect } from '../../components/form-controls';
 import { ProviderIcon, providerLabel } from '../../components/shared';
 import { ProxyFields, type ProxyPreset } from './ProxyFields';

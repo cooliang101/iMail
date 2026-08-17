@@ -1,14 +1,5 @@
-import { configuredServiceMode, embeddedTauriServiceEnabled } from './service-config';
-export { embeddedTauriServiceEnabled } from './service-config';
-import { desktopHttpRequest, type DesktopHttpInvoker, type DesktopHttpResponse } from './desktop-http';
-import { isTauriRuntime } from './platform/tauri-runtime';
-
-export type MailServiceKind = 'http' | 'tauri-embedded';
-
-export interface MailService {
-  readonly kind: MailServiceKind;
-  request(path: string, options?: RequestInit): Promise<DesktopHttpResponse>;
-}
+import type { DesktopHttpInvoker, DesktopHttpResponse } from '../desktop/http';
+import type { MailService } from './contracts';
 
 export type EmbeddedDomainCall =
   | { operation: 'systemInfo' }
@@ -148,12 +139,6 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   return null;
 }
 
-export class HttpMailService implements MailService {
-  readonly kind = 'http' as const;
-  constructor(private readonly requester: (path: string, options?: RequestInit) => Promise<DesktopHttpResponse>) {}
-  request(path: string, options?: RequestInit) { return this.requester(path, options); }
-}
-
 export class TauriMailService implements MailService {
   readonly kind = 'tauri-embedded' as const;
   constructor(private readonly invoker: DesktopHttpInvoker) {}
@@ -166,24 +151,4 @@ export class TauriMailService implements MailService {
     if (call) return this.invoker<DesktopHttpResponse>('desktop_mail_service_call', { call });
     throw new Error(`Tauri 直连尚未映射该领域操作：${options.method ?? 'GET'} ${path.split('?')[0]}`);
   }
-}
-
-async function tauriInvoke<T>(command: string, args?: Record<string, unknown>) {
-  const { invoke } = await import('@tauri-apps/api/core');
-  return invoke<T>(command, args);
-}
-
-export function createMailService(options: {
-  tauri?: boolean;
-  mode?: 'local' | 'remote';
-  embedded?: boolean;
-  invoker?: DesktopHttpInvoker;
-  httpRequester?: (path: string, options?: RequestInit) => Promise<DesktopHttpResponse>;
-} = {}): MailService {
-  const tauri = options.tauri ?? isTauriRuntime();
-  const mode = options.mode ?? configuredServiceMode();
-  const embedded = options.embedded ?? embeddedTauriServiceEnabled();
-  const invoker = options.invoker ?? tauriInvoke;
-  if (tauri && mode === 'local' && embedded) return new TauriMailService(invoker);
-  return new HttpMailService(options.httpRequester ?? ((path, request) => desktopHttpRequest(path, request)));
 }

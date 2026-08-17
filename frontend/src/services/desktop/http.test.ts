@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { desktopDownload, desktopHttpRequest, desktopReadBinary, desktopTestService, type DesktopHttpInvoker } from './desktop-http';
+import { desktopDownload, desktopHttpRequest, desktopReadBinary, desktopTestService, type DesktopHttpInvoker } from './http';
 
 describe('desktop HTTP bridge', () => {
   it('sends API requests to the Rust command instead of browser fetch', async () => {

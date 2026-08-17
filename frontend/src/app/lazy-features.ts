@@ -31,17 +31,17 @@ function createPreloadableComponent<T extends ElementType>(loader: () => Promise
   return { Component: Preloadable as unknown as T, preload };
 }
 
-const composePane = createPreloadableComponent(() => import('./features/compose/ComposePane').then((module) => ({ default: module.ComposePane })));
-const settingsModal = createPreloadableComponent(() => import('./features/settings/SettingsModal').then((module) => ({ default: module.SettingsModal })));
-const addAccountModal = createPreloadableComponent(() => import('./features/accounts/AddAccountModal').then((module) => ({ default: module.AddAccountModal })));
-const createApiTokenModal = createPreloadableComponent(() => import('./features/developer/CreateApiTokenModal').then((module) => ({ default: module.CreateApiTokenModal })));
-const createMcpTokenModal = createPreloadableComponent(() => import('./features/developer/CreateMcpTokenModal').then((module) => ({ default: module.CreateMcpTokenModal })));
-const notificationsModal = createPreloadableComponent(() => import('./features/organize/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
-const labelModal = createPreloadableComponent(() => import('./features/organize/LabelModal').then((module) => ({ default: module.LabelModal })));
-const snoozeModal = createPreloadableComponent(() => import('./features/organize/SnoozeModal').then((module) => ({ default: module.SnoozeModal })));
-const workspaceModal = createPreloadableComponent(() => import('./features/organize/WorkspaceModal').then((module) => ({ default: module.WorkspaceModal })));
-const preferencesSyncErrorDialog = createPreloadableComponent(() => import('./features/settings/PreferencesSyncErrorDialog').then((module) => ({ default: module.PreferencesSyncErrorDialog })));
-const appContextMenu = createPreloadableComponent(() => import('./features/context-menu/AppContextMenu').then((module) => ({ default: module.AppContextMenu })));
+const composePane = createPreloadableComponent(() => import('../features/compose/ComposePane').then((module) => ({ default: module.ComposePane })));
+const settingsModal = createPreloadableComponent(() => import('../features/settings/SettingsModal').then((module) => ({ default: module.SettingsModal })));
+const addAccountModal = createPreloadableComponent(() => import('../features/accounts/AddAccountModal').then((module) => ({ default: module.AddAccountModal })));
+const createApiTokenModal = createPreloadableComponent(() => import('../features/developer/CreateApiTokenModal').then((module) => ({ default: module.CreateApiTokenModal })));
+const createMcpTokenModal = createPreloadableComponent(() => import('../features/developer/CreateMcpTokenModal').then((module) => ({ default: module.CreateMcpTokenModal })));
+const notificationsModal = createPreloadableComponent(() => import('../features/organize/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
+const labelModal = createPreloadableComponent(() => import('../features/organize/LabelModal').then((module) => ({ default: module.LabelModal })));
+const snoozeModal = createPreloadableComponent(() => import('../features/organize/SnoozeModal').then((module) => ({ default: module.SnoozeModal })));
+const workspaceModal = createPreloadableComponent(() => import('../features/organize/WorkspaceModal').then((module) => ({ default: module.WorkspaceModal })));
+const preferencesSyncErrorDialog = createPreloadableComponent(() => import('../features/settings/PreferencesSyncErrorDialog').then((module) => ({ default: module.PreferencesSyncErrorDialog })));
+const appContextMenu = createPreloadableComponent(() => import('../features/context-menu/AppContextMenu').then((module) => ({ default: module.AppContextMenu })));
 
 export const ComposePane = composePane.Component;
 export const SettingsModal = settingsModal.Component;

@@ -1,5 +1,5 @@
 import { ArrowRight, CaretDown, Gear, Key, WarningCircle } from '../../components/icons';
-import type { CredentialGuide } from '../../provider-guides';
+import type { CredentialGuide } from '../../config/provider-guides';
 import type { ProviderId } from '../../types';
 import { providerLabel } from '../../components/shared';
 import { AppInput, AppSelect, type AppSelectOption } from '../../components/form-controls';

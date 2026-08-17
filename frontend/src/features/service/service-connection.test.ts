@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DesktopHttpInvoker } from '../../desktop-http';
+import type { DesktopHttpInvoker } from '../../services';
 import { parseServiceInfo, serviceErrorMessage, testServiceConnection } from './service-connection';
 
 const info = {

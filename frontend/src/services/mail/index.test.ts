@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createMailService, embeddedDomainCall, HttpMailService, TauriMailService } from './mail-service';
-import type { DesktopHttpInvoker } from './desktop-http';
+import { createMailService, embeddedDomainCall, HttpMailService, TauriMailService } from './index';
+import type { DesktopHttpInvoker } from '../desktop/http';
 
 describe('mail service client adapters', () => {
   it('maps local embedded requests to a typed Tauri command without a service URL or cookie transport', async () => {

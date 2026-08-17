@@ -1,4 +1,4 @@
-import { configuredServiceMode, configuredServiceUrl, embeddedTauriServiceEnabled } from './service-config';
+import { configuredServiceMode, configuredServiceUrl, embeddedTauriServiceEnabled } from '../config';
 
 export type DesktopHttpResponse = { status: number; body: string };
 export type DesktopHttpInvoker = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { describeDesktopLogValue, desktopLog } from './desktop-logging';
+import { describeDesktopLogValue, desktopLog } from './logging';
 
 describe('desktop logging bridge', () => {
   it('forwards bounded event data through the desktop command', async () => {

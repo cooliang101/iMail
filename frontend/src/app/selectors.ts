@@ -1,6 +1,6 @@
-import type { Account, MailboxRole } from './types';
-import type { AppView, WorkspaceFolder } from './app-model';
-import { isWorkspaceMailbox } from './features/organize';
+import type { Account, MailboxRole } from '../types';
+import type { AppView, WorkspaceFolder } from '../app-model';
+import { isWorkspaceMailbox } from '../features/organize';
 
 export function buildWorkspaceFolders(accounts: Account[], groups: string[]) {
   return new Map(groups.map((group) => {

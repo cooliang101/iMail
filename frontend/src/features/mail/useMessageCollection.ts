@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'preact/compat';
-import { api } from '../../api';
-import { buildMessageQuery } from '../../app-selectors';
-import { subscribeSyncEvents } from '../../sync-events';
+import { api, desktopLog, describeDesktopLogValue, subscribeSyncEvents } from '../../services';
+import { buildMessageQuery } from '../../app/selectors';
 import type { Account, Contact, Message } from '../../types';
 import type { AppView, MessageStats, Notice, WorkspaceFolder } from '../../app-model';
 import { appendMessagePage, applyMessageChanges, applyMessageStatsChanges, cacheMessageBody, messageTotalDelta, type MessageChange } from './message-cache';
 import type { MailListFilter } from './MessagePane';
-import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';
 
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; nextCursor?: string; hasMore: boolean };
 

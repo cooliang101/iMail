@@ -1,7 +1,7 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/compat';
 import { ArrowCounterClockwise, Check, WarningCircle } from './components/icons';
-import { api } from './api';
-import { buildWorkspaceFolders } from './app-selectors';
+import { api, desktopLog, describeDesktopLogValue } from './services';
+import { buildWorkspaceFolders } from './app/selectors';
 import type { Account, Contact, DeveloperToken, Draft, Message } from './types';
 import type { AppView, ContextTarget, MailNotification, MessageStats, Notice, WorkspaceFolder } from './app-model';
 import { AppAccountRail, AppSidebar, AppTopbar, useWorkspaceNavigation } from './features/navigation';
@@ -19,8 +19,7 @@ import { useAppTheme } from './features/appearance';
 import { subscribeDesktopAccountSelection, subscribeDesktopCompose, updateDesktopTrayMenu } from './platform/desktop-events';
 import { useNewMailNotifications } from './features/notifications';
 import { FeatureErrorBoundary, WorkspaceErrorBoundary } from './components/ErrorBoundary';
-import { desktopLog, describeDesktopLogValue } from './desktop-logging';
-import { AddAccountModal, AppContextMenu, ComposePane, CreateApiTokenModal, CreateMcpTokenModal, LabelModal, NotificationsModal, PreferencesSyncErrorDialog, preloadDeferredFeaturesDuringIdle, SettingsModal, SnoozeModal, WorkspaceModal } from './lazy-features';
+import { AddAccountModal, AppContextMenu, ComposePane, CreateApiTokenModal, CreateMcpTokenModal, LabelModal, NotificationsModal, PreferencesSyncErrorDialog, preloadDeferredFeaturesDuringIdle, SettingsModal, SnoozeModal, WorkspaceModal } from './app/lazy-features';
 
 function FeatureFallback({ label, kind = 'overlay' }: { label: string; kind?: 'workspace' | 'pane' | 'overlay' }) {
   return <div className={`feature-loading feature-loading-${kind}`} role="status">正在加载{label}…</div>;

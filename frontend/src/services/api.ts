@@ -1,7 +1,7 @@
-import { serviceUrl } from './service-config';
-import { isTauriRuntime } from './platform/tauri-runtime';
-import { createMailService } from './mail-service';
-import { desktopLog, describeDesktopLogValue } from './desktop-logging';
+import { serviceUrl } from './config';
+import { isTauriRuntime } from '../platform/tauri-runtime';
+import { createMailService } from './mail';
+import { desktopLog, describeDesktopLogValue } from './desktop/logging';
 
 export type ApiTransport = {
   request<T>(path: string, options?: RequestInit): Promise<T>;

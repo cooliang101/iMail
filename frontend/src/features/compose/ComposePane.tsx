@@ -1,7 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { ArrowLeft, File, PaperPlaneTilt, Trash, WarningCircle } from '../../components/icons';
-import { api } from '../../api';
+import { api } from '../../services';
 import type { Account, Contact, Draft, DraftAttachment, Message } from '../../types';
 import { AppInput } from '../../components/form-controls';
 import { RichTextEditor } from './RichTextEditor';
