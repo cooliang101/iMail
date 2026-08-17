@@ -8,6 +8,7 @@ import { providerLabel } from '../../components/shared';
 import { AppCheckbox, AppSelect } from '../../components/form-controls';
 import { McpIntegrationGuide } from './McpIntegrationGuide';
 import { useExternalAccessBaseUrl } from './external-access-endpoint';
+import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';
 
 type AccessTab = 'api' | 'mcp';
 
@@ -57,7 +58,10 @@ export function TokenWorkspace({ accounts, tokens, onCreateApi, onCreateMcp, onR
 
   async function copyEndpoint(value: string) {
     try { await navigator.clipboard.writeText(value); setNotice({ kind: 'success', text: '接入地址已复制' }); }
-    catch { setNotice({ kind: 'error', text: '复制失败，请手动选择地址' }); }
+    catch (error) {
+      void desktopLog('warn', 'external_access.copy_failed', describeDesktopLogValue(error));
+      setNotice({ kind: 'error', text: '复制失败，请手动选择地址' });
+    }
   }
 
   return <section className="token-workspace">

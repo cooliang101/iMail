@@ -2313,7 +2313,7 @@ checksum = "edcd27d72f2f071c64249075f42e205ff93c9a4c5f6c6da53e79ed9f9832c285"
 
 [[package]]
 name = "imail"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "axum",
  "chrono",
@@ -2349,7 +2349,7 @@ dependencies = [
 
 [[package]]
 name = "imail-attachment"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "encoding_rs",
  "imagesize",
@@ -2361,7 +2361,7 @@ dependencies = [
 
 [[package]]
 name = "imail-core"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "chrono",
  "icu_collator",
@@ -2379,7 +2379,7 @@ dependencies = [
 
 [[package]]
 name = "imail-http"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2416,7 +2416,7 @@ dependencies = [
 
 [[package]]
 name = "imail-http-service"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "imail-http",
  "imail-oauth",
@@ -2427,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "imail-mail"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2443,7 +2443,7 @@ dependencies = [
 
 [[package]]
 name = "imail-mail-network"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "async-imap",
  "base64 0.22.1",
@@ -2470,7 +2470,7 @@ dependencies = [
 
 [[package]]
 name = "imail-oauth"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2486,7 +2486,7 @@ dependencies = [
 
 [[package]]
 name = "imail-oauth-http"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "base64 0.22.1",
  "imail-oauth",
@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "imail-protocol"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -2507,7 +2507,7 @@ dependencies = [
 
 [[package]]
 name = "imail-runtime"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "chrono",
  "imail-core",
@@ -2526,7 +2526,7 @@ dependencies = [
 
 [[package]]
 name = "imail-security"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -2545,7 +2545,7 @@ dependencies = [
 
 [[package]]
 name = "imail-storage-sqlite"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "base64 0.22.1",
  "chrono",

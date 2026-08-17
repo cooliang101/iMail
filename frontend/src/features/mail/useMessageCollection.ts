@@ -61,7 +61,8 @@ export function useMessageCollection(options: Options) {
       setStats((current) => applyMessageStatsChanges(current, changes, currentAccounts));
       void api<{ contacts: Contact[] }>('/api/contacts').then((result) => setContacts(result.contacts))
         .catch((error) => desktopLog('warn', 'contacts.refresh_failed', describeDesktopLogValue(error)));
-    } catch {
+    } catch (error) {
+      void desktopLog('warn', 'sync.event_invalid', describeDesktopLogValue(error));
       // Optional malformed event payloads must not interrupt the mailbox view.
     }
   }), [setContacts]);

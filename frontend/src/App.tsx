@@ -14,7 +14,7 @@ import { useAuth } from './features/auth';
 import { useAppTheme } from './features/appearance';
 import { subscribeDesktopAccountSelection, subscribeDesktopCompose, updateDesktopTrayMenu } from './platform/desktop-events';
 import { useNewMailNotifications } from './features/notifications';
-import { FeatureErrorBoundary } from './components/ErrorBoundary';
+import { FeatureErrorBoundary, WorkspaceErrorBoundary } from './components/ErrorBoundary';
 import { desktopLog, describeDesktopLogValue } from './desktop-logging';
 
 const AddAccountModal = lazy(() => import('./features/accounts/AddAccountModal').then((module) => ({ default: module.AddAccountModal })));
@@ -393,6 +393,7 @@ function App() {
     <main className="workspace">
       <AppTopbar sidebarCollapsed={sidebarCollapsed} sidebarOpen={sidebarOpen} search={search} searchPlaceholder={view === 'contacts' ? '搜索联系人姓名或邮箱' : '搜索当前范围内的邮件'} searchShortcut={shortcutLabel(shortcutBindings.focusSearch)} searchInputRef={searchInputRef} onToggleSidebar={() => setSidebarCollapsed((current) => !current)} onOpenMobileSidebar={() => setSidebarOpen(true)} onSearchChange={setSearch} onNotifications={() => void openNotifications()} />
 
+      <WorkspaceErrorBoundary label={view === 'tokens' ? '外部接入' : view === 'contacts' ? '联系人' : composeMode ? '写信编辑器' : '邮件工作区'} resetKey={`${view}:${selected?.id ?? ''}:${composeMode ?? ''}`}>
       {view === 'contacts' ? <Suspense fallback={<FeatureFallback label="联系人" />}><ContactsWorkspace contacts={contacts} search={search} onCompose={(contact) => openCompose(activeAccount?.id, [contact.address])} /></Suspense> : view === 'tokens' ? <Suspense fallback={<FeatureFallback label="外部接入" />}><TokenWorkspace accounts={realAccounts} tokens={tokens} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /></Suspense> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
           {view === 'drafts' ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /></Suspense> : <MessagePane title={groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddOpen(true)} />}
@@ -404,6 +405,7 @@ function App() {
             onNext={() => { if (selectedIndex >= 0 && selectedIndex < messages.length - 1) selectMessage(messages[selectedIndex + 1].id); }}
             hasPrevious={selectedIndex > 0} hasNext={selectedIndex >= 0 && selectedIndex < messages.length - 1} />}
         </div>}
+      </WorkspaceErrorBoundary>
     </main>
 
     {addOpen && <Suspense fallback={<FeatureFallback label="邮箱接入" />}><AddAccountModal accounts={accounts} onClose={() => setAddOpen(false)} onAdded={async (result) => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice(result?.warning ? { kind: 'error', text: `授权已保存，连接验证失败：${result.warning}` } : { kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} /></Suspense>}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { absoluteServiceUrl, configuredServiceMode } from '../../service-config';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
+import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';
 
 type ExternalHttpEndpoint = { baseUrl: string };
 type DesktopInvoker = (command: string) => Promise<ExternalHttpEndpoint>;
@@ -40,7 +41,10 @@ export function useExternalAccessBaseUrl() {
     let active = true;
     void resolveExternalAccessBaseUrl()
       .then((value) => { if (active) setBaseUrl(value); })
-      .catch((value) => { if (active) setError(value instanceof Error ? value.message : String(value)); });
+      .catch((value) => {
+        void desktopLog('error', 'external_access.endpoint_failed', describeDesktopLogValue(value));
+        if (active) setError(value instanceof Error ? value.message : String(value));
+      });
     return () => { active = false; };
   }, []);
 

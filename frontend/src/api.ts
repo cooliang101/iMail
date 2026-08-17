@@ -1,6 +1,7 @@
 import { serviceUrl } from './service-config';
 import { isTauriRuntime } from './platform/tauri-runtime';
 import { createMailService } from './mail-service';
+import { desktopLog, describeDesktopLogValue } from './desktop-logging';
 
 export type ApiTransport = {
   request<T>(path: string, options?: RequestInit): Promise<T>;
@@ -61,7 +62,11 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     return await (isTauriRuntime() ? desktopApi<T>(path, options) : defaultTransport.request<T>(path, options));
   } catch (reason) {
-    if (reason instanceof Error) throw reason;
-    throw new Error(typeof reason === 'string' && reason.trim() ? reason : `请求失败：${path.split('?')[0]}`);
+    const error = reason instanceof Error
+      ? reason
+      : new Error(typeof reason === 'string' && reason.trim() ? reason : `请求失败：${path.split('?')[0]}`);
+    const status = 'status' in error && typeof error.status === 'number' ? ` status=${error.status}` : '';
+    void desktopLog('error', 'api.request_failed', `method=${options?.method ?? 'GET'} path=${path.split('?')[0]}${status}\n${describeDesktopLogValue(error)}`);
+    throw error;
   }
 }

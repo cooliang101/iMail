@@ -4,6 +4,7 @@ import { Archive, ArrowLeft, ArrowRight, CaretDown, Clock, Envelope, File, Star,
 import type { Account, Message } from '../../types';
 import { virtualRange } from '../../virtual';
 import { AccountProviderMark, providerLabel, relativeTime, SenderAvatar } from '../../components/shared';
+import { useAppTheme } from '../appearance';
 
 const MESSAGE_ROW_HEIGHT = 108;
 const SOFT_NEUBRUTALISM_ROW_PITCH = 116;
@@ -16,16 +17,9 @@ export function VirtualMessageList({ messages, accounts, selectedId, ready, load
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
-  const [rowPitch, setRowPitch] = useState(MESSAGE_ROW_HEIGHT);
+  const { themeId } = useAppTheme();
+  const rowPitch = themeId === 'soft-neubrutalism' ? SOFT_NEUBRUTALISM_ROW_PITCH : MESSAGE_ROW_HEIGHT;
   const firstMessageId = messages[0]?.id;
-
-  useEffect(() => {
-    const update = () => setRowPitch(document.documentElement.dataset.theme === 'soft-neubrutalism' ? SOFT_NEUBRUTALISM_ROW_PITCH : MESSAGE_ROW_HEIGHT);
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     const element = viewportRef.current;

@@ -20,7 +20,7 @@ const attributesByElement: Record<string, Set<string>> = {
 };
 
 const unsafeCssValue = /(?:expression\s*\(|url\s*\(|image-set\s*\(|cross-fade\s*\(|element\s*\(|paint\s*\(|@import|javascript\s*:|vbscript\s*:|data\s*:|var\s*\()/i;
-const unsafeCssProperty = /^(?:--|behavior$|-moz-binding$|content$|cursor$|filter$|(?:-webkit-)?mask|clip-path$|list-style-image$)/i;
+const unsafeCssProperty = /^(?:--|behavior$|-moz-binding$|content$|cursor$|filter$|(?:-webkit-)?mask|clip-path$|list-style-image$|position$|inset(?:-.+)?$|top$|right$|bottom$|left$|z-index$|zoom$|transform(?:-.+)?$|translate$|rotate$|scale$|animation(?:-.+)?$|transition(?:-.+)?$)/i;
 
 export function sanitizeEmailHtml(html: string, Parser: typeof DOMParser = DOMParser) {
   const source = /<(?:html|body)\b/i.test(html) ? html : `<!doctype html><html><body>${html}</body></html>`;
@@ -82,7 +82,6 @@ function sanitizeInlineStyle(value: string, document: Document) {
     const cssValue = probe.style.getPropertyValue(property).trim();
     const comparableValue = normalizeCssForInspection(cssValue);
     if (!cssValue || unsafeCssProperty.test(property) || unsafeCssValue.test(comparableValue)) continue;
-    if (property.toLocaleLowerCase() === 'position' && /^(?:fixed|sticky)$/i.test(comparableValue)) continue;
     safe.style.setProperty(property, cssValue);
   }
   return safe.getAttribute('style')?.trim() ?? '';

@@ -1,5 +1,4 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type FormEvent } from 'react';
-import '../../styles/compose.css';
 import { Button } from '@fluentui/react-components';
 import { ArrowLeft, File, PaperPlaneTilt, Trash, WarningCircle } from '@phosphor-icons/react';
 import { api } from '../../api';

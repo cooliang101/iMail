@@ -49,10 +49,17 @@ export function installDesktopLogging() {
     event.filename ? `source=${event.filename}:${event.lineno}:${event.colno}` : '',
   ]);
   const onUnhandledRejection = (event: PromiseRejectionEvent) => forward('error', 'frontend.unhandled_rejection', [event.reason]);
+  const onResourceError = (event: Event) => {
+    const target = event.target;
+    if (target instanceof HTMLScriptElement) forward('error', 'frontend.script_load_failed', [`source=${target.src || '[inline]'}`]);
+    else if (target instanceof HTMLLinkElement) forward('error', 'frontend.stylesheet_load_failed', [`source=${target.href || '[unknown]'}`]);
+    else if (target instanceof HTMLImageElement) forward('warn', 'frontend.image_load_failed', [`source=${safeResourceDescription(target.currentSrc || target.src)}`]);
+  };
 
   console.error = (...values: unknown[]) => { originalError(...values); forward('error', 'frontend.console_error', values); };
   console.warn = (...values: unknown[]) => { originalWarn(...values); forward('warn', 'frontend.console_warn', values); };
   window.addEventListener('error', onError);
+  window.addEventListener('error', onResourceError, true);
   window.addEventListener('unhandledrejection', onUnhandledRejection);
   void desktopLog('info', 'frontend.bootstrap', 'frontend logging and global error handlers installed');
 
@@ -60,6 +67,17 @@ export function installDesktopLogging() {
     console.error = originalError;
     console.warn = originalWarn;
     window.removeEventListener('error', onError);
+    window.removeEventListener('error', onResourceError, true);
     window.removeEventListener('unhandledrejection', onUnhandledRejection);
   };
+}
+
+function safeResourceDescription(value: string) {
+  try {
+    const url = new URL(value, window.location.href);
+    if (url.protocol === 'data:' || url.protocol === 'blob:') return `${url.protocol}[embedded]`;
+    return url.origin === window.location.origin ? `${url.origin}${url.pathname}` : `${url.origin}/[remote-resource]`;
+  } catch {
+    return '[invalid resource URL]';
+  }
 }

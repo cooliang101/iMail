@@ -1,4 +1,3 @@
-import '../../styles/compose.css';
 import { Button } from '@fluentui/react-components';
 import { PencilSimple, Trash } from '@phosphor-icons/react';
 import type { Account, Draft, Message } from '../../types';

@@ -70,4 +70,12 @@ describe('frontend workspace layout', () => {
     expect(workflow).toContain('cache-dependency-path: frontend/package-lock.json');
     expect(workflow).toContain('npm ci --prefix frontend');
   });
+
+  it('loads shell-affecting toast and workspace styles before lazy features render', async () => {
+    const styles = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'styles.css'), 'utf8');
+    expect(styles).toContain("@import './styles/compose.css';");
+    const composeStyles = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'styles', 'compose.css'), 'utf8');
+    expect(composeStyles).toContain('.toast {');
+    expect(composeStyles).toContain('.token-workspace {');
+  });
 });

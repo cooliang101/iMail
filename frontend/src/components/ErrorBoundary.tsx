@@ -60,3 +60,12 @@ export function FeatureErrorBoundary({ label, onClose, resetKey, children }: { l
     </section>
   </div>}>{children}</ErrorBoundary>;
 }
+
+export function WorkspaceErrorBoundary({ label, resetKey, children }: { label: string; resetKey?: unknown; children: ReactNode }) {
+  return <ErrorBoundary scope={`workspace:${label}`} resetKey={resetKey} fallback={(reset) => <section className="workspace-error" role="alert">
+    <WarningCircle size={38} weight="duotone" />
+    <h2>{label}暂时无法显示</h2>
+    <p>该区域发生了渲染错误，侧栏和设置仍可继续使用。错误详情已写入应用日志。</p>
+    <button type="button" onClick={reset}><ArrowCounterClockwise size={16} />重试此区域</button>
+  </section>}>{children}</ErrorBoundary>;
+}

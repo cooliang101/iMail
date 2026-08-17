@@ -48,6 +48,7 @@ async function installMailFixture(page: Page) {
     if (path === '/api/auth/status') return json(route, { setupRequired: false, registrationOpen: true, user: { id: 'user-1', login: 'fixture', displayName: 'Fixture User', createdAt: '2026-08-13T00:00:00Z' } });
     if (path === '/api/accounts') return json(route, { accounts: [account] });
     if (path === '/api/developer-tokens') return json(route, { tokens: [] });
+    if (path === '/api/external-access') return json(route, { settings: { mcpEnabled: false, gatewayEnabled: false } });
     if (path === '/api/preferences') return json(route, method === 'PATCH' ? { preferences: { ...preferences, ...request.postDataJSON() } } : { preferences });
     if (path === '/api/message-stats') return json(route, { total: 70, unread: 2, byAccount: [{ accountId: account.id, total: 70, unread: 2 }], byGroup: [{ group: account.group, total: 70, unread: 2 }] });
     if (path === '/api/drafts' && method === 'GET') return json(route, { drafts: state.drafts });
@@ -122,6 +123,21 @@ test('narrow desktop keeps the reader inside the viewport', async ({ page }) => 
   expect(geometry.layoutRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
   expect(geometry.contentLeft).toBeGreaterThanOrEqual(0);
   expect(geometry.contentRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+});
+
+test('mail notices and external access keep their layout before compose is opened', async ({ page }) => {
+  await installMailFixture(page);
+  await page.locator('.message-row').filter({ hasText: 'Fixture subject 2' }).click();
+  const notice = page.getByText('邮件已标记为已读', { exact: true });
+  await expect(notice).toBeVisible();
+  await expect(notice.locator('..')).toHaveCSS('position', 'fixed');
+  await expect(page.getByRole('button', { name: '打开设置' })).toBeVisible();
+
+  await page.getByRole('button', { name: /外部接入/ }).click();
+  await expect(page.getByRole('heading', { name: 'MCP Agent 接入' })).toBeVisible();
+  await expect(page.locator('.token-workspace')).toHaveCSS('overflow', 'auto');
+  await expect(page.locator('.access-tabs')).toHaveCSS('display', 'flex');
+  await expect(page.getByRole('button', { name: '打开设置' })).toBeVisible();
 });
 
 test('compose autosaves recipients, body and uploaded attachments', async ({ page }) => {

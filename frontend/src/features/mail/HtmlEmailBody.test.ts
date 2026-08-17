@@ -11,9 +11,9 @@ describe('rendered email sanitization', () => {
   });
 
   it('removes classes, ids, event handlers and unsafe URLs while retaining safe inline styles', () => {
-    const result = sanitize('<div id="app" class="card" onclick="alert(1)" style="color:red; position:fixed; background-image:u\\72l(https://evil.test/pixel)"><a href="javascript:alert(1)">bad</a><a href="https://example.com/x">safe</a></div>');
+    const result = sanitize('<div id="app" class="card" onclick="alert(1)" style="color:red; position:absolute; inset:0; z-index:9999; zoom:4; transform:scale(5); background-image:u\\72l(https://evil.test/pixel)"><a href="javascript:alert(1)">bad</a><a href="https://example.com/x">safe</a></div>');
     expect(result).toContain('<div style="color:red">');
-    expect(result).not.toMatch(/class=|id=|onclick=|position|background-image|javascript/i);
+    expect(result).not.toMatch(/class=|id=|onclick=|position|inset|z-index|zoom|transform|background-image|javascript/i);
     expect(result).toContain('href="https://example.com/x"');
     expect(result).toContain('target="_blank"');
     expect(result).toContain('rel="noopener noreferrer"');
