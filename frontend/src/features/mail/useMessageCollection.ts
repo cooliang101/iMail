@@ -6,6 +6,7 @@ import type { Account, Contact, Message } from '../../types';
 import type { AppView, MessageStats, Notice, WorkspaceFolder } from '../../app-model';
 import { appendMessagePage, applyMessageChanges, applyMessageStatsChanges, cacheMessageBody, messageTotalDelta, type MessageChange } from './message-cache';
 import type { MailListFilter } from './MessagePane';
+import { desktopLog, describeDesktopLogValue } from '../../desktop-logging';
 
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; nextCursor?: string; hasMore: boolean };
 
@@ -41,10 +42,12 @@ export function useMessageCollection(options: Options) {
   const implicitSelectedIdRef = useRef<string | null>(null);
   const recentBodyIdsRef = useRef<string[]>([]);
   const actionActiveRef = useRef(isMessageActionActive);
+  const selectedIdRef = useRef(selectedId);
 
   useEffect(() => { queryRef.current = query; }, [query]);
   useEffect(() => { accountsRef.current = accounts; }, [accounts]);
   useEffect(() => { actionActiveRef.current = isMessageActionActive; }, [isMessageActionActive]);
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
   useEffect(() => subscribeSyncEvents(['sync.completed'], (event: MessageEvent) => {
     try {
@@ -56,7 +59,8 @@ export function useMessageCollection(options: Options) {
       setMessages((current) => applyMessageChanges(current, changes, currentQuery, currentAccounts));
       setMessageTotal((current) => Math.max(0, current + messageTotalDelta(changes, currentQuery, currentAccounts)));
       setStats((current) => applyMessageStatsChanges(current, changes, currentAccounts));
-      void api<{ contacts: Contact[] }>('/api/contacts').then((result) => setContacts(result.contacts)).catch(() => undefined);
+      void api<{ contacts: Contact[] }>('/api/contacts').then((result) => setContacts(result.contacts))
+        .catch((error) => desktopLog('warn', 'contacts.refresh_failed', describeDesktopLogValue(error)));
     } catch {
       // Optional malformed event payloads must not interrupt the mailbox view.
     }
@@ -74,7 +78,7 @@ export function useMessageCollection(options: Options) {
         setMessageTotal(result.total);
         setHasMore(result.hasMore);
         setNextCursor(result.nextCursor);
-        setSelectedId(null);
+        setSelectedId(result.messages.some((message) => message.id === selectedIdRef.current) ? selectedIdRef.current : null);
       }).catch((error) => {
         if (!cancelled) setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件缓存加载失败' });
       }).finally(() => {

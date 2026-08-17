@@ -18,8 +18,8 @@ function DesktopTitlebar() {
       setAppWindow(current);
       const update = async () => { if (active) setMaximized(await current.isMaximized()); };
       await update();
-      unlisten = await current.onResized(update);
-    });
+      unlisten = await current.onResized(() => { void update().catch((error) => console.error('[window-state]', error)); });
+    }).catch((error) => console.error('[window-init]', error));
     return () => { active = false; unlisten?.(); };
   }, []);
 

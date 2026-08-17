@@ -29,7 +29,6 @@ type FixtureState = {
   moveCalls: string[];
   patchCalls: Array<{ id: string; body: Record<string, unknown> }>;
   drafts: Array<Record<string, unknown>>;
-  syncCalls: number;
   messagePageCalls: number;
   serviceInfoCalls: number;
   failNextPatch: boolean;
@@ -40,7 +39,7 @@ async function json(route: Route, body: unknown, status = 200) {
 }
 
 async function installMailFixture(page: Page) {
-  const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], syncCalls: 0, messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
+  const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -80,8 +79,6 @@ async function installMailFixture(page: Page) {
     if (path === '/api/messages/message-001/attachments/0/preview' && method === 'POST') return json(route, { previewId: 'preview-1', descriptor: { kind: 'text', filename: 'fixture.txt', contentType: 'text/plain', size: 18, archiveEntries: [] }, expiresInSeconds: 300 });
     if (path === '/api/attachment-previews/preview-1/content') return route.fulfill({ status: 200, contentType: 'text/plain', body: 'fixture attachment' });
     if (path === '/api/attachment-previews/preview-1' && method === 'DELETE') return route.fulfill({ status: 204, body: '' });
-    if (path === '/api/sync-status') return json(route, { worker: { workers: [], queuedJobs: 1, oldestQueuedAt: '2026-08-13T08:00:00Z' }, accounts: [{ accountId: account.id, policy: { accountId: account.id, enabled: true, folderMode: 'inbox', selectedMailboxes: [], notifyOnError: true, updatedAt: '2026-08-13T00:00:00Z' }, states: [{ accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox', lastSeenUid: 70, consecutiveFailures: 2, connectionStatus: 'unreachable', syncState: 'backoff', lastErrorCode: 'network', lastErrorMessage: 'fixture timeout' }], jobs: [] }] });
-    if (path === `/api/accounts/${account.id}/sync` && method === 'POST') { state.syncCalls += 1; return json(route, { queued: true }); }
     if (path === '/api/system/info') { state.serviceInfoCalls += 1; return json(route, { service: 'imail', instanceId: 'fixture-instance', version: '0.0.2', protocolVersion: 1, capabilities: { gateway: true, mcp: true, syncWorker: true, webClient: true } }); }
     if (path === '/api/auth/logout') return route.fulfill({ status: 204, body: '' });
     return json(route, { error: `Unhandled fixture route: ${method} ${path}` }, 404);
@@ -182,15 +179,6 @@ test('search, labels and snooze update the selected message', async ({ page }) =
   await page.getByRole('button', { name: '明天上午' }).click();
   expect(state.patchCalls.some(({ body }) => Array.isArray(body.labels))).toBe(true);
   expect(state.patchCalls.some(({ body }) => typeof body.snoozedUntil === 'string')).toBe(true);
-});
-
-test('sync failures are visible and retry queues the affected account', async ({ page }) => {
-  const state = await installMailFixture(page);
-  await page.getByRole('button', { name: '打开设置' }).click();
-  await page.getByRole('button', { name: /同步健康/ }).click();
-  await expect(page.getByText('fixture timeout')).toBeVisible();
-  await page.getByRole('button', { name: '重新同步此邮箱' }).click();
-  expect(state.syncCalls).toBe(1);
 });
 
 test('remote service selection verifies the endpoint before switching', async ({ page }) => {

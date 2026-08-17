@@ -26,8 +26,12 @@ export function useAppPreferences(userId: string, setNotice: Dispatch<SetStateAc
   const persistLocal = useCallback((next: AppPreferences) => {
     setPreferences(next);
     setShortcutBindings(next.shortcutBindings);
-    localStorage.setItem(preferencesKey, JSON.stringify(next));
-    localStorage.setItem(shortcutsKey, JSON.stringify(next.shortcutBindings));
+    try {
+      localStorage.setItem(preferencesKey, JSON.stringify(next));
+      localStorage.setItem(shortcutsKey, JSON.stringify(next.shortcutBindings));
+    } catch (error) {
+      setPreferencesSyncIssue({ message: error instanceof Error ? `设置已应用，但本机存储失败：${error.message}` : '设置已应用，但本机存储失败。' });
+    }
   }, [preferencesKey, shortcutsKey]);
 
   useEffect(() => {

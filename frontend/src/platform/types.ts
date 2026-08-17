@@ -8,6 +8,12 @@ export type SystemNotification = {
   title: string;
   body?: string;
   tag?: string;
+  target?: NotificationTarget;
+};
+
+export type NotificationTarget = {
+  messageId: string;
+  accountEmail?: string;
 };
 
 export interface PlatformRuntime {
@@ -16,4 +22,5 @@ export interface PlatformRuntime {
   saveDownload(input: DownloadRequest): Promise<void>;
   prepareNotifications(): Promise<boolean>;
   notify(input: SystemNotification): Promise<void>;
+  subscribeNotificationClicks(listener: (target: NotificationTarget) => void): () => void;
 }

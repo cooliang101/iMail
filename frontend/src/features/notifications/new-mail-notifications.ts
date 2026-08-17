@@ -43,5 +43,6 @@ export function newMailNotificationFromEvent(data: string): NewMailNotification 
     tag: `imail-message-${message.id}`,
     title: `新邮件 · ${sender}`,
     body: account ? `${detail}\n${account}` : detail,
+    target: { messageId: message.id, accountEmail: message.accountEmail },
   };
 }

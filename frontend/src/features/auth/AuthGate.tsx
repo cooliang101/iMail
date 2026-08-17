@@ -61,7 +61,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     serviceCheckRunner.cancel();
-    await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    await api('/api/auth/logout', { method: 'POST' })
+      .catch((reason) => desktopLog('warn', 'auth.logout_request_failed', describeDesktopLogValue(reason)));
     setUser(null); setMode('login'); setSelectedLogin(user?.login ?? ''); setError('');
   }, [serviceCheckRunner, user?.login]);
 

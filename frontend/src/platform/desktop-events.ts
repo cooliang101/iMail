@@ -23,7 +23,7 @@ export function subscribeDesktopCompose(listener: () => void) {
   void import('@tauri-apps/api/event').then(async ({ listen }) => {
     unlisten = await listen('desktop-compose', () => { if (!closed) listener(); });
     if (closed) unlisten();
-  }).catch(() => undefined);
+  }).catch((error) => console.error('[desktop-compose-listener]', error));
   return () => { closed = true; unlisten?.(); };
 }
 
@@ -36,6 +36,6 @@ export function subscribeDesktopAccountSelection(listener: (accountId: string) =
       if (!closed && payload) listener(payload);
     });
     if (closed) unlisten();
-  }).catch(() => undefined);
+  }).catch((error) => console.error('[desktop-account-listener]', error));
   return () => { closed = true; unlisten?.(); };
 }

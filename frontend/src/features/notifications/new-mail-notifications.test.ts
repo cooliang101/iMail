@@ -26,6 +26,7 @@ describe('new mail notifications', () => {
       tag: 'imail-message-message-1',
       title: '新邮件 · Alice',
       body: '项目进展\n新的里程碑已经完成。\nwork@example.com',
+      target: { messageId: 'message-1', accountEmail: 'work@example.com' },
     });
   });
 

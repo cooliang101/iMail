@@ -2327,6 +2327,7 @@ dependencies = [
  "imail-security",
  "imail-storage-sqlite",
  "log",
+ "notify-rust",
  "regex",
  "reqwest 0.12.15",
  "reqwest_cookie_store",

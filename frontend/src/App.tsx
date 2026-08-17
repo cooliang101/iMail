@@ -7,13 +7,15 @@ import type { AppView, ContextTarget, MailNotification, MessageStats, Notice, Wo
 import { AppAccountRail, AppSidebar, AppTopbar, useWorkspaceNavigation } from './features/navigation';
 import { applyOptimisticMessageMutation, MessageActionCoordinator, MessagePane, MessageReader, rollbackOptimisticMessageMutation, type MailListFilter, useMessageCollection } from './features/mail';
 import type { ComposePaneHandle } from './features/compose/ComposePane';
-import { isBrowserRefreshShortcut, isEditableShortcutTarget, shortcutDefinitions, shortcutLabel, shortcutMatches } from './features/shortcuts';
+import { isEditableShortcutTarget, shortcutDefinitions, shortcutLabel, shortcutMatches } from './features/shortcuts';
 import type { SettingsTab } from './features/settings/SettingsModal';
 import { useAppPreferences } from './features/settings/useAppPreferences';
 import { useAuth } from './features/auth';
 import { useAppTheme } from './features/appearance';
 import { subscribeDesktopAccountSelection, subscribeDesktopCompose, updateDesktopTrayMenu } from './platform/desktop-events';
 import { useNewMailNotifications } from './features/notifications';
+import { FeatureErrorBoundary } from './components/ErrorBoundary';
+import { desktopLog, describeDesktopLogValue } from './desktop-logging';
 
 const AddAccountModal = lazy(() => import('./features/accounts/AddAccountModal').then((module) => ({ default: module.AddAccountModal })));
 const ComposePane = lazy(() => import('./features/compose/ComposePane').then((module) => ({ default: module.ComposePane })));
@@ -88,26 +90,38 @@ function App() {
     setNotice,
     isMessageActionActive: (messageId) => messageActionsRef.current.isActive(messageId),
   });
-  useNewMailNotifications(preferences.notificationKinds.unread);
+  const openNotificationMessage = useCallback((messageId: string, accountEmail?: string) => {
+    const account = realAccountsRef.current.find((item) => item.email === accountEmail);
+    selectNavigationScope('inbox', account?.id ?? 'all', null);
+    setMailFilter('all');
+    setSelectedId(messageId);
+    setSidebarOpen(false);
+  }, [selectNavigationScope, setSidebarOpen]);
+  useNewMailNotifications(preferences.notificationKinds.unread, openNotificationMessage);
 
   const load = useCallback(async () => {
-    try {
-      const [accountData, tokenData, statsData, draftData, labelData, contactData] = await Promise.all([
-        api<{ accounts: Account[] }>('/api/accounts'),
-        api<{ tokens: DeveloperToken[] }>('/api/developer-tokens'),
-        api<MessageStats>('/api/message-stats'),
-        api<{ drafts: Draft[] }>('/api/drafts'),
-        api<{ labels: string[] }>('/api/labels'),
-        api<{ contacts: Contact[] }>('/api/contacts'),
-      ]);
-      setRealAccounts(accountData.accounts);
-      setTokens(tokenData.tokens);
-      setMessageStats(statsData);
-      setDrafts(draftData.drafts);
-      setLabels(labelData.labels);
-      setContacts(contactData.contacts);
-    } catch (error) {
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '服务连接失败' });
+    const results = await Promise.allSettled([
+      api<{ accounts: Account[] }>('/api/accounts'),
+      api<{ tokens: DeveloperToken[] }>('/api/developer-tokens'),
+      api<MessageStats>('/api/message-stats'),
+      api<{ drafts: Draft[] }>('/api/drafts'),
+      api<{ labels: string[] }>('/api/labels'),
+      api<{ contacts: Contact[] }>('/api/contacts'),
+    ] as const);
+    const [accountResult, tokenResult, statsResult, draftResult, labelResult, contactResult] = results;
+    if (accountResult.status === 'rejected') {
+      setNotice({ kind: 'error', text: accountResult.reason instanceof Error ? accountResult.reason.message : '邮箱账户加载失败' });
+      return;
+    }
+    setRealAccounts(accountResult.value.accounts);
+    if (tokenResult.status === 'fulfilled') setTokens(tokenResult.value.tokens);
+    if (statsResult.status === 'fulfilled') setMessageStats(statsResult.value);
+    if (draftResult.status === 'fulfilled') setDrafts(draftResult.value.drafts);
+    if (labelResult.status === 'fulfilled') setLabels(labelResult.value.labels);
+    if (contactResult.status === 'fulfilled') setContacts(contactResult.value.contacts);
+    const optionalFailure = results.slice(1).find((result) => result.status === 'rejected');
+    if (optionalFailure?.status === 'rejected') {
+      setNotice({ kind: 'error', text: optionalFailure.reason instanceof Error ? optionalFailure.reason.message : '部分邮箱数据加载失败，已保留现有内容' });
     }
   }, [setMessageStats]);
 
@@ -121,13 +135,17 @@ function App() {
   }), []);
   useLayoutEffect(() => { setTheme(preferences.theme, preferences.customTheme); }, [preferences.customTheme, preferences.theme, setTheme]);
   useEffect(() => {
-    void updateDesktopTrayMenu(accounts, preferences.theme, preferences.customTheme).catch(() => undefined);
+    void updateDesktopTrayMenu(accounts, preferences.theme, preferences.customTheme)
+      .catch((error) => desktopLog('warn', 'tray.update_failed', describeDesktopLogValue(error)));
   }, [accounts, preferences.customTheme, preferences.theme]);
   useEffect(() => { realAccountsRef.current = realAccounts; }, [realAccounts]);
   useEffect(() => {
     if (folderDiscoveryStarted.current || accounts.length === 0 || accounts.some((account) => account.mailboxes.length > 0)) return;
     folderDiscoveryStarted.current = true;
-    void api('/api/sync', { method: 'POST' }).then(load).catch(() => undefined);
+    void api('/api/sync', { method: 'POST' }).then(load).catch((error) => {
+      folderDiscoveryStarted.current = false;
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮箱文件夹初始化失败' });
+    });
   }, [accounts, load]);
   useEffect(() => {
     if (!notice) return;
@@ -337,7 +355,6 @@ function App() {
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || addOpen || tokenOpen || settingsTab || notificationsOpen || labelOpen || snoozeOpen || workspaceOpen !== undefined) return;
-      if (isBrowserRefreshShortcut(event)) return;
       const definition = shortcutDefinitions.find(({ id }) => shortcutMatches(event, shortcutBindings[id]));
       if (!definition) return;
       if (definition.scope === 'mail' && (view === 'contacts' || view === 'tokens')) return;
@@ -392,8 +409,8 @@ function App() {
     {addOpen && <Suspense fallback={<FeatureFallback label="邮箱接入" />}><AddAccountModal accounts={accounts} onClose={() => setAddOpen(false)} onAdded={async (result) => { setAddOpen(false); await load(); setMessageRevision((value) => value + 1); setNotice(result?.warning ? { kind: 'error', text: `授权已保存，连接验证失败：${result.warning}` } : { kind: 'success', text: '邮箱已接入，正在准备统一收件箱' }); }} /></Suspense>}
     {tokenOpen === 'api' && <Suspense fallback={<FeatureFallback label="访问令牌" />}><CreateApiTokenModal accounts={realAccounts} onClose={() => setTokenOpen(null)} onCreated={load} /></Suspense>}
     {tokenOpen === 'mcp' && <Suspense fallback={<FeatureFallback label="MCP 令牌" />}><CreateMcpTokenModal onClose={() => setTokenOpen(null)} onCreated={load} /></Suspense>}
-    {settingsTab && <Suspense fallback={<FeatureFallback label="设置" />}><SettingsModal initialTab={settingsTab} accounts={realAccounts} preferences={preferences} bindings={shortcutBindings} onPreferencesChange={savePreferences} onBindingsChange={saveShortcutBindings} onAddAccount={() => { setSettingsTab(null); setAddOpen(true); }} onClose={() => setSettingsTab(null)} onReload={load} setNotice={setNotice} /></Suspense>}
-    {notificationsOpen && <Suspense fallback={<FeatureFallback label="通知" />}><NotificationsModal notifications={notifications} accounts={accounts} onClose={() => setNotificationsOpen(false)} onOpenMessage={(notification) => { setNotificationsOpen(false); if (notification.accountId) setAccountFilter(notification.accountId); setView('inbox'); setSelectedId(notification.messageId ?? null); }} /></Suspense>}
+    {settingsTab && <FeatureErrorBoundary label="设置" resetKey={settingsTab} onClose={() => setSettingsTab(null)}><Suspense fallback={<FeatureFallback label="设置" />}><SettingsModal initialTab={settingsTab} accounts={realAccounts} preferences={preferences} bindings={shortcutBindings} onPreferencesChange={savePreferences} onBindingsChange={saveShortcutBindings} onAddAccount={() => { setSettingsTab(null); setAddOpen(true); }} onClose={() => setSettingsTab(null)} onReload={load} setNotice={setNotice} /></Suspense></FeatureErrorBoundary>}
+    {notificationsOpen && <Suspense fallback={<FeatureFallback label="通知" />}><NotificationsModal notifications={notifications} accounts={accounts} onClose={() => setNotificationsOpen(false)} onOpenMessage={(notification) => { setNotificationsOpen(false); if (notification.messageId) openNotificationMessage(notification.messageId, accounts.find((item) => item.id === notification.accountId)?.email); }} /></Suspense>}
     {labelOpen && selected && <Suspense fallback={<FeatureFallback label="标签" />}><LabelModal message={selected} knownLabels={labels} onClose={() => setLabelOpen(false)} onSave={(next) => { setLabelOpen(false); void updateSelectedLocal({ labels: next }, '邮件标签已更新'); }} /></Suspense>}
     {snoozeOpen && selected && <Suspense fallback={<FeatureFallback label="稍后处理" />}><SnoozeModal onClose={() => setSnoozeOpen(false)} onSave={(until) => { setSnoozeOpen(false); void updateSelectedLocal({ snoozedUntil: until }, until ? '邮件已移到稍后处理' : '邮件已返回收件箱'); }} /></Suspense>}
     {workspaceOpen !== undefined && <Suspense fallback={<FeatureFallback label="工作空间" />}><WorkspaceModal accounts={accounts} workspace={workspaceOpen ?? undefined} onClose={() => setWorkspaceOpen(undefined)} onSaved={async () => { setWorkspaceOpen(undefined); await load(); setNotice({ kind: 'success', text: '工作空间已更新' }); }} /></Suspense>}

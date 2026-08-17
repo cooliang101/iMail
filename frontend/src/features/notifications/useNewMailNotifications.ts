@@ -6,9 +6,15 @@ import { newMailNotificationFromEvent } from './new-mail-notifications';
 
 const MAX_REMEMBERED_EVENTS = 200;
 
-export function useNewMailNotifications(enabled: boolean) {
+export function useNewMailNotifications(enabled: boolean, onOpenMessage: (messageId: string, accountEmail?: string) => void) {
   const platform = usePlatform();
   const seenEvents = useRef(new Set<string>());
+  const onOpenMessageRef = useRef(onOpenMessage);
+
+  useEffect(() => { onOpenMessageRef.current = onOpenMessage; }, [onOpenMessage]);
+  useEffect(() => platform.subscribeNotificationClicks((target) => {
+    onOpenMessageRef.current(target.messageId, target.accountEmail);
+  }), [platform]);
 
   useEffect(() => {
     if (!enabled) return;

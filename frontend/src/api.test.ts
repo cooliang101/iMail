@@ -13,4 +13,9 @@ describe('API transport', () => {
     const transport = createApiTransport({ fetcher: vi.fn(async () => new Response(null, { status: 204 })) });
     await expect(transport.request('/api/auth/logout', { method: 'POST' })).resolves.toBeUndefined();
   });
+
+  it('turns malformed successful responses into a contextual recoverable error', async () => {
+    const transport = createApiTransport({ fetcher: vi.fn(async () => new Response('<html>broken</html>', { status: 200 })) });
+    await expect(transport.request('/api/messages?limit=60')).rejects.toThrow('服务返回了无法解析的数据：/api/messages');
+  });
 });

@@ -85,12 +85,19 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil((async () => {
+    const target = event.notification.data?.target;
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const existing = windows[0];
     if (existing) {
       await existing.focus();
+      if (target?.messageId) existing.postMessage({ type: 'imail-notification-click', target });
       return;
     }
-    await self.clients.openWindow(self.registration.scope);
+    const url = new URL(self.registration.scope);
+    if (target?.messageId) {
+      url.searchParams.set('notificationMessageId', target.messageId);
+      if (target.accountEmail) url.searchParams.set('notificationAccountEmail', target.accountEmail);
+    }
+    await self.clients.openWindow(url.href);
   })());
 });

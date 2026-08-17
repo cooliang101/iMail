@@ -31,10 +31,14 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     const normalized = normalizeThemeId(next);
     const normalizedCustomTheme = normalizeCustomTheme(nextCustomTheme);
     const serializedCustomTheme = JSON.stringify(normalizedCustomTheme);
-    localStorage.setItem(themeStorageKey, normalized);
-    localStorage.setItem(customThemeStorageKey, serializedCustomTheme);
     setThemeState((current) => current === normalized ? current : normalized);
     setCustomTheme((current) => JSON.stringify(current) === serializedCustomTheme ? current : normalizedCustomTheme);
+    try {
+      localStorage.setItem(themeStorageKey, normalized);
+      localStorage.setItem(customThemeStorageKey, serializedCustomTheme);
+    } catch (error) {
+      console.warn('[theme-storage]', error);
+    }
   }, []);
 
   useLayoutEffect(() => {
@@ -50,7 +54,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   const fluentTheme = useMemo(() => themeId === 'custom' ? createCustomFluentTheme(customTheme) : appThemes[themeId], [customTheme, themeId]);
   const providerStyle = useMemo(() => themeId === 'custom' ? customThemeCssVariables(customTheme) : undefined, [customTheme, themeId]);
-  const value = useMemo(() => ({ themeId, customTheme, setTheme }), [customTheme, themeId]);
+  const value = useMemo(() => ({ themeId, customTheme, setTheme }), [customTheme, setTheme, themeId]);
   return <ThemeContext.Provider value={value}>
     <FluentProvider theme={fluentTheme} style={providerStyle} className="fluent-root" data-theme={themeId}>
       {children}

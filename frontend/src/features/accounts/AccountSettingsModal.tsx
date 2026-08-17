@@ -26,7 +26,7 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
       providersRequestedRef.current = true;
       void api<{ oauth: Array<{ redirectUri: string }> }>('/api/providers').then((result) => {
         oauthOriginsRef.current = oauthCallbackOrigins(result.oauth.map((item) => item.redirectUri), window.location.origin);
-      }).catch(() => undefined);
+      }).catch((reason) => setError(reason instanceof Error ? reason.message : '快捷登录配置读取失败'));
     }
     const receive = (event: MessageEvent) => {
       if (event.source !== popupRef.current || !oauthOriginsRef.current.has(event.origin) || event.data?.source !== 'imail-oauth') return;
@@ -35,7 +35,8 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
       if (event.data.success) {
         void onReload().then(() => setNotice(event.data.warning
           ? { kind: 'error', text: `授权已保存，连接验证失败：${event.data.warning}` }
-          : { kind: 'success', text: '邮箱授权已更新' }));
+          : { kind: 'success', text: '邮箱授权已更新' }))
+          .catch((reason) => setError(reason instanceof Error ? reason.message : '授权已完成，但邮箱列表刷新失败'));
       } else setError(event.data.message || '重新授权未完成');
     };
     window.addEventListener('message', receive);

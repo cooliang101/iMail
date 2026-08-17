@@ -45,20 +45,20 @@ export function TrayMenuApp() {
     let unlisten: (() => void) | undefined;
     void invokeTray<TrayMenuData>('desktop_get_tray_menu').then((next) => {
       if (!closed) setData(next);
-    });
+    }).catch((error) => console.error('[tray-menu-load]', error));
     void import('@tauri-apps/api/event').then(async ({ listen }) => {
       unlisten = await listen<TrayMenuData>('desktop-tray-menu-updated', ({ payload }) => {
         if (!closed) setData(payload);
       });
       if (closed) unlisten();
-    });
+    }).catch((error) => console.error('[tray-menu-listener]', error));
     return () => { closed = true; unlisten?.(); };
   }, []);
 
   useEffect(() => { applyTheme(data); }, [data]);
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') void invokeTray('desktop_tray_action', { action: 'hide' });
+      if (event.key === 'Escape') void invokeTray('desktop_tray_action', { action: 'hide' }).catch((error) => console.error('[tray-menu-hide]', error));
     };
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
@@ -66,11 +66,11 @@ export function TrayMenuApp() {
   useLayoutEffect(() => {
     if (!panelRef.current) return;
     const height = Math.ceil(panelRef.current.getBoundingClientRect().height + 16);
-    void invokeTray('desktop_resize_tray_menu', { height });
+    void invokeTray('desktop_resize_tray_menu', { height }).catch((error) => console.error('[tray-menu-resize]', error));
   }, [data.accounts.length, expanded]);
 
   const action = (name: string, accountId?: string) => {
-    void invokeTray('desktop_tray_action', { action: name, accountId });
+    void invokeTray('desktop_tray_action', { action: name, accountId }).catch((error) => console.error('[tray-menu-action]', error));
   };
 
   return <main className="tray-menu-shell">

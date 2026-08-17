@@ -37,7 +37,15 @@ export function shortcutMatches(event: KeyboardLike, binding: string) {
 }
 
 export function isBrowserRefreshShortcut(event: KeyboardLike) {
-  return (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLocaleLowerCase() === 'r';
+  if (event.key === 'F5') return true;
+  return (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLocaleLowerCase() === 'r';
+}
+
+export function preventBrowserRefresh(event: KeyboardLike & Pick<Event, 'preventDefault' | 'stopImmediatePropagation'>) {
+  if (!isBrowserRefreshShortcut(event)) return false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  return true;
 }
 
 export function shortcutLabel(binding: string) {

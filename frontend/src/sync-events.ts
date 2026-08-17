@@ -44,13 +44,13 @@ function desktopEventConnection(): EventConnection {
     const embedded = mode === 'local' && embeddedTauriServiceEnabled();
     const commands = desktopEventCommandNames(mode, embedded);
     await invoke(commands.start, embedded ? undefined : { baseUrl: configuredServiceUrl() });
-  })().catch(() => undefined);
+  })().catch((error) => console.error('[sync-events-start]', error));
   return { close() {
     closed = true;
     unlisten?.();
     const mode = configuredServiceMode();
     const commands = desktopEventCommandNames(mode, mode === 'local' && embeddedTauriServiceEnabled());
-    void import('@tauri-apps/api/core').then(({ invoke }) => invoke(commands.stop)).catch(() => undefined);
+    void import('@tauri-apps/api/core').then(({ invoke }) => invoke(commands.stop)).catch((error) => console.error('[sync-events-stop]', error));
   } };
 }
 

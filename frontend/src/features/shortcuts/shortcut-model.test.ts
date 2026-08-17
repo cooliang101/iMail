@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { defaultShortcutBindings, isBrowserRefreshShortcut, loadShortcutBindings, shortcutConflict, shortcutFromEvent, shortcutLabel, shortcutMatches } from './shortcut-model';
+import { describe, expect, it, vi } from 'vitest';
+import { defaultShortcutBindings, isBrowserRefreshShortcut, loadShortcutBindings, preventBrowserRefresh, shortcutConflict, shortcutFromEvent, shortcutLabel, shortcutMatches } from './shortcut-model';
 
 describe('shortcut model', () => {
   it('normalizes platform modifier keys and matches exact combinations', () => {
@@ -28,9 +28,19 @@ describe('shortcut model', () => {
     expect(shortcutLabel(defaultShortcutBindings.previousMessage)).toBe('←');
   });
 
-  it('leaves exact browser refresh available and migrates the legacy sync binding', () => {
+  it('recognizes application reload shortcuts so the desktop shell can block them', () => {
     expect(isBrowserRefreshShortcut({ key: 'r', ctrlKey: true, metaKey: false, altKey: false, shiftKey: false })).toBe(true);
-    expect(isBrowserRefreshShortcut({ key: 'R', ctrlKey: false, metaKey: true, altKey: false, shiftKey: true })).toBe(false);
+    expect(isBrowserRefreshShortcut({ key: 'R', ctrlKey: false, metaKey: true, altKey: false, shiftKey: true })).toBe(true);
+    expect(isBrowserRefreshShortcut({ key: 'F5', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false })).toBe(true);
+    expect(isBrowserRefreshShortcut({ key: 'r', ctrlKey: true, metaKey: false, altKey: true, shiftKey: false })).toBe(false);
+    const preventDefault = vi.fn();
+    const stopImmediatePropagation = vi.fn();
+    expect(preventBrowserRefresh({ key: 'r', ctrlKey: true, metaKey: false, altKey: false, shiftKey: false, preventDefault, stopImmediatePropagation })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(stopImmediatePropagation).toHaveBeenCalledOnce();
+  });
+
+  it('migrates the legacy sync binding away from the reload shortcut', () => {
     const bindings = loadShortcutBindings({ getItem: () => JSON.stringify({ sync: 'Mod+R' }) });
     expect(bindings.sync).toBe(defaultShortcutBindings.sync);
     expect(loadShortcutBindings({ getItem: () => JSON.stringify({ sync: 'Mod+Shift+S' }) }).sync).toBe('Mod+Shift+S');

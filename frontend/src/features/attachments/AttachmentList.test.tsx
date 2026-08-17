@@ -10,6 +10,7 @@ const runtime: PlatformRuntime = {
   saveDownload: vi.fn(),
   prepareNotifications: vi.fn(async () => false),
   notify: vi.fn(),
+  subscribeNotificationClicks: vi.fn(() => () => undefined),
 };
 
 describe('AttachmentList', () => {

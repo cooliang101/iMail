@@ -38,12 +38,14 @@ test('@a11y critical first-run and empty-workspace flows remain accessible', asy
     await page.getByRole('button', { name: '关闭写信' }).click();
   });
 
-  await test.step('5. 同步健康与设置无障碍', async () => {
+  await test.step('5. 设置无障碍', async () => {
     await page.getByRole('button', { name: '打开设置' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
-    await page.getByRole('button', { name: /同步健康/ }).click();
-    await expect(page.getByRole('heading', { name: '同步健康' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: '还没有邮箱' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '通用' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /同步健康/ })).toHaveCount(0);
+    await page.locator('.overlay').evaluate(async (element) => {
+      await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    });
     const settingsA11y = await new AxeBuilder({ page }).analyze();
     expect(settingsA11y.violations.filter(({ impact }) => impact === 'serious' || impact === 'critical')).toEqual([]);
   });

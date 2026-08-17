@@ -5,6 +5,7 @@ use tauri::{
 };
 
 mod app_logging;
+mod desktop_notifications;
 mod desktop_platform;
 mod embedded_service;
 mod http_bridge;
@@ -113,6 +114,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             desktop_frontend_ready,
+            desktop_notifications::desktop_notify_message,
             tray_menu::desktop_update_tray_menu,
             tray_menu::desktop_get_tray_menu,
             tray_menu::desktop_resize_tray_menu,
