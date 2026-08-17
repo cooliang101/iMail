@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowCounterClockwise, Check, WarningCircle } from '@phosphor-icons/react';
 import { api } from './api';
 import { buildWorkspaceFolders } from './app-selectors';
@@ -20,18 +20,7 @@ import { subscribeDesktopAccountSelection, subscribeDesktopCompose, updateDeskto
 import { useNewMailNotifications } from './features/notifications';
 import { FeatureErrorBoundary, WorkspaceErrorBoundary } from './components/ErrorBoundary';
 import { desktopLog, describeDesktopLogValue } from './desktop-logging';
-
-const AddAccountModal = lazy(() => import('./features/accounts/AddAccountModal').then((module) => ({ default: module.AddAccountModal })));
-const ComposePane = lazy(() => import('./features/compose/ComposePane').then((module) => ({ default: module.ComposePane })));
-const CreateApiTokenModal = lazy(() => import('./features/developer/CreateApiTokenModal').then((module) => ({ default: module.CreateApiTokenModal })));
-const CreateMcpTokenModal = lazy(() => import('./features/developer/CreateMcpTokenModal').then((module) => ({ default: module.CreateMcpTokenModal })));
-const LabelModal = lazy(() => import('./features/organize/LabelModal').then((module) => ({ default: module.LabelModal })));
-const NotificationsModal = lazy(() => import('./features/organize/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
-const SettingsModal = lazy(() => import('./features/settings/SettingsModal').then((module) => ({ default: module.SettingsModal })));
-const PreferencesSyncErrorDialog = lazy(() => import('./features/settings/PreferencesSyncErrorDialog').then((module) => ({ default: module.PreferencesSyncErrorDialog })));
-const SnoozeModal = lazy(() => import('./features/organize/SnoozeModal').then((module) => ({ default: module.SnoozeModal })));
-const WorkspaceModal = lazy(() => import('./features/organize/WorkspaceModal').then((module) => ({ default: module.WorkspaceModal })));
-const AppContextMenu = lazy(() => import('./features/context-menu/AppContextMenu').then((module) => ({ default: module.AppContextMenu })));
+import { AddAccountModal, AppContextMenu, ComposePane, CreateApiTokenModal, CreateMcpTokenModal, LabelModal, NotificationsModal, PreferencesSyncErrorDialog, preloadDeferredFeaturesDuringIdle, SettingsModal, SnoozeModal, WorkspaceModal } from './lazy-features';
 
 function FeatureFallback({ label, kind = 'overlay' }: { label: string; kind?: 'workspace' | 'pane' | 'overlay' }) {
   return <div className={`feature-loading feature-loading-${kind}`} role="status">正在加载{label}…</div>;
@@ -126,6 +115,10 @@ function App() {
   }, [setMessageStats]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!ready) return;
+    return preloadDeferredFeaturesDuringIdle();
+  }, [ready]);
   // Desktop callbacks are registered once and only use React setters/ref-backed state.
   useEffect(() => subscribeDesktopCompose(() => openCompose()), []);
   useEffect(() => subscribeDesktopAccountSelection((accountId) => {

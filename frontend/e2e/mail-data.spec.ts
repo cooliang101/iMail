@@ -204,6 +204,31 @@ test('compose autosaves recipients, body and uploaded attachments', async ({ pag
   expect(state.drafts[0].attachments).toEqual(expect.arrayContaining([expect.objectContaining({ filename: 'upload.txt' })]));
 });
 
+test('idle warmup preloads deferred interaction bundles without a loading flash', async ({ page }) => {
+  await installMailFixture(page);
+  await page.waitForFunction(() => {
+    const resources = performance.getEntriesByType('resource').map((entry) => entry.name);
+    return resources.some((name) => name.includes('/features/compose/ComposePane.tsx'))
+      && resources.some((name) => name.includes('/features/settings/SettingsModal.tsx'))
+      && resources.some((name) => name.includes('/features/developer/CreateApiTokenModal.tsx'));
+  }, undefined, { timeout: 15_000 });
+  await page.evaluate(() => {
+    document.documentElement.dataset.sawFeatureLoading = 'false';
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('.feature-loading')) document.documentElement.dataset.sawFeatureLoading = 'true';
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+
+  await page.getByRole('button', { name: '写邮件' }).click();
+  await expect(page.getByPlaceholder('邮件主题')).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-saw-feature-loading', 'false');
+  await page.getByRole('button', { name: '关闭写信' }).click();
+  await page.getByRole('button', { name: '打开设置' }).click();
+  await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-saw-feature-loading', 'false');
+});
+
 test('attachment preview and download affordance use the message fixture', async ({ page }) => {
   await installMailFixture(page);
   await expect(page.getByRole('link', { name: /下载/ })).toHaveAttribute('download', 'fixture.txt');
