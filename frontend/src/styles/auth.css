@@ -45,4 +45,4 @@
   .auth-page { grid-template-columns: 1fr; }.auth-brand-panel { min-height: 250px; padding: 86px 28px 32px; justify-content: flex-end; }.auth-brand-panel .brand-logo { left: 28px; top: 25px; width: 44px; height: 44px; }.auth-brand-panel h1 { margin: 12px 0 8px; font-size: 32px; line-height: 1.08; }.auth-brand-panel p { display: none; }.auth-card-wrap { min-height: auto; padding: 38px 22px 50px; place-items: start center; }
 }
 
-.workspace { min-width: 0; min-height: 0; padding: var(--layout-shell-gap); }
+.workspace { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: 62px minmax(0, 1fr); overflow: hidden; padding: var(--layout-shell-gap); }

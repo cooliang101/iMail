@@ -6,6 +6,10 @@ import type { Account, Contact, DeveloperToken, Draft, Message } from './types';
 import type { AppView, ContextTarget, MailNotification, MessageStats, Notice, WorkspaceFolder } from './app-model';
 import { AppAccountRail, AppSidebar, AppTopbar, useWorkspaceNavigation } from './features/navigation';
 import { applyOptimisticMessageMutation, MessageActionCoordinator, MessagePane, MessageReader, rollbackOptimisticMessageMutation, type MailListFilter, useMessageCollection } from './features/mail';
+import { ContactsWorkspace } from './features/contacts/ContactsWorkspace';
+import { DraftWelcome } from './features/compose/DraftWelcome';
+import { DraftWorkspace } from './features/compose/DraftWorkspace';
+import { TokenWorkspace } from './features/developer/TokenWorkspace';
 import type { ComposePaneHandle } from './features/compose/ComposePane';
 import { isEditableShortcutTarget, shortcutDefinitions, shortcutLabel, shortcutMatches } from './features/shortcuts';
 import type { SettingsTab } from './features/settings/SettingsModal';
@@ -19,22 +23,18 @@ import { desktopLog, describeDesktopLogValue } from './desktop-logging';
 
 const AddAccountModal = lazy(() => import('./features/accounts/AddAccountModal').then((module) => ({ default: module.AddAccountModal })));
 const ComposePane = lazy(() => import('./features/compose/ComposePane').then((module) => ({ default: module.ComposePane })));
-const ContactsWorkspace = lazy(() => import('./features/contacts/ContactsWorkspace').then((module) => ({ default: module.ContactsWorkspace })));
 const CreateApiTokenModal = lazy(() => import('./features/developer/CreateApiTokenModal').then((module) => ({ default: module.CreateApiTokenModal })));
 const CreateMcpTokenModal = lazy(() => import('./features/developer/CreateMcpTokenModal').then((module) => ({ default: module.CreateMcpTokenModal })));
-const DraftWelcome = lazy(() => import('./features/compose/DraftWelcome').then((module) => ({ default: module.DraftWelcome })));
-const DraftWorkspace = lazy(() => import('./features/compose/DraftWorkspace').then((module) => ({ default: module.DraftWorkspace })));
 const LabelModal = lazy(() => import('./features/organize/LabelModal').then((module) => ({ default: module.LabelModal })));
 const NotificationsModal = lazy(() => import('./features/organize/NotificationsModal').then((module) => ({ default: module.NotificationsModal })));
 const SettingsModal = lazy(() => import('./features/settings/SettingsModal').then((module) => ({ default: module.SettingsModal })));
 const PreferencesSyncErrorDialog = lazy(() => import('./features/settings/PreferencesSyncErrorDialog').then((module) => ({ default: module.PreferencesSyncErrorDialog })));
 const SnoozeModal = lazy(() => import('./features/organize/SnoozeModal').then((module) => ({ default: module.SnoozeModal })));
-const TokenWorkspace = lazy(() => import('./features/developer/TokenWorkspace').then((module) => ({ default: module.TokenWorkspace })));
 const WorkspaceModal = lazy(() => import('./features/organize/WorkspaceModal').then((module) => ({ default: module.WorkspaceModal })));
 const AppContextMenu = lazy(() => import('./features/context-menu/AppContextMenu').then((module) => ({ default: module.AppContextMenu })));
 
-function FeatureFallback({ label }: { label: string }) {
-  return <div className="feature-loading" role="status">正在加载{label}…</div>;
+function FeatureFallback({ label, kind = 'overlay' }: { label: string; kind?: 'workspace' | 'pane' | 'overlay' }) {
+  return <div className={`feature-loading feature-loading-${kind}`} role="status">正在加载{label}…</div>;
 }
 
 type PendingMove = { message: Message; index: number; nextId: string | null; destination: 'archive' | 'trash'; unreadDelta: number };

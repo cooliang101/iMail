@@ -89,6 +89,23 @@ async function installMailFixture(page: Page) {
   return state;
 }
 
+async function simulateDesktopFrame(page: Page) {
+  await page.evaluate(() => {
+    const root = document.querySelector('#root');
+    const fluentRoot = root?.firstElementChild;
+    if (!root || !fluentRoot || root.querySelector('.desktop-frame')) return;
+    const frame = document.createElement('div');
+    const titlebar = document.createElement('div');
+    const content = document.createElement('div');
+    frame.className = 'desktop-frame';
+    titlebar.className = 'desktop-titlebar';
+    content.className = 'desktop-content';
+    root.append(frame);
+    frame.append(titlebar, content);
+    content.append(fluentRoot);
+  });
+}
+
 test('mail pagination loads stable fixture pages and reads full bodies', async ({ page }) => {
   const state = await installMailFixture(page);
   await expect(page.getByText('Full fixture body for', { exact: false })).toBeVisible();
@@ -127,17 +144,49 @@ test('narrow desktop keeps the reader inside the viewport', async ({ page }) => 
 
 test('mail notices and external access keep their layout before compose is opened', async ({ page }) => {
   await installMailFixture(page);
+  await simulateDesktopFrame(page);
+  const initialGeometry = await page.evaluate(() => {
+    const content = document.querySelector('.desktop-content')!.getBoundingClientRect();
+    const shell = document.querySelector('.app-shell')!.getBoundingClientRect();
+    const mail = document.querySelector('.mail-layout')!.getBoundingClientRect();
+    return { viewport: window.innerHeight, contentBottom: content.bottom, shellBottom: shell.bottom, mailBottom: mail.bottom };
+  });
+  expect(initialGeometry.contentBottom).toBeLessThanOrEqual(initialGeometry.viewport);
+  expect(initialGeometry.shellBottom).toBe(initialGeometry.contentBottom);
+  expect(initialGeometry.mailBottom).toBeLessThan(initialGeometry.contentBottom);
+
   await page.locator('.message-row').filter({ hasText: 'Fixture subject 2' }).click();
   const notice = page.getByText('邮件已标记为已读', { exact: true });
   await expect(notice).toBeVisible();
   await expect(notice.locator('..')).toHaveCSS('position', 'fixed');
   await expect(page.getByRole('button', { name: '打开设置' })).toBeVisible();
 
+  await page.evaluate(() => {
+    document.documentElement.dataset.sawFeatureLoading = 'false';
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('.feature-loading')) {
+        document.documentElement.dataset.sawFeatureLoading = 'true';
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
   await page.getByRole('button', { name: /外部接入/ }).click();
+  await expect(page.locator('.feature-loading')).toHaveCount(0);
+  await expect(page.locator('html')).toHaveAttribute('data-saw-feature-loading', 'false');
   await expect(page.getByRole('heading', { name: 'MCP Agent 接入' })).toBeVisible();
   await expect(page.locator('.token-workspace')).toHaveCSS('overflow', 'auto');
   await expect(page.locator('.access-tabs')).toHaveCSS('display', 'flex');
   await expect(page.getByRole('button', { name: '打开设置' })).toBeVisible();
+  const externalGeometry = await page.evaluate(() => {
+    const content = document.querySelector('.desktop-content')!.getBoundingClientRect();
+    const workspace = document.querySelector('.token-workspace') as HTMLElement;
+    const bounds = workspace.getBoundingClientRect();
+    return { contentBottom: content.bottom, workspaceBottom: bounds.bottom, workspaceHeight: bounds.height, workspaceScrollHeight: workspace.scrollHeight };
+  });
+  expect(externalGeometry.workspaceBottom).toBeLessThan(externalGeometry.contentBottom);
+  expect(externalGeometry.workspaceHeight).toBeGreaterThan(0);
+  expect(externalGeometry.workspaceScrollHeight).toBeGreaterThanOrEqual(externalGeometry.workspaceHeight);
 });
 
 test('compose autosaves recipients, body and uploaded attachments', async ({ page }) => {

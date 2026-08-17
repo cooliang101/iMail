@@ -195,6 +195,9 @@ body { line-height: var(--leading-copy); text-rendering: optimizeLegibility; -we
   .credential-renewal { grid-template-columns: 1fr 1fr; }.credential-renewal label { grid-column: 1 / -1; }
   .account-inline-editor { grid-template-columns: minmax(0, 1fr); }.account-inline-editor .account-proxy-fields .form-grid { grid-template-columns: 1fr; }.account-inline-editor .card-editor-actions { justify-content: flex-start; border-top: 1px solid var(--color-border); padding-top: 10px; }.account-edit-name .app-input { width: 100%; }.account-edit-workspace { width: min(150px, 42%); }
 }
+@media (max-width: 650px) {
+  .workspace { height: auto; display: block; overflow: visible; }
+}
 @media (min-width: 821px) {
   .app-shell.sidebar-collapsed { grid-template-columns: 72px 0 minmax(0, 1fr); }
   .app-shell.sidebar-collapsed .primary-sidebar { overflow: hidden; padding-inline: 0; border-right-color: transparent; opacity: 0; pointer-events: none; }
