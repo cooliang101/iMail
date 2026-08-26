@@ -81,7 +81,7 @@ export function ServicePanel() {
 
     {desktop && <section className="service-mode-grid" aria-label="服务模式">
       <button type="button" className={mode === 'local' ? 'is-selected' : ''} onClick={() => void activateLocal()} disabled={busy}>
-        <HardDrives size={28} weight="duotone" /><span><small>此设备</small><strong>本地服务</strong><p>Rust 服务直接嵌入应用，不开放本地 HTTP 端口。</p></span>{mode === 'local' && <CheckCircle size={20} weight="fill" />}
+        <HardDrives size={28} weight="duotone" /><span><small>此设备</small><strong>本地服务</strong><p>iMail 服务直接运行于应用内，不开放本地 HTTP 端口。</p></span>{mode === 'local' && <CheckCircle size={20} weight="fill" />}
       </button>
       <button type="button" className={mode === 'remote' ? 'is-selected' : ''} onClick={() => setRemoteEditorOpen(true)} disabled={busy}>
         <Cloud size={28} weight="duotone" /><span><small>多设备共享</small><strong>远程服务</strong><p>连接你部署的服务实例，多台设备使用同一份数据。</p></span>{mode === 'remote' && <CheckCircle size={20} weight="fill" />}

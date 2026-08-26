@@ -1127,22 +1127,22 @@ fn completed_embedded_switch(path: &Path) -> bool {
 
 fn validate_embedded_switch_data(data_dir: &Path) -> Result<(u32, u64, u64), String> {
     let store = SqliteReadOnlyStore::open_data_dir(data_dir)
-        .map_err(|error| format!("Rust 数据兼容检查失败：{error}"))?;
+        .map_err(|error| format!("iMail 数据兼容检查失败：{error}"))?;
     let inventory = store
         .inventory()
-        .map_err(|error| format!("Rust 数据完整性检查失败：{error}"))?;
+        .map_err(|error| format!("iMail 数据完整性检查失败：{error}"))?;
     let key = MasterKey::from_file(data_dir.join("master.key"))
-        .map_err(|error| format!("Rust 主密钥检查失败：{error}"))?;
+        .map_err(|error| format!("iMail 主密钥检查失败：{error}"))?;
     let credentials = store
         .credential_compatibility_summary(&key)
-        .map_err(|error| format!("Rust 凭据解密检查失败：{error}"))?;
+        .map_err(|error| format!("iMail 凭据解密检查失败：{error}"))?;
     if credentials.account_count != credentials.decrypted_count {
-        return Err("Rust 凭据解密检查未覆盖全部账户".into());
+        return Err("iMail 凭据解密检查未覆盖全部账户".into());
     }
     let host = EmbeddedServiceHost::start(
         HttpAdapterConfig::production(data_dir.to_path_buf()).with_sync_worker(false),
     )
-    .map_err(|error| format!("Rust 无网络首启检查失败：{error}"))?;
+    .map_err(|error| format!("iMail 无网络首启检查失败：{error}"))?;
     let info = host.service_info();
     if info.get("service").and_then(serde_json::Value::as_str) != Some("imail")
         || info
@@ -1151,10 +1151,10 @@ fn validate_embedded_switch_data(data_dir: &Path) -> Result<(u32, u64, u64), Str
             .and_then(serde_json::Value::as_bool)
             != Some(false)
     {
-        return Err("Rust 无网络首启返回了不兼容的服务身份".into());
+        return Err("iMail 无网络首启返回了不兼容的服务身份".into());
     }
     host.shutdown(Duration::from_secs(10))
-        .map_err(|error| format!("Rust 无网络首启关闭失败：{error}"))?;
+        .map_err(|error| format!("iMail 无网络首启关闭失败：{error}"))?;
     Ok((
         inventory.schema_version,
         credentials.account_count,
@@ -1238,7 +1238,7 @@ pub(crate) async fn prepare_embedded_switch(app: &AppHandle) -> Result<PathBuf, 
             validate_embedded_switch_data(&config.data_dir)?;
         let after_hash = file_sha256(&database)?;
         if after_hash != before_hash {
-            return Err("Rust 首启预检改变了数据库，旧服务保持停止并保留失败现场".into());
+            return Err("iMail 首启预检改变了数据库，旧服务保持停止并保留失败现场".into());
         }
         let record = EmbeddedSwitchRecord {
             format_version: 1,

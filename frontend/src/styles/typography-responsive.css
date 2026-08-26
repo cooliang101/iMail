@@ -187,7 +187,7 @@ body { line-height: var(--leading-copy); text-rendering: optimizeLegibility; -we
   .mobile-account-controls strong { font-size: 13px; }.mobile-account-controls small { color: var(--color-text-tertiary); font-size: 12px; line-height: 1.45; }
   .mobile-account-controls > div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .mobile-account-controls > div button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; border: 1px solid var(--color-border); border-radius: 9px; background: #fff; color: var(--neutral-90); font-size: 11px; }
-  .reader-content { width: 100%; padding: 24px 20px 44px; }.reader-actions { padding-inline: 10px; }.mail-body-view-action button span { display: none; }.sender-line { gap: 4px; }.sender-line button { padding: 6px; }
+  .reader-content { width: 100%; padding: 24px 20px 44px; }.reader-actions { padding-inline: 10px; }.mail-body-view-action button span { display: none; }.sender-line { gap: 4px; }.sender-line button { padding: 6px; }.verification-code-banner { grid-template-columns: auto minmax(0, 1fr); }.verification-code-action { grid-column: 1 / -1; }.verification-code-action button { flex: 1; justify-content: center; }.about-hero { grid-template-columns: 56px minmax(0, 1fr); padding: 18px; }.about-hero img { width: 56px; height: 56px; }.about-hero > strong { grid-column: 1 / -1; justify-self: start; }.about-project-card { grid-template-columns: 38px minmax(0, 1fr); }.about-project-card button { grid-column: 1 / -1; justify-content: center; }
 }
 @media (max-width: 650px) {
   .credential-guide ol { grid-template-columns: 1fr; }

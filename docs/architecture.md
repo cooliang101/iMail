@@ -12,7 +12,7 @@ iMail 的 Rust 领域服务独立拥有邮箱凭据、SQLite、同步任务、We
 
 Windows 桌面 OAuth 使用系统浏览器、authorization code + PKCE 和单次临时 `localhost` callback listener；端口由操作系统动态分配，该 listener 不承载业务 API。远程服务通过同一 OAuth 引擎显式配置 HTTPS `OAUTH_CALLBACK_BASE_URL` 与 Web Client 凭据。
 
-远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源。`http-service/` 只负责独立进程启动和部署，通用 Web API/MCP/Gateway 实现仍由 `crates/imail-http/` 提供。当前部署边界见[部署模式](deployment-modes.md)，未来平台扩展见[跨平台支持路线](cross-platform-support-roadmap.md)。
+远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源。`http-service/` 只负责独立进程启动和部署，通用 Web API/MCP/Gateway 实现仍由 `crates/imail-http/` 提供。当前部署边界见[部署模式](deployment-modes.md)。
 
 Web 生产构建注册独立 Service Worker：带内容哈希的 JS、CSS、字体和图片采用缓存优先，页面导航采用网络优先并回退到已缓存应用外壳。`/api`、`/gateway`、`/mcp` 与 `text/event-stream` 请求始终绕过缓存；Tauri 运行时不注册 Service Worker。
 
@@ -91,7 +91,9 @@ Agent
 - `contracts/mcp-tools.json`：由 Rust MCP 实现嵌入并在 Rust 测试中校验的稳定工具契约。
 - `imail-core`、`imail-mail` 与 `imail-storage-sqlite`：HTTP、MCP 与 Tauri 共用的领域行为。
 
-账户可选的 `http`、`https`、`socks5` 代理由 `imail-mail-network` 统一注入 IMAP 与 SMTP 连接，因此连接测试、同步、远程邮件操作、附件下载和发信遵循同一邮箱配置。SQLite schema v5 为 `accounts` 增加可空的 `proxy_json`，持久化协议、主机、端口和可选用户名；v4 升级只添加该列，不改写已有账户。代理密码继续合并进加密凭据载荷，公开账户视图和 MCP 输出不返回密码。关闭代理时同时清除 `proxy_json` 和加密载荷中的代理密码，备份/恢复按 schema v5 保留两部分。
+账户可选的 `http`、`https`、`socks5` 代理由 `imail-mail-network` 统一注入 IMAP 与 SMTP 连接，因此连接测试、同步、远程邮件操作、附件下载和发信遵循同一邮箱配置。SQLite schema v5 为 `accounts` 增加可空的 `proxy_json`，持久化协议、主机、端口和可选用户名；v4 升级只添加该列，不改写已有账户。代理密码继续合并进加密凭据载荷，公开账户视图和 MCP 输出不返回密码。关闭代理时同时清除 `proxy_json` 和加密载荷中的代理密码，备份/恢复保留两部分。
+
+SQLite schema v7 增加 `apple_hme_sessions`，schema v8 增加 `apple_hme_addresses` 与 `apple_hme_sync_state`。会话记录以邮箱账户 ID 为主键并通过外键随账户级联删除，只保存 `master.key` 加密后的 `AppleSession` 与更新时间；Apple ID、Cookie、`scnt`、Session Token、API Key 和数据访问 Token 均不进入公开账户模型。地址表保存最近一次手动同步的 HME 管理快照，按应用用户和邮箱账户隔离，创建、停用和删除成功后同步更新本地记录。HME pending 2FA 状态仅在进程内保留十分钟，并额外绑定应用用户与邮箱账户。Apple Account 会话用于新建地址，iCloud Web 会话用于手动同步、创建、停用和删除；IMAP/SMTP 仍使用原邮箱应用专用密码。
 - `crates/imail-core/src/theme.rs`、`crates/imail-core/src/preferences.rs` 与 `crates/imail-http/src/mcp.rs`：校验并按应用用户保存自定义主题令牌，供 HTTP preferences 与 MCP 控制面共同使用。
 - `crates/imail-core/src/developer_tokens.rs`、`crates/imail-storage-sqlite/src/developer_tokens.rs` 与 `imail-security`：生成和验证高熵授权码、SHA-256 哈希、过期、撤销与用户作用域。
 

@@ -1371,6 +1371,147 @@
         "readOnlyHint": true,
         "idempotentHint": true
       }
+    },
+    {
+      "name": "apple_hme_status",
+      "title": "查看 Apple HME 授权",
+      "description": "查看指定 iCloud 邮箱的 Apple Account 与 iCloud Web 会话授权状态，不返回 Cookie 或 Token。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": { "email": { "type": "string", "format": "email" } },
+        "required": ["email"],
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "idempotentHint": true }
+    },
+    {
+      "name": "apple_hme_start_login",
+      "title": "开始 Apple HME 授权",
+      "description": "使用 Apple 账户密码开始 Apple Account 或 iCloud Web 网页会话授权。密码仅用于本次 SRP 登录，不会保存或返回。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "kind": { "type": "string", "enum": ["icloudWeb", "appleAccount"] },
+          "password": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "appleId": { "type": "string", "format": "email" },
+          "twoFactorMethod": { "type": "string", "enum": ["trustedDevice", "phone"] },
+          "phoneNumber": { "type": "object" },
+          "icloudHost": { "type": "string", "enum": ["https://www.icloud.com", "https://www.icloud.com.cn"] }
+        },
+        "required": ["email", "kind", "password"],
+        "additionalProperties": false
+      },
+      "annotations": { "idempotentHint": false }
+    },
+    {
+      "name": "apple_hme_submit_two_factor",
+      "title": "完成 Apple 双重认证",
+      "description": "提交 Apple 返回的 6 位双重认证验证码，完成并加密保存 HME 会话。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "pendingId": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "code": { "type": "string", "pattern": "^[0-9]{6}$" },
+          "phoneNumber": { "type": "object" }
+        },
+        "required": ["email", "pendingId", "code"],
+        "additionalProperties": false
+      },
+      "annotations": { "idempotentHint": false }
+    },
+    {
+      "name": "apple_hme_list",
+      "title": "读取本地 Hide My Email 地址",
+      "description": "读取指定 iCloud 账户已持久化到 iMail 的 Hide My Email 地址，不访问 Apple。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": { "email": { "type": "string", "format": "email" } },
+        "required": ["email"],
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "idempotentHint": true }
+    },
+    {
+      "name": "apple_hme_sync",
+      "title": "同步 Hide My Email 地址",
+      "description": "从 Apple 手动同步指定 iCloud 账户的 Hide My Email 地址并持久化到 iMail。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": { "email": { "type": "string", "format": "email" } },
+        "required": ["email"],
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": false, "idempotentHint": true }
+    },
+    {
+      "name": "apple_hme_create",
+      "title": "创建 Hide My Email 地址",
+      "description": "通过已授权的 Apple Account 或 iCloud Web 会话创建新的 Hide My Email 地址。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "label": { "type": "string", "maxLength": 200 },
+          "note": { "type": "string", "maxLength": 500 },
+          "channel": { "type": "string", "enum": ["auto", "appleAccount", "icloudWeb"], "default": "auto" }
+        },
+        "required": ["email"],
+        "additionalProperties": false
+      },
+      "annotations": { "idempotentHint": false }
+    },
+    {
+      "name": "apple_hme_deactivate",
+      "title": "停用 Hide My Email 地址",
+      "description": "停用一个 Hide My Email 地址；该操作不会永久删除地址。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "anonymousId": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "required": ["email", "anonymousId"],
+        "additionalProperties": false
+      },
+      "annotations": { "destructiveHint": true, "idempotentHint": false }
+    },
+    {
+      "name": "apple_hme_delete",
+      "title": "永久删除 Hide My Email 地址",
+      "description": "永久删除一个已经停用的 Hide My Email 地址；活动地址会被拒绝。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "anonymousId": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "required": ["email", "anonymousId"],
+        "additionalProperties": false
+      },
+      "annotations": { "destructiveHint": true, "idempotentHint": false }
+    },
+    {
+      "name": "apple_hme_disconnect",
+      "title": "断开 Apple HME 授权",
+      "description": "删除 iMail 本地加密保存的 Apple HME 会话，不会删除 Apple 端的 HME 地址。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": { "email": { "type": "string", "format": "email" } },
+        "required": ["email"],
+        "additionalProperties": false
+      },
+      "annotations": { "destructiveHint": true, "idempotentHint": true }
     }
   ]
 }

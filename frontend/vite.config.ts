@@ -1,12 +1,15 @@
 import preact from '@preact/preset-vite';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 const apiTarget = `http://localhost:${process.env.VITE_API_PORT ?? '8787'}`;
 const frontendRoot = fileURLToPath(new URL('.', import.meta.url));
+const packageVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version as string;
 
 export default defineConfig({
   root: frontendRoot,
+  define: { __APP_VERSION__: JSON.stringify(packageVersion) },
   plugins: [preact()],
   build: {
     rollupOptions: {

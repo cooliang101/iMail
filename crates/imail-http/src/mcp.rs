@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 
-const MANAGEMENT_TOOLS: [&str; 10] = [
+const MANAGEMENT_TOOLS: [&str; 17] = [
     "settings_update",
     "theme_custom_update",
     "account_add_with_code",
@@ -45,6 +45,13 @@ const MANAGEMENT_TOOLS: [&str; 10] = [
     "account_proxy_update",
     "account_remove",
     "sync_policy_update",
+    "apple_hme_start_login",
+    "apple_hme_submit_two_factor",
+    "apple_hme_sync",
+    "apple_hme_create",
+    "apple_hme_deactivate",
+    "apple_hme_delete",
+    "apple_hme_disconnect",
 ];
 const MODERN_PROTOCOL: &str = "2026-07-28";
 const LEGACY_PROTOCOLS: [&str; 5] = [
@@ -478,6 +485,108 @@ async fn call_tool(
     name: &str,
     arguments: Value,
 ) -> Result<Value, McpError> {
+    if name.starts_with("apple_hme_") {
+        let email = required_string(&arguments, "email")?.to_string();
+        let lookup_owner = owner_id.clone();
+        let account_id = run(database.clone(), move |store| {
+            Ok(account_by_email(store, &lookup_owner, &email)?.id)
+        })
+        .await?;
+        let result = match name {
+            "apple_hme_status" => crate::apple_hme::status_service(state, owner_id, account_id)
+                .await
+                .and_then(|value| {
+                    serde_json::to_value(value)
+                        .map_err(|_| crate::apple_hme::IntegrationError::Internal)
+                }),
+            "apple_hme_start_login" => {
+                let kind = parse(
+                    arguments
+                        .get("kind")
+                        .cloned()
+                        .ok_or(McpError::Invalid("缺少必填参数"))?,
+                )?;
+                let password = required_string(&arguments, "password")?.to_string();
+                let apple_id = optional_string(&arguments, "appleId").map(str::to_string);
+                let method = arguments
+                    .get("twoFactorMethod")
+                    .cloned()
+                    .map(parse)
+                    .transpose()?;
+                let phone = arguments.get("phoneNumber").cloned();
+                let host = optional_string(&arguments, "icloudHost").map(str::to_string);
+                crate::apple_hme::start_login_service(
+                    state,
+                    owner_id,
+                    "mcp".into(),
+                    account_id,
+                    kind,
+                    password,
+                    apple_id,
+                    method,
+                    phone,
+                    host,
+                )
+                .await
+                .and_then(|value| {
+                    serde_json::to_value(value)
+                        .map_err(|_| crate::apple_hme::IntegrationError::Internal)
+                })
+            }
+            "apple_hme_submit_two_factor" => {
+                let pending_id = required_string(&arguments, "pendingId")?.to_string();
+                let code = required_string(&arguments, "code")?.to_string();
+                let phone = arguments.get("phoneNumber").cloned();
+                crate::apple_hme::submit_two_factor_service(
+                    state,
+                    owner_id,
+                    "mcp".into(),
+                    account_id,
+                    pending_id,
+                    code,
+                    phone,
+                )
+                .await
+                .and_then(|value| {
+                    serde_json::to_value(value)
+                        .map_err(|_| crate::apple_hme::IntegrationError::Internal)
+                })
+            }
+            "apple_hme_list" => crate::apple_hme::list_service(state, owner_id, account_id).await,
+            "apple_hme_sync" => crate::apple_hme::sync_service(state, owner_id, account_id).await,
+            "apple_hme_create" => {
+                let label = optional_string(&arguments, "label")
+                    .unwrap_or_default()
+                    .to_string();
+                let note = optional_string(&arguments, "note")
+                    .unwrap_or_default()
+                    .to_string();
+                let channel = arguments
+                    .get("channel")
+                    .cloned()
+                    .map(parse)
+                    .transpose()?
+                    .unwrap_or_default();
+                crate::apple_hme::create_service(state, owner_id, account_id, label, note, channel)
+                    .await
+            }
+            "apple_hme_deactivate" => {
+                let anonymous_id = required_string(&arguments, "anonymousId")?.to_string();
+                crate::apple_hme::deactivate_service(state, owner_id, account_id, anonymous_id)
+                    .await
+            }
+            "apple_hme_delete" => {
+                let anonymous_id = required_string(&arguments, "anonymousId")?.to_string();
+                crate::apple_hme::delete_service(state, owner_id, account_id, anonymous_id).await
+            }
+            "apple_hme_disconnect" => {
+                crate::apple_hme::disconnect_service(state, owner_id, account_id).await
+            }
+            _ => return Err(McpError::MethodNotFound),
+        }
+        .map_err(|error| McpError::Application(error.public_message()))?;
+        return Ok(tool_output(result));
+    }
     if name == "account_add_with_code" {
         let account = crate::accounts::mcp_add_with_code(state, owner_id, arguments).await?;
         return Ok(tool_output(json!({"account":safe_account(account)})));
@@ -1183,6 +1292,26 @@ fn tool_schema(name: &str) -> Value {
         "account_proxy_update" => {
             json!({"type":"object","properties":{"email":email_schema(),"enabled":{"type":"boolean"},"sourceEmail":email_schema(),"protocol":{"type":"string","enum":["http","https","socks5"]},"host":{"type":"string","minLength":1,"maxLength":253},"port":{"type":"integer","minimum":1,"maximum":65535},"username":{"type":"string","maxLength":256},"password":{"type":"string","maxLength":512}},"required":["email","enabled"],"additionalProperties":false})
         }
+        "apple_hme_status" | "apple_hme_list" | "apple_hme_sync" | "apple_hme_disconnect" => {
+            email_only_schema()
+        }
+        "apple_hme_start_login" => json!({"type":"object","properties":{
+            "email":email_schema(),"kind":{"type":"string","enum":["icloudWeb","appleAccount"]},
+            "password":{"type":"string","minLength":1,"maxLength":512},"appleId":email_schema(),
+            "twoFactorMethod":{"type":"string","enum":["trustedDevice","phone"]},
+            "phoneNumber":{"type":"object"},"icloudHost":{"type":"string","enum":["https://www.icloud.com","https://www.icloud.com.cn"]}
+        },"required":["email","kind","password"],"additionalProperties":false}),
+        "apple_hme_submit_two_factor" => json!({"type":"object","properties":{
+            "email":email_schema(),"pendingId":{"type":"string","minLength":1,"maxLength":200},
+            "code":{"type":"string","pattern":"^[0-9]{6}$"},"phoneNumber":{"type":"object"}
+        },"required":["email","pendingId","code"],"additionalProperties":false}),
+        "apple_hme_create" => json!({"type":"object","properties":{
+            "email":email_schema(),"label":{"type":"string","maxLength":200},"note":{"type":"string","maxLength":500},
+            "channel":{"type":"string","enum":["auto","appleAccount","icloudWeb"],"default":"auto"}
+        },"required":["email"],"additionalProperties":false}),
+        "apple_hme_deactivate" | "apple_hme_delete" => json!({"type":"object","properties":{
+            "email":email_schema(),"anonymousId":{"type":"string","minLength":1,"maxLength":200}
+        },"required":["email","anonymousId"],"additionalProperties":false}),
         "mailbox_sync" => {
             json!({"type":"object","properties":{"email":email_schema(),"mailboxRole":mailbox_role_schema(),"mailboxPath":{"type":"string","minLength":1,"maxLength":500}},"additionalProperties":false})
         }

@@ -2,7 +2,7 @@
 
 iMail 是一个本地优先的多邮箱客户端。它把 Gmail、Outlook、QQ、Yahoo、iCloud 和其他 IMAP 邮箱放进同一个界面，统一处理收信、搜索、写信、联系人和日常整理。
 
-项目目前处于内部测试阶段，正式交付包括 Windows x64 桌面端和服务端 Docker 镜像。Linux 桌面正在规划中，macOS 标记为未来支持。
+项目目前处于内部测试阶段，只交付 Windows x64 桌面端和服务端 Docker 镜像。Linux 仅作为服务端容器运行环境，不维护原生 Linux 或 macOS 桌面构建。
 
 ## 主要能力
 
@@ -13,6 +13,7 @@ iMail 是一个本地优先的多邮箱客户端。它把 Gmail、Outlook、QQ�
 - 支持搜索、星标、已读、归档、垃圾箱和自定义标签
 - 支持写信、回复、转发、草稿和附件下载
 - 支持联系人、发件人 Logo 和写信建议
+- 支持为 iCloud 邮箱管理 Hide My Email 地址
 - 支持稍后处理、通知中心、快捷键和多套主题
 - 每个邮箱可单独使用 HTTP、HTTPS 或 SOCKS5 代理
 - 可为可信工具和 Agent 开启独立的 API 或 MCP 接入
@@ -62,17 +63,12 @@ iMail 是本地优先产品，不提供自动的多设备数据同步。本地�
 
 这些入口默认关闭。MCP 的账户管理能力只接受专用的 `mcp:full` 授权码，具体接入方式见 [MCP 指南](docs/mcp-integration.md)。
 
-## 当前平台与计划
+## 当前交付平台
 
 | 目标 | 状态 |
 | --- | --- |
 | Windows x64 桌面端 | 已支持，当前用于内部测试 |
 | Docker `linux/amd64` | 已发布到 GHCR，持续补充部署与安全验收 |
-| Linux x64 桌面端 | 计划支持 |
-| Docker `linux/arm64` | 后续支持 |
-| macOS 桌面端 | 未来支持，尚未进入实施阶段 |
-
-跨平台工作坚持复用同一套邮件能力、界面和数据格式，不为不同平台维护彼此分叉的产品。详细阶段见[跨平台支持路线](docs/cross-platform-support-roadmap.md)。
 
 ## 本地开发
 
@@ -123,5 +119,4 @@ docs/           架构、部署、运维和开发计划
 - [运维手册](docs/operator-runbook.md)
 - [MCP 接入指南](docs/mcp-integration.md)
 - [架构说明](docs/architecture.md)
-- [跨平台支持路线](docs/cross-platform-support-roadmap.md)
 - [内部测试说明](docs/internal-testing.md)

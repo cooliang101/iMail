@@ -1228,7 +1228,7 @@ mod tests {
             ));
             let connection = Connection::open(&path).unwrap();
             connection
-                .execute_batch(include_str!("../sql/schema-v6.sql"))
+                .execute_batch(include_str!("../sql/schema-v8.sql"))
                 .unwrap();
             connection
                 .execute(

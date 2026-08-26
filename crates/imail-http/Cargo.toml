@@ -11,6 +11,7 @@ base64.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
 imail-attachment = { path = "../imail-attachment" }
+imail-apple-hme = { path = "../imail-apple-hme" }
 imail-core = { path = "../imail-core" }
 imail-mail = { path = "../imail-mail" }
 imail-mail-network = { path = "../imail-mail-network" }

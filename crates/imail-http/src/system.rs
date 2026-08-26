@@ -142,6 +142,10 @@ async fn providers(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     Extension(_user): Extension<AuthenticatedUser>,
 ) -> Json<ProvidersBody> {
+    Json(providers_body(&state))
+}
+
+fn providers_body(state: &AppState) -> ProvidersBody {
     let providers = vec![
         Provider { id: "outlook", name: "Outlook / Microsoft 365", hint: "优先使用 Microsoft 安全登录，也可使用账户允许的应用专用密码", auth_mode: "oauth2", oauth_provider: Some(Some("microsoft")), oauth_tenant: None, fallback_auth_mode: Some("app-password"), help_url: Some("https://support.microsoft.com/account-billing/manage-app-passwords-for-two-step-verification-d6dc8c6d-4bf7-4851-ad95-6d07799387e9") },
         Provider { id: "gmail", name: "Gmail", hint: "使用 Google 安全登录", auth_mode: "oauth2", oauth_provider: Some(Some("google")), oauth_tenant: None, fallback_auth_mode: Some("app-password"), help_url: None },
@@ -172,5 +176,9 @@ async fn providers(
         }
     })
     .collect();
-    Json(ProvidersBody { providers, oauth })
+    ProvidersBody { providers, oauth }
+}
+
+pub(crate) fn embedded_providers(state: &AppState) -> serde_json::Value {
+    serde_json::to_value(providers_body(state)).expect("provider catalog serializes")
 }

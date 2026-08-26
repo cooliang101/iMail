@@ -2313,7 +2313,7 @@ checksum = "edcd27d72f2f071c64249075f42e205ff93c9a4c5f6c6da53e79ed9f9832c285"
 
 [[package]]
 name = "imail"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "axum",
  "chrono",
@@ -2331,6 +2331,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.15",
  "reqwest_cookie_store",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -2348,8 +2349,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "imail-apple-hme"
+version = "0.0.12"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "num-bigint",
+ "pbkdf2",
+ "rand 0.8.7",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "thiserror 1.0.69",
+ "ureq",
+ "url",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "imail-attachment"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "encoding_rs",
  "imagesize",
@@ -2361,7 +2382,7 @@ dependencies = [
 
 [[package]]
 name = "imail-core"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "chrono",
  "icu_collator",
@@ -2379,12 +2400,13 @@ dependencies = [
 
 [[package]]
 name = "imail-http"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "axum",
  "base64 0.22.1",
  "chrono",
  "futures-util",
+ "imail-apple-hme",
  "imail-attachment",
  "imail-core",
  "imail-mail",
@@ -2416,7 +2438,7 @@ dependencies = [
 
 [[package]]
 name = "imail-http-service"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "imail-http",
  "imail-oauth",
@@ -2427,7 +2449,7 @@ dependencies = [
 
 [[package]]
 name = "imail-mail"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2443,7 +2465,7 @@ dependencies = [
 
 [[package]]
 name = "imail-mail-network"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "async-imap",
  "base64 0.22.1",
@@ -2470,7 +2492,7 @@ dependencies = [
 
 [[package]]
 name = "imail-oauth"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2486,7 +2508,7 @@ dependencies = [
 
 [[package]]
 name = "imail-oauth-http"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "base64 0.22.1",
  "imail-oauth",
@@ -2499,7 +2521,7 @@ dependencies = [
 
 [[package]]
 name = "imail-protocol"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "serde",
  "serde_json",
@@ -2507,7 +2529,7 @@ dependencies = [
 
 [[package]]
 name = "imail-runtime"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "chrono",
  "imail-core",
@@ -2526,7 +2548,7 @@ dependencies = [
 
 [[package]]
 name = "imail-security"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -2545,7 +2567,7 @@ dependencies = [
 
 [[package]]
 name = "imail-storage-sqlite"
-version = "0.0.7"
+version = "0.0.12"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -3083,10 +3105,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+
+[[package]]
+name = "num-integer"
+version = "0.1.47"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ce2d95d4b3734dc35aa2f45e1aa22cd416814592a4f9d9205e11affd5b8e10b"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "num-traits"

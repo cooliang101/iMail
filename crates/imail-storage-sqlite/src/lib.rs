@@ -18,6 +18,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 mod app_data;
+mod apple_hme_addresses;
+mod apple_hme_sessions;
 mod auth;
 mod backup;
 mod content_data;
@@ -27,6 +29,8 @@ mod export_encryption;
 mod migration;
 mod privacy_data;
 mod sync_runtime;
+pub use apple_hme_addresses::{AppleHmeAddressRecord, AppleHmeAddressSnapshot};
+pub use apple_hme_sessions::AppleHmeSessionRecord;
 pub use auth::{AuthStoreError, SqliteAuthStore};
 pub use backup::{
     create_data_backup, prepare_data_restore, BackupReport, FilesystemDataMaintenance,

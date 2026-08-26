@@ -77,7 +77,9 @@ fn execute(arguments: &[std::ffi::OsString]) -> Result<serde_json::Value, Box<dy
     let credentials = store.credential_compatibility_summary(&key)?;
 
     let host = EmbeddedServiceHost::start(
-        HttpAdapterConfig::production(&data_dir).with_sync_worker(false),
+        HttpAdapterConfig::production(&data_dir)
+            .with_sync_worker(false)
+            .with_apple_hme_keepalive(false),
     )?;
     let service_info = host.service_info();
     host.shutdown(Duration::from_secs(2))?;
@@ -169,7 +171,7 @@ mod tests {
         assert_eq!(report["noHttpListener"], true);
         assert_eq!(report["syncWorker"], false);
         assert_eq!(report["protectedFilesUnchanged"], true);
-        assert_eq!(report["inventory"]["schemaVersion"], 6);
+        assert_eq!(report["inventory"]["schemaVersion"], 8);
     }
 
     #[test]

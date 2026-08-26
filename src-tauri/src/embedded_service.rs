@@ -70,6 +70,7 @@ pub struct EmbeddedServiceResponse {
 #[serde(tag = "operation", rename_all = "camelCase")]
 pub enum EmbeddedDomainCall {
     SystemInfo,
+    Providers,
     AuthStatus,
     AuthRegister {
         input: serde_json::Value,
@@ -102,6 +103,49 @@ pub enum EmbeddedDomainCall {
         input: serde_json::Value,
     },
     AccountConnectionTest {
+        #[serde(rename = "accountId")]
+        account_id: String,
+    },
+    AppleHmeStatus {
+        #[serde(rename = "accountId")]
+        account_id: String,
+    },
+    AppleHmeStartLogin {
+        #[serde(rename = "accountId")]
+        account_id: String,
+        input: serde_json::Value,
+    },
+    AppleHmeSubmitTwoFactor {
+        #[serde(rename = "accountId")]
+        account_id: String,
+        input: serde_json::Value,
+    },
+    AppleHmeList {
+        #[serde(rename = "accountId")]
+        account_id: String,
+    },
+    AppleHmeSync {
+        #[serde(rename = "accountId")]
+        account_id: String,
+    },
+    AppleHmeCreate {
+        #[serde(rename = "accountId")]
+        account_id: String,
+        input: serde_json::Value,
+    },
+    AppleHmeDeactivate {
+        #[serde(rename = "accountId")]
+        account_id: String,
+        #[serde(rename = "anonymousId")]
+        anonymous_id: String,
+    },
+    AppleHmeDelete {
+        #[serde(rename = "accountId")]
+        account_id: String,
+        #[serde(rename = "anonymousId")]
+        anonymous_id: String,
+    },
+    AppleHmeDisconnect {
         #[serde(rename = "accountId")]
         account_id: String,
     },
@@ -216,6 +260,7 @@ impl EmbeddedDomainCall {
         let mut draft_id = None;
         let (path, method, body) = match self {
             Self::SystemInfo => ("/api/system/info".into(), "GET", None),
+            Self::Providers => ("/api/providers".into(), "GET", None),
             Self::AuthStatus => ("/api/auth/status".into(), "GET", None),
             Self::AuthRegister { input } => json_request("/api/auth/register", "POST", input),
             Self::AuthLogin { input } => json_request("/api/auth/login", "POST", input),
@@ -248,6 +293,80 @@ impl EmbeddedDomainCall {
                     path_segment(&account_id)
                 ),
                 "POST",
+                None,
+            ),
+            Self::AppleHmeStatus { account_id } => (
+                format!("/api/accounts/{}/apple-hme", path_segment(&account_id)),
+                "GET",
+                None,
+            ),
+            Self::AppleHmeStartLogin { account_id, input } => json_request(
+                format!(
+                    "/api/accounts/{}/apple-hme/login",
+                    path_segment(&account_id)
+                ),
+                "POST",
+                input,
+            ),
+            Self::AppleHmeSubmitTwoFactor { account_id, input } => json_request(
+                format!(
+                    "/api/accounts/{}/apple-hme/two-factor",
+                    path_segment(&account_id)
+                ),
+                "POST",
+                input,
+            ),
+            Self::AppleHmeList { account_id } => (
+                format!(
+                    "/api/accounts/{}/apple-hme/addresses",
+                    path_segment(&account_id)
+                ),
+                "GET",
+                None,
+            ),
+            Self::AppleHmeSync { account_id } => (
+                format!(
+                    "/api/accounts/{}/apple-hme/addresses/sync",
+                    path_segment(&account_id)
+                ),
+                "POST",
+                None,
+            ),
+            Self::AppleHmeCreate { account_id, input } => json_request(
+                format!(
+                    "/api/accounts/{}/apple-hme/addresses",
+                    path_segment(&account_id)
+                ),
+                "POST",
+                input,
+            ),
+            Self::AppleHmeDeactivate {
+                account_id,
+                anonymous_id,
+            } => (
+                format!(
+                    "/api/accounts/{}/apple-hme/addresses/{}/deactivate",
+                    path_segment(&account_id),
+                    path_segment(&anonymous_id)
+                ),
+                "POST",
+                None,
+            ),
+            Self::AppleHmeDelete {
+                account_id,
+                anonymous_id,
+            } => (
+                format!(
+                    "/api/accounts/{}/apple-hme/addresses/{}",
+                    path_segment(&account_id),
+                    path_segment(&anonymous_id)
+                ),
+                "DELETE",
+                None,
+            ),
+            Self::AppleHmeDisconnect { account_id } => (
+                format!("/api/accounts/{}/apple-hme", path_segment(&account_id)),
+                "DELETE",
                 None,
             ),
             Self::OauthStart { input } => json_request("/api/oauth/start", "POST", input),
@@ -566,11 +685,11 @@ impl EmbeddedMailServiceState {
 
     async fn initialize(&self, data_dir: PathBuf) -> Result<PathBuf, String> {
         let data_dir = self.select_data_dir(data_dir)?;
-        self.load_session(&data_dir).await?;
         let host_data_dir = data_dir.clone();
         self.host
             .get_or_try_init(|| async move {
                 prepare_empty_data_dir(&host_data_dir)?;
+                self.load_session(&host_data_dir).await?;
                 let mut config = HttpAdapterConfig::production(host_data_dir)
                     .with_sync_worker(true)
                     .with_oauth_environment(desktop_oauth_environment());
@@ -655,6 +774,16 @@ impl EmbeddedMailServiceState {
                     .get()
                     .ok_or_else(|| "嵌入式服务尚未初始化".to_string())?;
                 Ok(Some(json_response(200, host.service_info())))
+            }
+            EmbeddedDomainCall::Providers => {
+                if self.current_user_id()?.is_none() {
+                    return Ok(Some(unauthorized_response()));
+                }
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(json_response(200, host.providers())))
             }
             EmbeddedDomainCall::AuthStatus => {
                 let raw_session = self.raw_session()?;
@@ -959,6 +1088,135 @@ impl EmbeddedMailServiceState {
                     .test_account_connection(user_id, account_id.clone())
                     .await;
                 Ok(Some(account_application_response(result)))
+            }
+            EmbeddedDomainCall::AppleHmeStatus { account_id } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_status(user_id, account_id.clone()).await,
+                )))
+            }
+            EmbeddedDomainCall::AppleHmeStartLogin { account_id, input } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_start_login(
+                        user_id,
+                        "imail-desktop".into(),
+                        account_id.clone(),
+                        input.clone(),
+                    )
+                    .await,
+                )))
+            }
+            EmbeddedDomainCall::AppleHmeSubmitTwoFactor { account_id, input } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_submit_two_factor(
+                        user_id,
+                        "imail-desktop".into(),
+                        account_id.clone(),
+                        input.clone(),
+                    )
+                    .await,
+                )))
+            }
+            EmbeddedDomainCall::AppleHmeList { account_id } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_list(user_id, account_id.clone()).await,
+                )))
+            }
+            EmbeddedDomainCall::AppleHmeSync { account_id } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_sync(user_id, account_id.clone()).await,
+                )))
+            }
+            EmbeddedDomainCall::AppleHmeCreate { account_id, input } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_create(user_id, account_id.clone(), input.clone())
+                        .await,
+                )))
+            }
+            EmbeddedDomainCall::AppleHmeDeactivate {
+                account_id,
+                anonymous_id,
+            } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_deactivate(user_id, account_id.clone(), anonymous_id.clone())
+                        .await,
+                )))
+            }
+            EmbeddedDomainCall::AppleHmeDelete {
+                account_id,
+                anonymous_id,
+            } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_delete(user_id, account_id.clone(), anonymous_id.clone())
+                        .await,
+                )))
+            }
+            EmbeddedDomainCall::AppleHmeDisconnect { account_id } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "iMail 服务尚未初始化".to_string())?;
+                Ok(Some(embedded_operation_response(
+                    host.apple_hme_disconnect(user_id, account_id.clone()).await,
+                )))
             }
             EmbeddedDomainCall::OauthStart { input } => {
                 let Some(user_id) = self.current_user_id()? else {
@@ -1901,8 +2159,8 @@ fn prepare_empty_data_dir(data_dir: &Path) -> Result<(), String> {
             .create_new(true)
             .open(&database)
             .map_err(|error| format!("创建嵌入式数据库失败：{error}"))?;
-        migrate_database(&database).map_err(|error| format!("初始化嵌入式数据库失败：{error}"))?;
     }
+    migrate_database(&database).map_err(|error| format!("迁移嵌入式数据库失败：{error}"))?;
     let key = data_dir.join("master.key");
     if !key.exists() {
         let mut file = OpenOptions::new()
@@ -2157,6 +2415,8 @@ async fn ensure_runtime_allowed(
 mod tests {
     use super::*;
     use imail_core::{AccountRecord, AccountRepository};
+    use imail_storage_sqlite::AppleHmeAddressRecord;
+    use rusqlite::Connection;
     use sha2::{Digest, Sha256};
 
     #[test]
@@ -2231,6 +2491,73 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&auth.body).unwrap()["setupRequired"],
             true
         );
+        state.shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn migrates_an_existing_v6_database_before_restoring_the_session() {
+        let root = std::env::temp_dir().join(format!(
+            "imail-tauri-v6-session-migration-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let data_dir = root.join("data");
+        prepare_empty_data_dir(&data_dir).unwrap();
+        let database = data_dir.join("imail.sqlite");
+        {
+            let connection = Connection::open(&database).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO metadata(key,value) VALUES('migration_test_marker','preserved')",
+                    [],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "UPDATE metadata SET value='6' WHERE key='schema_version'",
+                    [],
+                )
+                .unwrap();
+            connection
+                .execute_batch("DROP TABLE apple_hme_sessions;")
+                .unwrap();
+        }
+        write_private_session(
+            &embedded_session_path(&data_dir).unwrap(),
+            b"expired-session",
+        )
+        .unwrap();
+
+        let state = EmbeddedMailServiceState::default();
+        state.initialize(data_dir.clone()).await.unwrap();
+
+        let connection = Connection::open(&database).unwrap();
+        let schema_version: String = connection
+            .query_row(
+                "SELECT value FROM metadata WHERE key='schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let marker: String = connection
+            .query_row(
+                "SELECT value FROM metadata WHERE key='migration_test_marker'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let hme_table_exists: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='apple_hme_sessions')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(schema_version, "8");
+        assert_eq!(marker, "preserved");
+        assert!(hme_table_exists);
+
+        drop(connection);
         state.shutdown().unwrap();
         let _ = std::fs::remove_dir_all(root);
     }
@@ -2516,6 +2843,7 @@ mod tests {
         );
         let first_id = uuid::Uuid::new_v4().to_string();
         let second_id = uuid::Uuid::new_v4().to_string();
+        let icloud_id = uuid::Uuid::new_v4().to_string();
         let account = |id: &str, email: &str| AccountRecord {
             id: id.into(),
             owner_id: user_id.clone(),
@@ -2556,6 +2884,28 @@ mod tests {
         assert!(store
             .insert_account_if_email_available(&account(&second_id, "second@example.test"))
             .unwrap());
+        let mut icloud = account(&icloud_id, "owner@icloud.com");
+        icloud.provider = "icloud".into();
+        assert!(store.insert_account_if_email_available(&icloud).unwrap());
+        store
+            .replace_apple_hme_addresses(
+                &user_id,
+                &icloud_id,
+                &[AppleHmeAddressRecord {
+                    account_id: icloud_id.clone(),
+                    user_id: user_id.clone(),
+                    anonymous_id: "cached-hme-1".into(),
+                    email: "quiet-path@icloud.com".into(),
+                    label: "Shopping".into(),
+                    note: String::new(),
+                    forward_to_email: "owner@icloud.com".into(),
+                    active: true,
+                    origin: "icloud-web".into(),
+                    created_at: Some("2026-08-18T00:00:00Z".into()),
+                    updated_at: String::new(),
+                }],
+            )
+            .unwrap();
         drop(store);
 
         let direct_list = state
@@ -2587,6 +2937,34 @@ mod tests {
         ] {
             assert!(!direct_list.body.contains(forbidden));
         }
+
+        let direct_hme = state
+            .direct_call(&EmbeddedDomainCall::AppleHmeList {
+                account_id: icloud_id.clone(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        let routed_hme = state
+            .request(
+                data_dir.clone(),
+                EmbeddedServiceRequest {
+                    path: format!("/api/accounts/{icloud_id}/apple-hme/addresses"),
+                    method: "GET".into(),
+                    body: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(direct_hme.status, 200, "{}", direct_hme.body);
+        assert_eq!(direct_hme.body, routed_hme.body);
+        let hme: serde_json::Value = serde_json::from_str(&direct_hme.body).unwrap();
+        assert_eq!(hme["addressCount"], 1);
+        assert_eq!(hme["addresses"][0]["email"], "quiet-path@icloud.com");
+        assert!(hme["lastSyncedAt"].is_string());
+        let mut store = SqliteAuthStore::open_database(data_dir.join("imail.sqlite")).unwrap();
+        assert!(store.delete_account(&user_id, &icloud_id).unwrap());
+        drop(store);
 
         let patch = serde_json::json!({
             "displayName":" Renamed ",

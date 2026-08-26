@@ -1,0 +1,250 @@
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'preact/compat';
+import type { Notice } from '../../app-model';
+import { AppButton } from '../../components/AppButton';
+import { AppInput, AppSelect, AppTextarea } from '../../components/form-controls';
+import { CheckCircle, Globe, Key, LockKey, WarningCircle } from '../../components/icons';
+import { api } from '../../services';
+import type { Account } from '../../types';
+
+type HmeStatus = {
+  accountId: string;
+  authorized: boolean;
+  connected: boolean;
+  icloudWebAuthorized: boolean;
+  icloudWebConnected: boolean;
+  icloudWebStatusMessage?: string;
+  icloudWebLastSuccessfulKeepaliveAt?: string;
+  appleAccountAuthorized: boolean;
+  appleAccountConnected: boolean;
+  appleAccountStatusMessage?: string;
+  appleAccountLastSuccessfulKeepaliveAt?: string;
+  isIcloudPlus: boolean;
+  canCreateHme: boolean;
+  updatedAt?: string;
+};
+
+type HmeAddress = {
+  anonymousId: string;
+  email: string;
+  label: string;
+  note: string;
+  forwardToEmail: string;
+  active: boolean;
+  origin: string;
+  createdAt?: string;
+};
+
+type LoginResult = {
+  status: HmeStatus;
+  needsTwoFactor: boolean;
+  pendingId?: string;
+  expiresAt?: string;
+  message: string;
+};
+
+function keepaliveLabel(value?: string) {
+  return value ? `最近成功保活：${new Date(value).toLocaleString()}` : '尚无成功保活记录';
+}
+
+export function AppleHmePanel({ account, setNotice }: { account: Account; setNotice: (notice: Notice) => void }) {
+  const [status, setStatus] = useState<HmeStatus | null>(null);
+  const [addresses, setAddresses] = useState<HmeAddress[]>([]);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [loginKind, setLoginKind] = useState<'icloudWeb' | 'appleAccount' | null>(null);
+  const [pendingId, setPendingId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [activeView, setActiveView] = useState<'addresses' | 'create'>('addresses');
+  const loginFormRef = useRef<HTMLFormElement>(null);
+
+  const loadAddresses = useCallback(async () => {
+    const result = await api<{ addresses: HmeAddress[]; lastSyncedAt?: string | null }>(`/api/accounts/${account.id}/apple-hme/addresses`);
+    setAddresses(result.addresses);
+    setLastSyncedAt(result.lastSyncedAt ?? null);
+  }, [account.id]);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const next = await api<HmeStatus>(`/api/accounts/${account.id}/apple-hme`);
+      setStatus(next);
+      await loadAddresses();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : '无法读取 Hide My Email 状态');
+    }
+  }, [account.id, loadAddresses]);
+
+  useEffect(() => {
+    void loadStatus();
+    const timer = window.setInterval(() => { void loadStatus(); }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [loadStatus]);
+
+  useEffect(() => {
+    if (!loginKind) return;
+    const frame = window.requestAnimationFrame(() => {
+      loginFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loginKind, pendingId]);
+
+  async function syncAddresses() {
+    setBusy(true); setError('');
+    try {
+      const result = await api<{ addresses: HmeAddress[]; lastSyncedAt: string }>(`/api/accounts/${account.id}/apple-hme/addresses/sync`, { method: 'POST' });
+      setAddresses(result.addresses);
+      setLastSyncedAt(result.lastSyncedAt);
+      setNotice({ kind: 'success', text: `已从 Apple 同步 ${result.addresses.length} 个隐藏邮件地址` });
+    } catch (value) {
+      setError(value instanceof Error ? value.message : '隐藏邮件地址同步失败');
+      await loadStatus();
+    } finally { setBusy(false); }
+  }
+
+  async function startLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!loginKind) return;
+    const form = new FormData(event.currentTarget);
+    setBusy(true); setError('');
+    try {
+      const result = await api<LoginResult>(`/api/accounts/${account.id}/apple-hme/login`, {
+        method: 'POST',
+        body: JSON.stringify({
+          kind: loginKind,
+          appleId: form.get('appleId'),
+          password: form.get('password'),
+          twoFactorMethod: 'trustedDevice',
+        }),
+      });
+      setStatus(result.status);
+      if (result.needsTwoFactor && result.pendingId) {
+        setPendingId(result.pendingId);
+        setNotice({ kind: 'success', text: 'Apple 已发送双重认证验证码' });
+      } else {
+        setLoginKind(null);
+        setNotice({ kind: 'success', text: 'Apple HME 授权已保存' });
+        if (result.status.icloudWebConnected) await loadAddresses();
+      }
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Apple 授权失败');
+    } finally { setBusy(false); }
+  }
+
+  async function submitCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true); setError('');
+    try {
+      const result = await api<LoginResult>(`/api/accounts/${account.id}/apple-hme/two-factor`, {
+        method: 'POST', body: JSON.stringify({ pendingId, code: form.get('code') }),
+      });
+      setStatus(result.status); setPendingId(''); setLoginKind(null);
+      setNotice({ kind: 'success', text: 'Apple 双重认证已完成' });
+      if (result.status.icloudWebConnected) await loadAddresses();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : '验证码验证失败');
+    } finally { setBusy(false); }
+  }
+
+  async function createAddress(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setBusy(true); setError('');
+    try {
+      const result = await api<{ address: HmeAddress }>(`/api/accounts/${account.id}/apple-hme/addresses`, {
+        method: 'POST', body: JSON.stringify({ label: form.get('label'), note: form.get('note'), channel: form.get('channel') }),
+      });
+      setAddresses((current) => [result.address, ...current.filter((item) => item.anonymousId !== result.address.anonymousId)]);
+      formElement.reset();
+      setActiveView('addresses');
+      setNotice({ kind: 'success', text: `已创建 ${result.address.email}` });
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Hide My Email 创建失败');
+      await loadStatus();
+    } finally { setBusy(false); }
+  }
+
+  async function mutateAddress(address: HmeAddress, action: 'deactivate' | 'delete') {
+    setBusy(true); setError('');
+    try {
+      const suffix = action === 'deactivate' ? '/deactivate' : '';
+      await api(`/api/accounts/${account.id}/apple-hme/addresses/${encodeURIComponent(address.anonymousId)}${suffix}`, { method: action === 'deactivate' ? 'POST' : 'DELETE' });
+      await loadAddresses();
+      setNotice({ kind: 'success', text: action === 'deactivate' ? `${address.email} 已停用` : `${address.email} 已永久删除` });
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Hide My Email 操作失败');
+      await loadStatus();
+    } finally { setBusy(false); }
+  }
+
+  async function disconnect() {
+    setBusy(true); setError('');
+    try {
+      await api(`/api/accounts/${account.id}/apple-hme`, { method: 'DELETE' });
+      setStatus((current) => current ? { ...current, authorized: false, connected: false, icloudWebAuthorized: false, icloudWebConnected: false, icloudWebStatusMessage: undefined, icloudWebLastSuccessfulKeepaliveAt: undefined, appleAccountAuthorized: false, appleAccountConnected: false, appleAccountStatusMessage: undefined, appleAccountLastSuccessfulKeepaliveAt: undefined, isIcloudPlus: false, canCreateHme: false } : current);
+      setPendingId(''); setLoginKind(null);
+      setActiveView('addresses');
+      setNotice({ kind: 'success', text: '本地 Apple HME 会话已删除' });
+    } catch (value) {
+      setError(value instanceof Error ? value.message : '断开 Apple HME 授权失败');
+    } finally { setBusy(false); }
+  }
+
+  const bothConnected = Boolean(status?.appleAccountConnected && status?.icloudWebConnected);
+  const partiallyConnected = Boolean(status?.appleAccountConnected || status?.icloudWebConnected);
+  const overallLabel = !status ? '检查中' : bothConnected ? '全部可用' : partiallyConnected ? '部分可用' : status.authorized ? '需要重新授权' : '未连接';
+
+  return <section className="apple-hme-panel">
+    <header className="apple-hme-heading">
+      <span className="apple-hme-mark"><LockKey size={19} /></span>
+      <div><small>iCloud+ 隐私</small><strong>隐藏邮件地址</strong><p>创建随机地址并转发到你的 iCloud 邮箱。密码只用于本次连接，iMail 不会保存。</p></div>
+      <span className={`apple-hme-status${bothConnected ? ' is-connected' : partiallyConnected ? ' is-partial' : status?.authorized ? ' is-invalid' : ''}`}>
+        {bothConnected && <CheckCircle size={14} weight="fill" />}{overallLabel}
+      </span>
+    </header>
+    <div className="apple-hme-session-list">
+      <div className="apple-hme-session-row">
+        <span><Key size={18} /></span><div><strong>Apple 地址创建</strong><small>{status?.appleAccountConnected ? '在线，可生成新的隐私邮箱。' : status?.appleAccountAuthorized ? (status.appleAccountStatusMessage || '本地有授权，但在线会话已失效。') : '尚未授权 Apple Account。'}</small><small className="apple-hme-keepalive">{keepaliveLabel(status?.appleAccountLastSuccessfulKeepaliveAt)}</small></div>
+        <AppButton appearance={status?.appleAccountConnected ? 'subtle' : 'secondary'} disabled={busy} onClick={() => { setError(''); setPendingId(''); setLoginKind('appleAccount'); }}>{status?.appleAccountConnected ? '重新授权' : '连接'}</AppButton>
+        <em className={status?.appleAccountConnected ? 'is-connected' : status?.appleAccountAuthorized ? 'is-invalid' : ''}>{status?.appleAccountConnected ? '在线' : status?.appleAccountAuthorized ? '已失效' : '未授权'}</em>
+      </div>
+      <div className="apple-hme-session-row">
+        <span><Globe size={18} /></span><div><strong>iCloud 地址管理</strong><small>{status?.icloudWebConnected ? '在线，可同步、停用和删除地址。' : status?.icloudWebAuthorized ? (status.icloudWebStatusMessage || '本地有授权，但在线会话已失效。') : '尚未授权 iCloud Web。'}</small><small className="apple-hme-keepalive">{keepaliveLabel(status?.icloudWebLastSuccessfulKeepaliveAt)}</small></div>
+        <AppButton appearance={status?.icloudWebConnected ? 'subtle' : 'secondary'} disabled={busy} onClick={() => { setError(''); setPendingId(''); setLoginKind('icloudWeb'); }}>{status?.icloudWebConnected ? '重新授权' : '连接'}</AppButton>
+        <em className={status?.icloudWebConnected ? 'is-connected' : status?.icloudWebAuthorized ? 'is-invalid' : ''}>{status?.icloudWebConnected ? '在线' : status?.icloudWebAuthorized ? '已失效' : '未授权'}</em>
+      </div>
+    </div>
+    {error && <p className="apple-hme-error" role="alert"><WarningCircle size={16} /><span>{error}</span><button type="button" aria-label="关闭错误提示" onClick={() => setError('')}>×</button></p>}
+    {loginKind && !pendingId && <form ref={loginFormRef} className="apple-hme-login" onSubmit={startLogin}>
+      <div className="apple-hme-form-heading"><strong>{loginKind === 'icloudWeb' ? '连接 iCloud 地址管理' : '连接 Apple 地址创建'}</strong><small>登录过程中可能需要输入 Apple 设备收到的 6 位验证码。</small></div>
+      <AppInput name="appleId" type="email" defaultValue={account.email} aria-label="Apple ID" required />
+      <AppInput name="password" type="password" placeholder="Apple 账户密码（不会保存）" aria-label="Apple 账户密码" autoComplete="current-password" required />
+      <div className="apple-hme-login-actions"><button type="button" onClick={() => setLoginKind(null)}>取消</button><AppButton appearance="primary" type="submit" disabled={busy}>{busy ? '正在连接…' : `授权 ${loginKind === 'icloudWeb' ? 'iCloud Web' : 'Apple Account'}`}</AppButton></div>
+    </form>}
+    {pendingId && <form ref={loginFormRef} className="apple-hme-login" onSubmit={submitCode}>
+      <div className="apple-hme-form-heading"><strong>完成双重认证</strong><small>输入 Apple 发送到受信任设备的验证码。</small></div>
+      <AppInput name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="6 位验证码" aria-label="Apple 双重认证验证码" autoFocus required />
+      <div className="apple-hme-login-actions"><button type="button" onClick={() => { setPendingId(''); setLoginKind(null); }}>取消</button><AppButton appearance="primary" type="submit" disabled={busy}>{busy ? '正在验证…' : '完成验证'}</AppButton></div>
+    </form>}
+    <nav className="apple-hme-view-switch" aria-label="隐私邮箱操作">
+      <button type="button" className={activeView === 'addresses' ? 'is-active' : ''} onClick={() => setActiveView('addresses')}>地址管理</button>
+      <button type="button" className={activeView === 'create' ? 'is-active' : ''} onClick={() => { setError(''); if (status?.appleAccountConnected || (status?.icloudWebConnected && status.canCreateHme)) setActiveView('create'); else { setPendingId(''); setLoginKind('appleAccount'); } }}>创建地址</button>
+    </nav>
+    {activeView === 'addresses' && <div className="apple-hme-addresses">
+      <div className="apple-hme-address-heading"><div><strong>隐私邮箱列表</strong><small>{addresses.length} 个本地地址{lastSyncedAt ? ` · 最后同步 ${new Date(lastSyncedAt).toLocaleString()}` : ' · 尚未从 Apple 同步'}</small></div><AppButton appearance="secondary" disabled={busy} onClick={() => { if (status?.icloudWebConnected) void syncAddresses(); else { setPendingId(''); setLoginKind('icloudWeb'); } }}>{busy ? '同步中…' : status?.icloudWebConnected ? '从 Apple 同步' : '连接 iCloud 后同步'}</AppButton></div>
+      {addresses.length === 0 ? <div className="apple-hme-empty"><Globe size={21} /><span><strong>本地还没有隐私邮箱</strong><small>{status?.icloudWebConnected ? '点击“从 Apple 同步”获取已创建的隐私邮箱并保存到本地。' : '先连接上方的 iCloud 地址管理，再手动同步 Apple 已创建的隐私邮箱。'}</small></span></div> : addresses.map((address) => <article key={address.anonymousId}>
+        <span><strong>{address.email}</strong><small>{address.label || '未命名'}{address.forwardToEmail ? ` · 转发至 ${address.forwardToEmail}` : ''}</small></span>
+        <em className={address.active ? 'is-active' : ''}>{address.active ? '使用中' : '已停用'}</em>
+        {address.active ? <button type="button" disabled={busy || !status?.icloudWebConnected} onClick={() => void mutateAddress(address, 'deactivate')}>停用</button> : <button type="button" className="apple-hme-delete" disabled={busy || !status?.icloudWebConnected} onClick={() => void mutateAddress(address, 'delete')}>永久删除</button>}
+      </article>)}
+    </div>}
+    {activeView === 'create' && (status?.appleAccountConnected || (status?.icloudWebConnected && status.canCreateHme)) && <form className="apple-hme-create" onSubmit={createAddress}>
+      <div className="apple-hme-form-heading"><strong>创建新的隐私邮箱</strong><small>填写用途和备注后，由 Apple 生成新的转发地址。</small></div>
+      <AppInput name="label" placeholder="用途标签，例如：购物账户" aria-label="Hide My Email 标签" maxLength={200} />
+      <AppTextarea name="note" placeholder="备注（可选）" aria-label="Hide My Email 备注" maxLength={500} rows={2} />
+      <AppSelect name="channel" aria-label="创建通道" defaultValue="auto" options={[{ value: 'auto', label: '自动选择授权通道' }, { value: 'appleAccount', label: 'Apple Account' }, { value: 'icloudWeb', label: 'iCloud Web' }]} />
+      <AppButton appearance="primary" type="submit" disabled={busy}>{busy ? '正在创建…' : '创建隐藏邮箱'}</AppButton>
+    </form>}
+    {status?.authorized && <footer className="apple-hme-footer"><span>授权会话仅加密保存在这台设备上。</span><button type="button" disabled={busy} onClick={() => void disconnect()}>断开所有 Apple 授权</button></footer>}
+  </section>;
+}

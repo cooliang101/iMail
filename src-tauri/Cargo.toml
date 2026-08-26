@@ -1,6 +1,6 @@
 [package]
 name = "imail"
-version = "0.0.7"
+version = "0.0.12"
 description = "Local-first multi-account mail client and developer gateway"
 authors = ["iMail contributors"]
 license = ""
@@ -54,3 +54,6 @@ imail-storage-sqlite = { path = "../crates/imail-storage-sqlite" }
 uuid = { version = "1", features = ["v4"] }
 url = "=2.5.2"
 fs2 = "0.4"
+
+[dev-dependencies]
+rusqlite = { workspace = true }

@@ -1,8 +1,8 @@
 {
   "name": "imail",
-  "version": "0.0.7",
+  "version": "0.0.12",
   "imail": {
-    "schemaVersion": 6
+    "schemaVersion": 8
   },
   "private": true,
   "type": "module",

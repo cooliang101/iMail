@@ -61,7 +61,7 @@ docker compose --env-file .env.remote -f http-service/compose.https.example.yml 
 
 ## 备份与恢复
 
-在线备份使用 SQLite backup API 取得一致数据库快照，并同时复制自动生成的主密钥、持久实例身份与发件人 Logo。备份先写入同目录暂存项，全部成功后再原子提交，并生成包含 iMail 版本、数据库 schema 版本和逐文件 SHA-256 的 v2 完整性清单；恢复仍兼容已有 v1 清单。当前 schema v5 在 `accounts.proxy_json` 中保存每邮箱的非密码代理字段，代理密码仍位于加密凭据载荷，二者都会随数据库快照一起备份：
+在线备份使用 SQLite backup API 取得一致数据库快照，并同时复制自动生成的主密钥、持久实例身份与发件人 Logo。备份先写入同目录暂存项，全部成功后再原子提交，并生成包含 iMail 版本、数据库 schema 版本和逐文件 SHA-256 的 v2 完整性清单；恢复仍兼容已有 v1 清单。schema v5 起在 `accounts.proxy_json` 中保存每邮箱的非密码代理字段，代理密码仍位于加密凭据载荷，二者都会随数据库快照一起备份：
 
 ```bash
 npm --prefix frontend run backup -- /safe/backups/imail-2026-08-03
@@ -211,7 +211,9 @@ curl -fsS --cookie 'imail_session=<当前会话>' \
 
 ### HTTP 401
 
-- 确认授权码以 `imail_mcp_` 开头且包含 `mcp:full`。
+- 确认授权码以 `imail_mcp_` 开头且包含 `mcp:full`。Apple HME 管理同样只接受这一管理 scope。
+- HME 授权异常时先调用 `apple_hme_status`。若任一会话失效，分别重新完成 `appleAccount` 和 `icloudWeb` 授权；不要要求用户把 Apple 主密码写入配置文件或日志。断开本地授权不会删除 Apple 端地址，也不会清除已经同步到本地的地址列表。
+- `apple_hme_list` 只读取本地持久化快照，不会隐式访问 Apple。需要刷新时由用户在界面点击“从 Apple 同步”，或显式调用 `apple_hme_sync`；同步成功后会用 Apple 当前列表事务性替换本地快照，并记录最后同步时间。
 - 确认未超过签发时选择的有效期，且 Token 未在 UI 中撤销。
 - 确认请求头是 `Authorization: Bearer <code>`，不要把邮箱服务商授权码放在这里。
 

@@ -3,6 +3,7 @@ import type { MailService } from './contracts';
 
 export type EmbeddedDomainCall =
   | { operation: 'systemInfo' }
+  | { operation: 'providers' }
   | { operation: 'authStatus' }
   | { operation: 'authRegister'; input: Record<string, unknown> }
   | { operation: 'authLogin'; input: Record<string, unknown> }
@@ -14,6 +15,15 @@ export type EmbeddedDomainCall =
   | { operation: 'accountCredentialUpdate'; accountId: string; input: Record<string, unknown> }
   | { operation: 'accountProxyUpdate'; accountId: string; input: Record<string, unknown> }
   | { operation: 'accountConnectionTest'; accountId: string }
+  | { operation: 'appleHmeStatus'; accountId: string }
+  | { operation: 'appleHmeStartLogin'; accountId: string; input: Record<string, unknown> }
+  | { operation: 'appleHmeSubmitTwoFactor'; accountId: string; input: Record<string, unknown> }
+  | { operation: 'appleHmeList'; accountId: string }
+  | { operation: 'appleHmeSync'; accountId: string }
+  | { operation: 'appleHmeCreate'; accountId: string; input: Record<string, unknown> }
+  | { operation: 'appleHmeDeactivate'; accountId: string; anonymousId: string }
+  | { operation: 'appleHmeDelete'; accountId: string; anonymousId: string }
+  | { operation: 'appleHmeDisconnect'; accountId: string }
   | { operation: 'oauthStart'; input: Record<string, unknown> }
   | { operation: 'oauthReconnect'; accountId: string }
   | { operation: 'oauthStatus'; input: Record<string, unknown> }
@@ -64,6 +74,7 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
     const reads: Record<string, EmbeddedDomainCall> = {
       '/api/auth/status': { operation: 'authStatus' },
       '/api/system/info': { operation: 'systemInfo' },
+      '/api/providers': { operation: 'providers' },
       '/api/accounts': { operation: 'accountsList' },
       '/api/message-stats': { operation: 'messageStats' },
       '/api/labels': { operation: 'labelsList' },
@@ -117,6 +128,22 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   if (accountProxy && method === 'PUT' && body) return { operation: 'accountProxyUpdate', accountId: decodeURIComponent(accountProxy[1]), input: body };
   const accountTest = url.pathname.match(/^\/api\/accounts\/([^/]+)\/connection-test$/);
   if (accountTest && method === 'POST' && options.body === undefined) return { operation: 'accountConnectionTest', accountId: decodeURIComponent(accountTest[1]) };
+  const appleHme = url.pathname.match(/^\/api\/accounts\/([^/]+)\/apple-hme$/);
+  if (appleHme && method === 'GET' && options.body === undefined) return { operation: 'appleHmeStatus', accountId: decodeURIComponent(appleHme[1]) };
+  if (appleHme && method === 'DELETE' && options.body === undefined) return { operation: 'appleHmeDisconnect', accountId: decodeURIComponent(appleHme[1]) };
+  const appleHmeLogin = url.pathname.match(/^\/api\/accounts\/([^/]+)\/apple-hme\/login$/);
+  if (appleHmeLogin && method === 'POST' && body) return { operation: 'appleHmeStartLogin', accountId: decodeURIComponent(appleHmeLogin[1]), input: body };
+  const appleHmeTwoFactor = url.pathname.match(/^\/api\/accounts\/([^/]+)\/apple-hme\/two-factor$/);
+  if (appleHmeTwoFactor && method === 'POST' && body) return { operation: 'appleHmeSubmitTwoFactor', accountId: decodeURIComponent(appleHmeTwoFactor[1]), input: body };
+  const appleHmeAddresses = url.pathname.match(/^\/api\/accounts\/([^/]+)\/apple-hme\/addresses$/);
+  if (appleHmeAddresses && method === 'GET' && options.body === undefined) return { operation: 'appleHmeList', accountId: decodeURIComponent(appleHmeAddresses[1]) };
+  if (appleHmeAddresses && method === 'POST' && body) return { operation: 'appleHmeCreate', accountId: decodeURIComponent(appleHmeAddresses[1]), input: body };
+  const appleHmeSync = url.pathname.match(/^\/api\/accounts\/([^/]+)\/apple-hme\/addresses\/sync$/);
+  if (appleHmeSync && method === 'POST' && options.body === undefined) return { operation: 'appleHmeSync', accountId: decodeURIComponent(appleHmeSync[1]) };
+  const appleHmeAddress = url.pathname.match(/^\/api\/accounts\/([^/]+)\/apple-hme\/addresses\/([^/]+)$/);
+  if (appleHmeAddress && method === 'DELETE' && options.body === undefined) return { operation: 'appleHmeDelete', accountId: decodeURIComponent(appleHmeAddress[1]), anonymousId: decodeURIComponent(appleHmeAddress[2]) };
+  const appleHmeDeactivate = url.pathname.match(/^\/api\/accounts\/([^/]+)\/apple-hme\/addresses\/([^/]+)\/deactivate$/);
+  if (appleHmeDeactivate && method === 'POST' && options.body === undefined) return { operation: 'appleHmeDeactivate', accountId: decodeURIComponent(appleHmeDeactivate[1]), anonymousId: decodeURIComponent(appleHmeDeactivate[2]) };
   const oauthReconnect = url.pathname.match(/^\/api\/accounts\/([^/]+)\/oauth\/reconnect$/);
   if (oauthReconnect && method === 'POST' && options.body === undefined) return { operation: 'oauthReconnect', accountId: decodeURIComponent(oauthReconnect[1]) };
   if (method === 'POST' && url.pathname === '/api/oauth/start' && body) return { operation: 'oauthStart', input: body };
@@ -145,10 +172,10 @@ export class TauriMailService implements MailService {
 
   request(path: string, options: RequestInit = {}) {
     if (options.body !== undefined && typeof options.body !== 'string') {
-      throw new Error('Tauri 直连只接受 JSON 请求体');
+      throw new Error('iMail 只能处理 JSON 格式的请求内容');
     }
     const call = embeddedDomainCall(path, options);
     if (call) return this.invoker<DesktopHttpResponse>('desktop_mail_service_call', { call });
-    throw new Error(`Tauri 直连尚未映射该领域操作：${options.method ?? 'GET'} ${path.split('?')[0]}`);
+    throw new Error('iMail 暂时无法完成这项操作，请更新应用后重试');
   }
 }

@@ -42,6 +42,7 @@ use url::Url;
 use uuid::{Uuid, Version};
 
 pub mod accounts;
+mod apple_hme;
 mod attachment_cache;
 mod attachment_previews;
 mod auth;
@@ -151,6 +152,10 @@ pub enum HttpAdapterError {
     SyncRuntimeStart(String),
     #[error("同步运行时未能优雅关闭：{0:?}")]
     SyncRuntimeShutdown(Vec<String>),
+    #[error("Apple HME 会话保活任务启动失败：{0}")]
+    AppleHmeKeepaliveStart(String),
+    #[error("Apple HME 会话保活任务未能优雅关闭")]
+    AppleHmeKeepaliveShutdown,
 }
 
 #[derive(Clone)]
@@ -163,6 +168,7 @@ pub struct HttpAdapterConfig {
     pub gateway: bool,
     pub mcp: bool,
     sync_worker: bool,
+    apple_hme_keepalive: bool,
     sync_runtime: SyncRuntimeOptions,
     registration_open: bool,
     secure_cookies: bool,
@@ -280,6 +286,7 @@ impl HttpAdapterConfig {
             gateway: false,
             mcp: false,
             sync_worker: false,
+            apple_hme_keepalive: true,
             sync_runtime: SyncRuntimeOptions::default(),
             registration_open: true,
             secure_cookies: false,
@@ -313,6 +320,11 @@ impl HttpAdapterConfig {
 
     pub fn with_sync_worker(mut self, enabled: bool) -> Self {
         self.sync_worker = enabled;
+        self
+    }
+
+    pub fn with_apple_hme_keepalive(mut self, enabled: bool) -> Self {
+        self.apple_hme_keepalive = enabled;
         self
     }
 
@@ -420,7 +432,15 @@ struct AppState {
     logo_in_flight: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     attachment_previews: attachment_previews::PreviewState,
     security: security::SecurityState,
+    apple_hme_pending: Arc<imail_apple_hme::MemoryPendingLoginStore>,
+    apple_hme_pending_owners: Mutex<HashMap<String, AppleHmePendingOwner>>,
     daemon_shutdown: Option<tokio::sync::mpsc::Sender<()>>,
+}
+
+struct AppleHmePendingOwner {
+    owner_id: String,
+    account_id: String,
+    expires_at_ms: i64,
 }
 
 #[derive(Clone)]
@@ -483,11 +503,18 @@ fn build_router_with_shutdown(config: HttpAdapterConfig) -> Result<HostedRouter,
     } else {
         (None, None)
     };
+    let data_dir = config.data_dir.clone();
+    let apple_hme_keepalive_enabled = config.apple_hme_keepalive;
     let (router, connections, _) = build_router_state(config, daemon_sender)?;
+    let apple_hme_keepalive = apple_hme_keepalive_enabled
+        .then(|| apple_hme::AppleHmeKeepaliveRuntime::start(data_dir))
+        .transpose()
+        .map_err(|error| HttpAdapterError::AppleHmeKeepaliveStart(error.to_string()))?;
     Ok(HostedRouter {
         router,
         connection_shutdown: connections,
         daemon_shutdown: daemon_receiver,
+        apple_hme_keepalive,
     })
 }
 
@@ -495,6 +522,7 @@ struct HostedRouter {
     router: Router,
     connection_shutdown: tokio::sync::broadcast::Sender<()>,
     daemon_shutdown: Option<tokio::sync::mpsc::Receiver<()>>,
+    apple_hme_keepalive: Option<apple_hme::AppleHmeKeepaliveRuntime>,
 }
 
 /// In-process service host for desktop and other native callers.
@@ -506,6 +534,7 @@ pub struct EmbeddedServiceHost {
     state: Arc<AppState>,
     connection_shutdown: tokio::sync::broadcast::Sender<()>,
     sync_runtime: std::sync::Mutex<Option<PersistentSyncRuntime>>,
+    apple_hme_keepalive: std::sync::Mutex<Option<apple_hme::AppleHmeKeepaliveRuntime>>,
     sync_event_signal: SyncEventSignal,
 }
 
@@ -514,11 +543,17 @@ impl EmbeddedServiceHost {
         let (router, connection_shutdown, state) = build_router_state(config.clone(), None)?;
         let sync_event_signal = SyncEventSignal::default();
         let sync_runtime = start_sync_runtime(&config, Some(sync_event_signal.clone()))?;
+        let apple_hme_keepalive = config
+            .apple_hme_keepalive
+            .then(|| apple_hme::AppleHmeKeepaliveRuntime::start(config.data_dir.clone()))
+            .transpose()
+            .map_err(|error| HttpAdapterError::AppleHmeKeepaliveStart(error.to_string()))?;
         Ok(Self {
             router,
             state,
             connection_shutdown,
             sync_runtime: std::sync::Mutex::new(sync_runtime),
+            apple_hme_keepalive: std::sync::Mutex::new(apple_hme_keepalive),
             sync_event_signal,
         })
     }
@@ -529,6 +564,99 @@ impl EmbeddedServiceHost {
 
     pub fn service_info(&self) -> serde_json::Value {
         serde_json::to_value(&self.state.info).expect("service info serializes")
+    }
+
+    pub fn providers(&self) -> serde_json::Value {
+        system::embedded_providers(&self.state)
+    }
+
+    pub async fn apple_hme_status(
+        &self,
+        owner_id: String,
+        account_id: String,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_status(Arc::clone(&self.state), owner_id, account_id).await
+    }
+
+    pub async fn apple_hme_start_login(
+        &self,
+        owner_id: String,
+        actor: String,
+        account_id: String,
+        input: serde_json::Value,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_start_login(Arc::clone(&self.state), owner_id, actor, account_id, input)
+            .await
+    }
+
+    pub async fn apple_hme_submit_two_factor(
+        &self,
+        owner_id: String,
+        actor: String,
+        account_id: String,
+        input: serde_json::Value,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_submit_two_factor(
+            Arc::clone(&self.state),
+            owner_id,
+            actor,
+            account_id,
+            input,
+        )
+        .await
+    }
+
+    pub async fn apple_hme_list(
+        &self,
+        owner_id: String,
+        account_id: String,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_list(Arc::clone(&self.state), owner_id, account_id).await
+    }
+
+    pub async fn apple_hme_sync(
+        &self,
+        owner_id: String,
+        account_id: String,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_sync(Arc::clone(&self.state), owner_id, account_id).await
+    }
+
+    pub async fn apple_hme_create(
+        &self,
+        owner_id: String,
+        account_id: String,
+        input: serde_json::Value,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_create(Arc::clone(&self.state), owner_id, account_id, input).await
+    }
+
+    pub async fn apple_hme_deactivate(
+        &self,
+        owner_id: String,
+        account_id: String,
+        anonymous_id: String,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_deactivate(Arc::clone(&self.state), owner_id, account_id, anonymous_id)
+            .await
+    }
+
+    pub async fn apple_hme_delete(
+        &self,
+        owner_id: String,
+        account_id: String,
+        anonymous_id: String,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_delete(Arc::clone(&self.state), owner_id, account_id, anonymous_id)
+            .await
+    }
+
+    pub async fn apple_hme_disconnect(
+        &self,
+        owner_id: String,
+        account_id: String,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        apple_hme::embedded_disconnect(Arc::clone(&self.state), owner_id, account_id).await
     }
 
     pub fn sync_event_signal(&self) -> SyncEventSignal {
@@ -772,6 +900,17 @@ impl EmbeddedServiceHost {
 
     pub fn shutdown(&self, maximum_wait: Duration) -> Result<(), HttpAdapterError> {
         let _ = self.connection_shutdown.send(());
+        let mut keepalive = self
+            .apple_hme_keepalive
+            .lock()
+            .map_err(|_| HttpAdapterError::AppleHmeKeepaliveShutdown)?;
+        let keepalive_graceful = !keepalive
+            .as_mut()
+            .is_some_and(|runtime| !runtime.shutdown(maximum_wait));
+        if keepalive_graceful {
+            *keepalive = None;
+        }
+        drop(keepalive);
         let mut runtime = self.sync_runtime.lock().map_err(|_| {
             HttpAdapterError::SyncRuntimeShutdown(vec!["runtime lock poisoned".into()])
         })?;
@@ -782,6 +921,9 @@ impl EmbeddedServiceHost {
             }
         }
         *runtime = None;
+        if !keepalive_graceful {
+            return Err(HttpAdapterError::AppleHmeKeepaliveShutdown);
+        }
         Ok(())
     }
 }
@@ -819,10 +961,13 @@ fn build_router_state(
         logo_in_flight: Mutex::new(HashMap::new()),
         attachment_previews: attachment_previews::PreviewState::default(),
         security: security::SecurityState::default(),
+        apple_hme_pending: Arc::new(imail_apple_hme::MemoryPendingLoginStore::default()),
+        apple_hme_pending_owners: Mutex::new(HashMap::new()),
         daemon_shutdown,
     });
     let protected = Router::new()
         .merge(accounts::routes())
+        .merge(apple_hme::routes())
         .merge(attachment_previews::routes())
         .merge(drafts::routes())
         .merge(developer_tokens::routes())
@@ -888,6 +1033,7 @@ pub async fn serve_with_shutdown(
         router,
         connection_shutdown: shutdown_connections,
         mut daemon_shutdown,
+        mut apple_hme_keepalive,
     } = build_router_with_shutdown(config.clone())?;
     let mut sync_runtime = start_sync_runtime(&config, None)?;
     let notify_connections = shutdown_connections.clone();
@@ -909,11 +1055,17 @@ pub async fn serve_with_shutdown(
     })
     .await
     .map_err(HttpAdapterError::Serve);
+    let keepalive_graceful = apple_hme_keepalive
+        .as_mut()
+        .map_or(true, |runtime| runtime.shutdown(Duration::from_secs(10)));
     if let Some(runtime) = &mut sync_runtime {
         let report = runtime.shutdown(Duration::from_secs(10));
         if !report.graceful() {
             return Err(HttpAdapterError::SyncRuntimeShutdown(report.timed_out));
         }
+    }
+    if !keepalive_graceful {
+        return Err(HttpAdapterError::AppleHmeKeepaliveShutdown);
     }
     result
 }
@@ -2226,7 +2378,7 @@ mod tests {
                 .unwrap(),
         )
         .await;
-        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 29);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 38);
         assert!(listed.to_string().contains("accounts_list"));
         let tools = listed["result"]["tools"].as_array().unwrap();
         let shared_contract: Value =

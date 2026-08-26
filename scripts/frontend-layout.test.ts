@@ -108,4 +108,24 @@ describe('frontend workspace layout', () => {
     expect(composeStyles).toContain('.toast {');
     expect(composeStyles).toContain('.token-workspace {');
   });
+
+  it('keeps Hide My Email as an independent settings feature', async () => {
+    const settings = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'settings', 'SettingsModal.tsx'), 'utf8');
+    const accounts = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'accounts', 'AccountSettingsModal.tsx'), 'utf8');
+    const hmePanel = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'apple-hme', 'AppleHmePanel.tsx'), 'utf8');
+    const settingsStyles = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'styles', 'settings.css'), 'utf8');
+    expect(settings).toContain("id: 'apple-hme'");
+    expect(settings).toContain('<AppleHmeSettingsPanel');
+    expect(accounts).not.toContain('AppleHmePanel');
+    expect(await exists('frontend/src/features/apple-hme/AppleHmePanel.tsx')).toBe(true);
+    expect(hmePanel).toContain("scrollIntoView({ behavior: 'smooth', block: 'nearest' })");
+    expect(hmePanel).toContain('appleAccountLastSuccessfulKeepaliveAt');
+    expect(hmePanel).toContain('icloudWebLastSuccessfulKeepaliveAt');
+    expect(hmePanel.indexOf('className="apple-hme-error"')).toBeLessThan(hmePanel.indexOf('className="apple-hme-login"'));
+    expect(hmePanel).toContain('className="apple-hme-view-switch"');
+    expect(settingsStyles).toContain('.apple-hme-login-actions');
+    expect(settingsStyles).toContain('.settings-panel-body { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto');
+    expect(settingsStyles).toContain('.apple-hme-settings-panel .settings-panel-body { display: block');
+    expect(settingsStyles).toContain('scrollbar-gutter: stable');
+  });
 });

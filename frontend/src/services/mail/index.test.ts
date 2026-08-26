@@ -32,6 +32,7 @@ describe('mail service client adapters', () => {
   it('maps first-wave read operations to typed Rust domain calls', async () => {
     expect(embeddedDomainCall('/api/auth/status')).toEqual({ operation: 'authStatus' });
     expect(embeddedDomainCall('/api/accounts')).toEqual({ operation: 'accountsList' });
+    expect(embeddedDomainCall('/api/providers')).toEqual({ operation: 'providers' });
     expect(embeddedDomainCall('/api/message-stats')).toEqual({ operation: 'messageStats' });
     expect(embeddedDomainCall('/api/messages?limit=60&offset=0&search=hello%20world')).toEqual({
       operation: 'messagesList', query: { limit: '60', offset: '0', search: 'hello world' },
@@ -66,6 +67,15 @@ describe('mail service client adapters', () => {
       ['/api/accounts/a/credential', { method: 'PUT', body: '{"password":"secret"}' }, 'accountCredentialUpdate'],
       ['/api/accounts/a/proxy', { method: 'PUT', body: '{"enabled":false}' }, 'accountProxyUpdate'],
       ['/api/accounts/a/connection-test', { method: 'POST' }, 'accountConnectionTest'],
+      ['/api/accounts/a/apple-hme', undefined, 'appleHmeStatus'],
+      ['/api/accounts/a/apple-hme', { method: 'DELETE' }, 'appleHmeDisconnect'],
+      ['/api/accounts/a/apple-hme/login', { method: 'POST', body: '{"kind":"appleAccount"}' }, 'appleHmeStartLogin'],
+      ['/api/accounts/a/apple-hme/two-factor', { method: 'POST', body: '{"code":"123456"}' }, 'appleHmeSubmitTwoFactor'],
+      ['/api/accounts/a/apple-hme/addresses', undefined, 'appleHmeList'],
+      ['/api/accounts/a/apple-hme/addresses/sync', { method: 'POST' }, 'appleHmeSync'],
+      ['/api/accounts/a/apple-hme/addresses', { method: 'POST', body: '{"label":"购物"}' }, 'appleHmeCreate'],
+      ['/api/accounts/a/apple-hme/addresses/h1/deactivate', { method: 'POST' }, 'appleHmeDeactivate'],
+      ['/api/accounts/a/apple-hme/addresses/h1', { method: 'DELETE' }, 'appleHmeDelete'],
       ['/api/oauth/start', { method: 'POST', body: '{"provider":"google"}' }, 'oauthStart'],
       ['/api/accounts/a/oauth/reconnect', { method: 'POST' }, 'oauthReconnect'],
       ['/api/oauth/status', { method: 'POST', body: '{"state":"opaque"}' }, 'oauthStatus'],
@@ -88,6 +98,6 @@ describe('mail service client adapters', () => {
     ];
     for (const [path, options, operation] of mapped) expect(embeddedDomainCall(path, options)?.operation).toBe(operation);
     const service = new TauriMailService(vi.fn());
-    expect(() => service.request('/api/unmapped-internal')).toThrow('尚未映射');
+    expect(() => service.request('/api/unmapped-internal')).toThrow('iMail 暂时无法完成这项操作');
   });
 });

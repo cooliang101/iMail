@@ -11,6 +11,7 @@
 - 通用 Web API、MCP 与 Gateway 能力统一放在 `crates/imail-http/`，由 Tauri 应用和 `http-service/` 共同复用；账户管理只允许 `mcp:full` 授权码，任何响应都不得暴露邮箱凭据、OAuth Token 或加密字段。
 - 新增邮件或账户管理行为时，同步评估 HTTP API、MCP 工具与 `docs/mcp-integration.md`，避免两个控制面能力漂移。
 - 联系人与邮件发件人必须复用 `contacts` 数据和其中的 Logo 字段；Logo 使用子域键与可注册主域兜底键，已有成功或失败采集记录的域名不得自动重试。
+- Apple HME 协议实现统一放在 `crates/imail-apple-hme/`；真实 Apple 账户验证只能作为显式人工 canary，不进入普通 CI，会话必须使用 `master.key` 加密保存，永久删除只允许已停用地址。
 - 当前交付平台仅包含 Windows 桌面端和服务端 Docker 镜像；不维护原生 Linux 或 macOS 桌面构建、安装与发布流程。
 - Windows 内部测试日常在本机构建和验证；GitHub Actions 手动运行必须选择 `docker` 或 `windows`，不得连带执行另一平台，三段式版本标签只发布服务端 `linux/amd64` Docker 镜像。普通分支推送与 pull request 不触发；未经用户明确授权，不要创建版本 tag 或执行 `workflow_dispatch`。
 - 提交前从仓库根目录运行 `npm --prefix frontend run typecheck`、`npm --prefix frontend test` 和 `npm --prefix frontend run build`。

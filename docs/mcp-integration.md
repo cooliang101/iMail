@@ -59,6 +59,15 @@ Authorization: Bearer imail_mcp_xxx
 | 账户 | `account_test_connection` | 验证已保存的 IMAP/SMTP 凭据 |
 | 账户 | `account_proxy_update` | 启用、修改、关闭或从另一邮箱复用账户级 HTTP/HTTPS/SOCKS5 代理 |
 | 账户 | `account_remove` | 移除账户及其本地缓存和草稿 |
+| Apple HME | `apple_hme_status` | 查看 Apple Account 与 iCloud Web 授权状态 |
+| Apple HME | `apple_hme_start_login` | 使用 Apple 密码开始 SRP 网页授权 |
+| Apple HME | `apple_hme_submit_two_factor` | 提交 6 位双重认证验证码 |
+| Apple HME | `apple_hme_list` | 读取 iMail 本地持久化的 Hide My Email 地址 |
+| Apple HME | `apple_hme_sync` | 从 Apple 手动同步地址并保存到本地 |
+| Apple HME | `apple_hme_create` | 创建 Hide My Email 地址 |
+| Apple HME | `apple_hme_deactivate` | 停用 Hide My Email 地址 |
+| Apple HME | `apple_hme_delete` | 永久删除已经停用的地址 |
+| Apple HME | `apple_hme_disconnect` | 删除 iMail 本地加密会话 |
 | 同步 | `mailbox_sync` | 为单个/全部账户的特殊或自定义文件夹创建持久化同步任务 |
 | 同步 | `sync_policy_get` | 读取默认/账户级自动同步设置、邮箱状态和最近任务 |
 | 同步 | `sync_policy_update` | 更新自动同步开关、文件夹范围与失败通知 |
@@ -93,6 +102,8 @@ Authorization: Bearer imail_mcp_xxx
 ## 5. 安全约束
 
 - MCP 响应不返回邮箱授权码、邮箱/代理密码、OAuth Token、主密钥或 `encryptedSecret`。
+- Apple HME 工具只允许操作属于当前应用用户的 `icloud` 邮箱。Apple 主密码只用于当前 SRP 请求；会话 Cookie、`scnt`、Session Token 和 API Key 使用 `master.key` 加密保存在 `apple_hme_sessions`，任何 HTTP/MCP 响应都只返回连接状态。完整管理通常需要分别调用 `apple_hme_start_login` 完成 `appleAccount` 与 `icloudWeb` 两类授权。`apple_hme_list` 只读本地缓存；显式调用 `apple_hme_sync` 才会访问 Apple 并以事务替换本地地址快照。
+- `apple_hme_delete` 只接受已停用地址；活动地址必须先调用 `apple_hme_deactivate`。`apple_hme_disconnect` 只删除本地会话，不影响 Apple 端已有地址。
 - “设置 → 隐私与数据”的邮箱授权导出只属于登录会话保护的应用 HTTP UI。即使授权码具有 `mcp:full`，MCP 也不能创建或下载该文件；API Gateway 同样不提供该能力。
 - 清除当前用户邮箱数据也不作为 MCP 或 Gateway 工具提供。需要执行时，用户必须在应用 UI 中完成两阶段确认、当前 iMail 密码复核和固定确认文字。
 - HTTP 默认限制 Host/Origin 为回环地址；远程部署必须配置 HTTPS 和 `MCP_ALLOWED_HOSTS`。

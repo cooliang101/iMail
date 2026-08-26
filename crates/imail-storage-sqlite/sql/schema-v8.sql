@@ -87,3 +87,22 @@ CREATE TABLE IF NOT EXISTS sync_worker_heartbeats (
   worker_id TEXT PRIMARY KEY, process_id INTEGER NOT NULL, host_name TEXT NOT NULL,
   started_at TEXT NOT NULL, heartbeat_at TEXT NOT NULL
 ) STRICT;
+CREATE TABLE IF NOT EXISTS apple_hme_sessions (
+  account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, encrypted_session TEXT NOT NULL, updated_at TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS apple_hme_sessions_owner ON apple_hme_sessions(user_id, updated_at DESC);
+CREATE TABLE IF NOT EXISTS apple_hme_addresses (
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, anonymous_id TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE,
+  label TEXT NOT NULL, note TEXT NOT NULL, forward_to_email TEXT NOT NULL,
+  active INTEGER NOT NULL CHECK (active IN (0, 1)), origin TEXT NOT NULL,
+  created_at TEXT, updated_at TEXT NOT NULL,
+  PRIMARY KEY (account_id, anonymous_id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS apple_hme_addresses_owner ON apple_hme_addresses(user_id, account_id, active DESC, created_at DESC);
+CREATE TABLE IF NOT EXISTS apple_hme_sync_state (
+  account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, last_synced_at TEXT NOT NULL, address_count INTEGER NOT NULL CHECK (address_count >= 0)
+) STRICT;
+CREATE INDEX IF NOT EXISTS apple_hme_sync_state_owner ON apple_hme_sync_state(user_id, last_synced_at DESC);
