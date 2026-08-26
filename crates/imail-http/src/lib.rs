@@ -1368,7 +1368,9 @@ mod tests {
     };
     use imail_oauth::{OAuthConfig, OAuthError, OAuthGrant, OAuthIdentity, OAuthTokenResponse};
     use imail_security::{decrypt_portable_export, MasterKey, PortableEncryptedPayload};
-    use imail_storage_sqlite::{migrate_database, SqliteAuthStore, SyncEnqueue, SyncRuntimeStore};
+    use imail_storage_sqlite::{
+        migrate_database, AppleHmeAddressRecord, SqliteAuthStore, SyncEnqueue, SyncRuntimeStore,
+    };
     use serde_json::{json, Value};
     use tower::ServiceExt;
 
@@ -2781,7 +2783,7 @@ mod tests {
             .upsert_account(&AccountRecord {
                 id: account_id.clone(),
                 owner_id: owner.id.clone(),
-                provider: "custom".into(),
+                provider: "icloud".into(),
                 email: "owner@example.com".into(),
                 display_name: "Owner Mail".into(),
                 group: "工作".into(),
@@ -2813,7 +2815,11 @@ mod tests {
                         uid,
                         message_id: None,
                         from: json!({ "name": "Sender", "address": "sender@example.net" }),
-                        to: json!([{ "name": "Owner", "address": "owner@example.com" }]),
+                        to: if id == "gateway-message-2" {
+                            json!([{ "name": "Private", "address": "private-alias@icloud.com" }])
+                        } else {
+                            json!([{ "name": "Owner", "address": "owner@example.com" }])
+                        },
                         subject: subject.into(),
                         preview: "Gateway preview".into(),
                         text: "Gateway body".into(),
@@ -2829,6 +2835,21 @@ mod tests {
                 )
                 .unwrap();
         }
+        store
+            .upsert_apple_hme_address(&AppleHmeAddressRecord {
+                account_id: account_id.clone(),
+                user_id: owner.id.clone(),
+                anonymous_id: "gateway-hme-1".into(),
+                email: "private-alias@icloud.com".into(),
+                label: "Gateway private mailbox".into(),
+                note: String::new(),
+                forward_to_email: "owner@example.com".into(),
+                active: true,
+                origin: "WEB".into(),
+                created_at: Some("2026-08-10T07:00:00.000Z".into()),
+                updated_at: "2026-08-10T07:00:00.000Z".into(),
+            })
+            .unwrap();
         drop(store);
         let mut config = HttpAdapterConfig::new(&directory);
         config.gateway = true;
@@ -3006,6 +3027,24 @@ mod tests {
         )
         .await;
         assert_eq!(second_page["messages"][0]["id"], "gateway-message-1");
+        let hme_page = json(
+            router
+                .clone()
+                .oneshot(gateway_request(
+                    "/gateway/v1/mailboxes/private-alias@icloud.com/messages".into(),
+                    &raw,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(hme_page["messages"].as_array().unwrap().len(), 1);
+        assert_eq!(hme_page["messages"][0]["id"], "gateway-message-2");
+        assert_eq!(
+            hme_page["messages"][0]["accountEmail"],
+            "private-alias@icloud.com"
+        );
+        assert!(!hme_page.to_string().contains("owner@example.com"));
         let detail = json(
             router
                 .clone()
@@ -3018,6 +3057,11 @@ mod tests {
         )
         .await;
         assert_eq!(detail["message"]["text"], "Gateway body");
+        assert_eq!(
+            detail["message"]["accountEmail"],
+            "private-alias@icloud.com"
+        );
+        assert!(!detail.to_string().contains("owner@example.com"));
         let invalid_cursor = router
             .clone()
             .oneshot(gateway_request(

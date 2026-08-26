@@ -37,6 +37,7 @@ pub struct GatewayMessageCursor {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GatewayMessageQuery {
     pub account_ids: Vec<String>,
+    pub recipient: Option<String>,
     pub mailbox_role: Option<String>,
     pub unread: Option<bool>,
     pub since: Option<String>,

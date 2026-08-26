@@ -104,6 +104,7 @@ Authorization: Bearer imail_mcp_xxx
 - MCP 响应不返回邮箱授权码、邮箱/代理密码、OAuth Token、主密钥或 `encryptedSecret`。
 - Apple HME 工具只允许操作属于当前应用用户的 `icloud` 邮箱。Apple 主密码只用于当前 SRP 请求；会话 Cookie、`scnt`、Session Token 和 API Key 使用 `master.key` 加密保存在 `apple_hme_sessions`，任何 HTTP/MCP 响应都只返回连接状态。完整管理通常需要分别调用 `apple_hme_start_login` 完成 `appleAccount` 与 `icloudWeb` 两类授权。`apple_hme_list` 只读本地缓存；显式调用 `apple_hme_sync` 才会访问 Apple 并以事务替换本地地址快照。
 - `apple_hme_delete` 只接受已停用地址；活动地址必须先调用 `apple_hme_deactivate`。`apple_hme_disconnect` 只删除本地会话，不影响 Apple 端已有地址。
+- 本地 Gateway 的 `GET /gateway/v1/mailboxes/{mailbox}/messages` 接受已持久化的 iCloud Hide My Email 地址。服务只在 Token 已授权其所属 iCloud 账户时解析该地址，并按邮件的实际收件人过滤；响应中的 `accountEmail` 使用请求的隐私邮箱，不暴露主 iCloud 地址。停用地址仍可查询历史邮件，HME 地址不作为 SMTP 发件身份。
 - “设置 → 隐私与数据”的邮箱授权导出只属于登录会话保护的应用 HTTP UI。即使授权码具有 `mcp:full`，MCP 也不能创建或下载该文件；API Gateway 同样不提供该能力。
 - 清除当前用户邮箱数据也不作为 MCP 或 Gateway 工具提供。需要执行时，用户必须在应用 UI 中完成两阶段确认、当前 iMail 密码复核和固定确认文字。
 - HTTP 默认限制 Host/Origin 为回环地址；远程部署必须配置 HTTPS 和 `MCP_ALLOWED_HOSTS`。

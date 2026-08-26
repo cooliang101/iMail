@@ -183,24 +183,45 @@ async fn list_messages_inner(
     let database = state.config.data_dir.join("imail.sqlite");
     match run(database, move |store| {
         let accounts = store.list_accounts(&token.owner_id)?;
-        let by_email = accounts
-            .iter()
-            .map(|account| (account.email.to_ascii_lowercase(), account))
-            .collect::<HashMap<_, _>>();
         let permitted = token.account_ids.iter().cloned().collect::<HashSet<_>>();
-        let account_ids = if let Some(mailbox) = &input.mailbox {
-            let account = by_email
-                .get(&mailbox.to_ascii_lowercase())
-                .filter(|account| permitted.contains(&account.id))
-                .ok_or(GatewayStorageError::Mailbox)?;
-            vec![account.id.clone()]
+        let (account_ids, recipient, public_mailbox) = if let Some(mailbox) = &input.mailbox {
+            if let Some(account) = accounts.iter().find(|account| {
+                account.email.eq_ignore_ascii_case(mailbox) && permitted.contains(&account.id)
+            }) {
+                (vec![account.id.clone()], None, None)
+            } else {
+                let mut resolved = None;
+                for account in &accounts {
+                    if !account.provider.eq_ignore_ascii_case("icloud")
+                        || !permitted.contains(&account.id)
+                    {
+                        continue;
+                    }
+                    let addresses = store.apple_hme_addresses(&token.owner_id, &account.id)?;
+                    if let Some(address) = addresses
+                        .addresses
+                        .into_iter()
+                        .find(|address| address.email.eq_ignore_ascii_case(mailbox))
+                    {
+                        resolved = Some((account.id.clone(), address.email));
+                        break;
+                    }
+                }
+                let (account_id, alias) = resolved.ok_or(GatewayStorageError::Mailbox)?;
+                (
+                    vec![account_id.clone()],
+                    Some(alias.clone()),
+                    Some((account_id, alias)),
+                )
+            }
         } else {
-            token.account_ids.clone()
+            (token.account_ids.clone(), None, None)
         };
         let page = store.query_gateway_messages(
             &token.owner_id,
             &GatewayMessageQuery {
                 account_ids,
+                recipient,
                 mailbox_role: input.mailbox_role,
                 unread: input.unread,
                 since: input.since,
@@ -210,10 +231,13 @@ async fn list_messages_inner(
                 limit: input.limit,
             },
         )?;
-        let email_by_id = accounts
+        let mut email_by_id = accounts
             .into_iter()
             .map(|account| (account.id, account.email))
             .collect::<HashMap<_, _>>();
+        if let Some((account_id, alias)) = public_mailbox {
+            email_by_id.insert(account_id, alias);
+        }
         let values = page
             .messages
             .iter()
@@ -271,7 +295,18 @@ async fn message_detail(
         let account = store
             .account(&token.owner_id, &message.account_id)?
             .ok_or(GatewayStorageError::Message)?;
-        let mut value = message_summary(&message, &account.email);
+        let public_mailbox = if account.provider.eq_ignore_ascii_case("icloud") {
+            store
+                .apple_hme_addresses(&token.owner_id, &account.id)?
+                .addresses
+                .into_iter()
+                .find(|address| message_has_recipient(&message.to, &address.email))
+                .map(|address| address.email)
+                .unwrap_or(account.email)
+        } else {
+            account.email
+        };
+        let mut value = message_summary(&message, &public_mailbox);
         if let Some(object) = value.as_object_mut() {
             object.insert("text".into(), Value::String(message.text));
             if let Some(html) = message.html.filter(|value| !value.is_empty()) {
@@ -837,6 +872,21 @@ fn message_summary(message: &MessageReadModel, account_email: &str) -> Value {
     })
 }
 
+fn message_has_recipient(value: &Value, email: &str) -> bool {
+    let matches = |value: &Value| match value {
+        Value::String(address) => address.eq_ignore_ascii_case(email),
+        Value::Object(recipient) => recipient
+            .get("address")
+            .and_then(Value::as_str)
+            .is_some_and(|address| address.eq_ignore_ascii_case(email)),
+        _ => false,
+    };
+    value.as_array().map_or_else(
+        || matches(value),
+        |recipients| recipients.iter().any(matches),
+    )
+}
+
 fn valid_send(input: &SendInput) -> bool {
     valid_email(&input.mailbox)
         && !input.to.is_empty()
@@ -1016,7 +1066,7 @@ fn openapi_document() -> Value {
             "/health": { "get": { "operationId": "gatewayHealth", "security": [], "responses": { "200": { "description": "网关正常" } } } },
             "/mailboxes": { "get": { "operationId": "listMailboxes", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "邮箱列表" }, "401": { "description": "Token 无效或权限不足" } } } },
             "/messages": { "get": { "operationId": "listMessages", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "邮件分页结果" }, "400": { "description": "参数或游标无效" } } } },
-            "/mailboxes/{mailbox}/messages": { "get": { "operationId": "listMailboxMessages", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "邮件分页结果" } } } },
+            "/mailboxes/{mailbox}/messages": { "get": { "operationId": "listMailboxMessages", "description": "按主邮箱或已同步的 iCloud Hide My Email 地址查询；隐私邮箱查询只返回实际发送到该地址的邮件，且不暴露主 iCloud 地址。", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "邮件分页结果" } } } },
             "/messages/{messageId}": { "get": { "operationId": "getMessage", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "邮件详情" } } } },
             "/messages/{messageId}/attachments/{index}": { "get": { "operationId": "downloadAttachment", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "附件二进制内容" } } } },
             "/send": { "post": { "operationId": "sendMessage", "security": [{ "bearerAuth": [] }], "responses": { "201": { "description": "发送成功" } } } }

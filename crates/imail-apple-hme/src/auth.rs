@@ -199,21 +199,15 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
             state.switch_for_account_country();
         }
         if needs_two_factor {
-            match state.two_factor_method {
-                TwoFactorMethod::TrustedDevice if state.flow == LoginStateKind::ICloudWeb => {
-                    self.request_trusted_device_code(&mut state)?
-                }
-                TwoFactorMethod::TrustedDevice => {}
-                TwoFactorMethod::Phone => {
-                    let phone = request.phone_number.as_ref().ok_or_else(|| {
-                        AppleHmeError::new(
-                            AppleHmeErrorCode::InvalidInput,
-                            "短信验证需要 Apple 返回的 phoneNumber",
-                            false,
-                        )
-                    })?;
-                    self.request_phone_code(&mut state, phone)?;
-                }
+            if requires_explicit_two_factor_code_request(state.two_factor_method) {
+                let phone = request.phone_number.as_ref().ok_or_else(|| {
+                    AppleHmeError::new(
+                        AppleHmeErrorCode::InvalidInput,
+                        "短信验证需要 Apple 返回的 phoneNumber",
+                        false,
+                    )
+                })?;
+                self.request_phone_code(&mut state, phone)?;
             }
             let expires_at = Utc::now() + Duration::minutes(PENDING_TTL_MINUTES);
             let payload = serde_json::to_vec(&state).map_err(|_| {
@@ -443,17 +437,6 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
         }
         self.require_success(&response, false)?;
         Ok(false)
-    }
-
-    fn request_trusted_device_code(&self, state: &mut AuthState) -> Result<()> {
-        let response = self.request(
-            state,
-            HttpMethod::Put,
-            format!("{}/verify/trusteddevice/securitycode", state.auth_base),
-            true,
-            None,
-        )?;
-        self.require_success(&response, false)
     }
 
     fn request_phone_code(&self, state: &mut AuthState, phone: &Value) -> Result<()> {
@@ -1327,6 +1310,12 @@ fn validate_phone_number(phone: &Value) -> Result<()> {
     Ok(())
 }
 
+fn requires_explicit_two_factor_code_request(method: TwoFactorMethod) -> bool {
+    // A 409 from signin/complete has already initiated trusted-device 2FA.
+    // Requesting it again can invalidate the fresh challenge with 401/419.
+    matches!(method, TwoFactorMethod::Phone)
+}
+
 fn nonempty(value: String) -> Option<String> {
     (!value.trim().is_empty()).then(|| value.trim().to_string())
 }
@@ -1389,6 +1378,12 @@ mod tests {
         assert_eq!(radix36(35), "z");
         assert_eq!(radix36(36), "10");
         assert_eq!(leading_zero_bits(&[0, 0b0001_0000]), 11);
+        assert!(!requires_explicit_two_factor_code_request(
+            TwoFactorMethod::TrustedDevice
+        ));
+        assert!(requires_explicit_two_factor_code_request(
+            TwoFactorMethod::Phone
+        ));
     }
 
     #[test]

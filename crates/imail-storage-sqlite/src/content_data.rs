@@ -531,6 +531,25 @@ impl MessageRepository for SqliteAuthStore {
             .join(",");
         clauses.push(format!("m.account_id IN ({placeholders})"));
         values.extend(query.account_ids.iter().cloned().map(SqlValue::Text));
+        if let Some(recipient) = query
+            .recipient
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            clauses.push(
+                "EXISTS (
+                    SELECT 1 FROM json_each(m.to_json) AS recipient
+                    WHERE lower(CASE recipient.type
+                        WHEN 'object' THEN json_extract(recipient.value, '$.address')
+                        WHEN 'text' THEN recipient.value
+                        ELSE ''
+                    END) = lower(?)
+                )"
+                .into(),
+            );
+            values.push(SqlValue::Text(recipient.to_string()));
+        }
         push_exact(
             &mut clauses,
             &mut values,

@@ -417,12 +417,17 @@ impl<T: HttpTransport> AppleHmeClient<T> {
         }
         let manage: ManageResponse =
             self.call_apple_account(state, HttpMethod::Get, "/account/manage", None)?;
-        if manage.api_key.trim().is_empty() {
+        if !manage.api_key.trim().is_empty() {
+            state.api_key = Some(manage.api_key);
+        } else if state
+            .api_key
+            .as_deref()
+            .map_or(true, |value| value.trim().is_empty())
+        {
             return Err(AppleHmeError::bad_response(
                 "Apple Account 管理接口未返回 API Key",
             ));
         }
-        state.api_key = Some(manage.api_key);
         state.saved_at = Utc::now();
         state.last_checked_at = Some(Utc::now());
         state.last_check_ok = true;
@@ -963,6 +968,61 @@ mod tests {
             state.last_status_message.as_deref(),
             Some("Apple Account 会话保活正常")
         );
+        assert!(state.last_successful_keepalive_at.is_some());
+        assert_eq!(
+            *paths.lock().unwrap(),
+            vec![
+                "/account/manage/gs/ws/token",
+                "/account/manage",
+                "/account/manage/forwardemail"
+            ]
+        );
+    }
+
+    #[test]
+    fn keepalive_retains_existing_api_key_when_manage_response_omits_it() {
+        let paths = Arc::new(Mutex::new(Vec::new()));
+        let client = AppleHmeClient::new(ScriptedTransport {
+            responses: Arc::new(Mutex::new(vec![
+                response(json!({"timeOutInterval":5})),
+                response(json!({})),
+                response(json!({"forwardToEmail":"owner@icloud.com"})),
+            ])),
+            paths: Arc::clone(&paths),
+        });
+        let now = Utc::now();
+        let mut session = AppleSession::empty("owner@icloud.com");
+        session.put_state(LoginState {
+            kind: LoginStateKind::AppleAccount,
+            host: "appleid.apple.com".into(),
+            origin: "https://account.apple.com".into(),
+            cookies: vec![AppleCookie {
+                name: "account".into(),
+                value: "secret".into(),
+                domain: ".appleid.apple.com".into(),
+                path: "/".into(),
+                expires_at: None,
+                secure: true,
+                http_only: true,
+            }],
+            scnt: Some("scnt".into()),
+            session_id: Some("session".into()),
+            api_key: Some("existing-key".into()),
+            data_access_token: None,
+            user_agent: APPLE_ACCOUNT_USER_AGENT.into(),
+            saved_at: now,
+            manage_expires_at: Some(now),
+            last_checked_at: Some(now),
+            last_check_ok: true,
+            last_status_message: None,
+            last_successful_keepalive_at: None,
+        });
+
+        client.keep_alive_apple_account(&mut session).unwrap();
+
+        let state = session.state(LoginStateKind::AppleAccount).unwrap();
+        assert_eq!(state.api_key.as_deref(), Some("existing-key"));
+        assert!(state.last_check_ok);
         assert!(state.last_successful_keepalive_at.is_some());
         assert_eq!(
             *paths.lock().unwrap(),

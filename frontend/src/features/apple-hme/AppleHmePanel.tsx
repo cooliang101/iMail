@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'preact
 import type { Notice } from '../../app-model';
 import { AppButton } from '../../components/AppButton';
 import { AppInput, AppSelect, AppTextarea } from '../../components/form-controls';
-import { CheckCircle, Globe, Key, LockKey, WarningCircle } from '../../components/icons';
+import { CheckCircle, Copy, Globe, Key, LockKey, WarningCircle } from '../../components/icons';
 import { api } from '../../services';
 import type { Account } from '../../types';
 
@@ -55,7 +55,9 @@ export function AppleHmePanel({ account, setNotice }: { account: Account; setNot
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [activeView, setActiveView] = useState<'addresses' | 'create'>('addresses');
+  const [copiedAddressId, setCopiedAddressId] = useState<string | null>(null);
   const loginFormRef = useRef<HTMLFormElement>(null);
+  const copyResetTimerRef = useRef<number | null>(null);
 
   const loadAddresses = useCallback(async () => {
     const result = await api<{ addresses: HmeAddress[]; lastSyncedAt?: string | null }>(`/api/accounts/${account.id}/apple-hme/addresses`);
@@ -78,6 +80,10 @@ export function AppleHmePanel({ account, setNotice }: { account: Account; setNot
     const timer = window.setInterval(() => { void loadStatus(); }, 15_000);
     return () => window.clearInterval(timer);
   }, [loadStatus]);
+
+  useEffect(() => () => {
+    if (copyResetTimerRef.current !== null) window.clearTimeout(copyResetTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!loginKind) return;
@@ -177,6 +183,20 @@ export function AppleHmePanel({ account, setNotice }: { account: Account; setNot
     } finally { setBusy(false); }
   }
 
+  async function copyAddress(address: HmeAddress) {
+    try {
+      await navigator.clipboard.writeText(address.email);
+      if (copyResetTimerRef.current !== null) window.clearTimeout(copyResetTimerRef.current);
+      setCopiedAddressId(address.anonymousId);
+      copyResetTimerRef.current = window.setTimeout(() => {
+        setCopiedAddressId(null);
+        copyResetTimerRef.current = null;
+      }, 2_000);
+    } catch {
+      setNotice({ kind: 'error', text: '复制失败，请手动选择隐私邮箱地址' });
+    }
+  }
+
   async function disconnect() {
     setBusy(true); setError('');
     try {
@@ -233,9 +253,9 @@ export function AppleHmePanel({ account, setNotice }: { account: Account; setNot
     {activeView === 'addresses' && <div className="apple-hme-addresses">
       <div className="apple-hme-address-heading"><div><strong>隐私邮箱列表</strong><small>{addresses.length} 个本地地址{lastSyncedAt ? ` · 最后同步 ${new Date(lastSyncedAt).toLocaleString()}` : ' · 尚未从 Apple 同步'}</small></div><AppButton appearance="secondary" disabled={busy} onClick={() => { if (status?.icloudWebConnected) void syncAddresses(); else { setPendingId(''); setLoginKind('icloudWeb'); } }}>{busy ? '同步中…' : status?.icloudWebConnected ? '从 Apple 同步' : '连接 iCloud 后同步'}</AppButton></div>
       {addresses.length === 0 ? <div className="apple-hme-empty"><Globe size={21} /><span><strong>本地还没有隐私邮箱</strong><small>{status?.icloudWebConnected ? '点击“从 Apple 同步”获取已创建的隐私邮箱并保存到本地。' : '先连接上方的 iCloud 地址管理，再手动同步 Apple 已创建的隐私邮箱。'}</small></span></div> : addresses.map((address) => <article key={address.anonymousId}>
-        <span><strong>{address.email}</strong><small>{address.label || '未命名'}{address.forwardToEmail ? ` · 转发至 ${address.forwardToEmail}` : ''}</small></span>
+        <div className="apple-hme-address-details"><span className="apple-hme-address-line"><strong>{address.email}</strong><button type="button" className="apple-hme-copy-address" aria-label={`复制隐私邮箱 ${address.email}`} title="复制隐私邮箱" onClick={() => void copyAddress(address)}><Copy size={15} /></button>{copiedAddressId === address.anonymousId && <span className="apple-hme-copy-success" role="status" aria-label="复制成功" title="复制成功"><CheckCircle size={17} weight="fill" /></span>}</span><small>{address.label || '未命名'}{address.forwardToEmail ? ` · 转发至 ${address.forwardToEmail}` : ''}</small></div>
         <em className={address.active ? 'is-active' : ''}>{address.active ? '使用中' : '已停用'}</em>
-        {address.active ? <button type="button" disabled={busy || !status?.icloudWebConnected} onClick={() => void mutateAddress(address, 'deactivate')}>停用</button> : <button type="button" className="apple-hme-delete" disabled={busy || !status?.icloudWebConnected} onClick={() => void mutateAddress(address, 'delete')}>永久删除</button>}
+        {address.active ? <button type="button" className="apple-hme-address-action" disabled={busy || !status?.icloudWebConnected} onClick={() => void mutateAddress(address, 'deactivate')}>停用</button> : <button type="button" className="apple-hme-address-action apple-hme-delete" disabled={busy || !status?.icloudWebConnected} onClick={() => void mutateAddress(address, 'delete')}>永久删除</button>}
       </article>)}
     </div>}
     {activeView === 'create' && (status?.appleAccountConnected || (status?.icloudWebConnected && status.canCreateHme)) && <form className="apple-hme-create" onSubmit={createAddress}>
