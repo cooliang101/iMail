@@ -21,7 +21,10 @@ use imail_core::{
 };
 use imail_http::{EmbeddedServiceHost, HttpAdapterConfig};
 use imail_oauth::OAuthEnvironment;
-use imail_protocol::{AccountMetadataPatch, AppPreferencesPatch};
+use imail_protocol::{
+    AccountMetadataPatch, AppPreferencesPatch, TranslationProviderProfileInput,
+    TranslationSettingsUpdate,
+};
 use imail_security::MasterKey;
 use imail_storage_sqlite::{migrate_database, SqliteAuthStore, SyncRuntimeStore};
 use serde::{Deserialize, Serialize};
@@ -227,6 +230,36 @@ pub enum EmbeddedDomainCall {
     PreferencesGet,
     PreferencesUpdate {
         input: serde_json::Value,
+    },
+    TranslationSettingsGet,
+    TranslationSettingsUpdate {
+        input: serde_json::Value,
+    },
+    TranslationProfileUpsert {
+        #[serde(rename = "profileId")]
+        profile_id: String,
+        input: serde_json::Value,
+    },
+    TranslationProfileDelete {
+        #[serde(rename = "profileId")]
+        profile_id: String,
+    },
+    TranslationCredentialUpdate {
+        #[serde(rename = "profileId")]
+        profile_id: String,
+        input: serde_json::Value,
+    },
+    TranslationCredentialClear {
+        #[serde(rename = "profileId")]
+        profile_id: String,
+    },
+    TranslationConsentAccept {
+        #[serde(rename = "profileId")]
+        profile_id: String,
+    },
+    TranslationConsentRevoke {
+        #[serde(rename = "profileId")]
+        profile_id: String,
     },
     DeveloperTokensList,
     DeveloperTokenCreate {
@@ -479,6 +512,52 @@ impl EmbeddedDomainCall {
             ),
             Self::PreferencesGet => ("/api/preferences".into(), "GET", None),
             Self::PreferencesUpdate { input } => json_request("/api/preferences", "PATCH", input),
+            Self::TranslationSettingsGet => ("/api/translation-settings".into(), "GET", None),
+            Self::TranslationSettingsUpdate { input } => {
+                json_request("/api/translation-settings", "PUT", input)
+            }
+            Self::TranslationProfileUpsert { profile_id, input } => json_request(
+                format!("/api/translation-profiles/{}", path_segment(&profile_id)),
+                "PUT",
+                input,
+            ),
+            Self::TranslationProfileDelete { profile_id } => (
+                format!("/api/translation-profiles/{}", path_segment(&profile_id)),
+                "DELETE",
+                None,
+            ),
+            Self::TranslationCredentialUpdate { profile_id, input } => json_request(
+                format!(
+                    "/api/translation-profiles/{}/credential",
+                    path_segment(&profile_id)
+                ),
+                "PUT",
+                input,
+            ),
+            Self::TranslationCredentialClear { profile_id } => (
+                format!(
+                    "/api/translation-profiles/{}/credential",
+                    path_segment(&profile_id)
+                ),
+                "DELETE",
+                None,
+            ),
+            Self::TranslationConsentAccept { profile_id } => (
+                format!(
+                    "/api/translation-profiles/{}/consent",
+                    path_segment(&profile_id)
+                ),
+                "POST",
+                None,
+            ),
+            Self::TranslationConsentRevoke { profile_id } => (
+                format!(
+                    "/api/translation-profiles/{}/consent",
+                    path_segment(&profile_id)
+                ),
+                "DELETE",
+                None,
+            ),
             Self::DeveloperTokensList => ("/api/developer-tokens".into(), "GET", None),
             Self::DeveloperTokenCreate { input } => {
                 json_request("/api/developer-tokens", "POST", input)
@@ -1623,6 +1702,87 @@ impl EmbeddedMailServiceState {
                         json_response(500, serde_json::json!({"error":"服务暂时无法完成请求"}))
                     }
                 }))
+            }
+            EmbeddedDomainCall::TranslationSettingsGet
+            | EmbeddedDomainCall::TranslationSettingsUpdate { .. }
+            | EmbeddedDomainCall::TranslationProfileUpsert { .. }
+            | EmbeddedDomainCall::TranslationProfileDelete { .. }
+            | EmbeddedDomainCall::TranslationCredentialUpdate { .. }
+            | EmbeddedDomainCall::TranslationCredentialClear { .. }
+            | EmbeddedDomainCall::TranslationConsentAccept { .. }
+            | EmbeddedDomainCall::TranslationConsentRevoke { .. } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                use imail_http::translation_settings::TranslationSettingsApplicationCall as Call;
+                let application_call = match call {
+                    EmbeddedDomainCall::TranslationSettingsGet => Call::Read,
+                    EmbeddedDomainCall::TranslationSettingsUpdate { input } => {
+                        let Ok(input) =
+                            serde_json::from_value::<TranslationSettingsUpdate>(input.clone())
+                        else {
+                            return Ok(Some(json_response(
+                                400,
+                                serde_json::json!({"error":"请求参数无效"}),
+                            )));
+                        };
+                        Call::Update(input)
+                    }
+                    EmbeddedDomainCall::TranslationProfileUpsert { profile_id, input } => {
+                        let Ok(input) = serde_json::from_value::<TranslationProviderProfileInput>(
+                            input.clone(),
+                        ) else {
+                            return Ok(Some(json_response(
+                                400,
+                                serde_json::json!({"error":"请求参数无效"}),
+                            )));
+                        };
+                        Call::UpsertProfile {
+                            profile_id: profile_id.clone(),
+                            input,
+                        }
+                    }
+                    EmbeddedDomainCall::TranslationProfileDelete { profile_id } => {
+                        Call::DeleteProfile {
+                            profile_id: profile_id.clone(),
+                        }
+                    }
+                    EmbeddedDomainCall::TranslationCredentialUpdate { profile_id, input } => {
+                        let Ok(input) = serde_json::from_value(input.clone()) else {
+                            return Ok(Some(json_response(
+                                400,
+                                serde_json::json!({"error":"请求参数无效"}),
+                            )));
+                        };
+                        Call::UpdateCredential {
+                            profile_id: profile_id.clone(),
+                            input,
+                        }
+                    }
+                    EmbeddedDomainCall::TranslationCredentialClear { profile_id } => {
+                        Call::ClearCredential {
+                            profile_id: profile_id.clone(),
+                        }
+                    }
+                    EmbeddedDomainCall::TranslationConsentAccept { profile_id } => {
+                        Call::AcceptConsent {
+                            profile_id: profile_id.clone(),
+                        }
+                    }
+                    EmbeddedDomainCall::TranslationConsentRevoke { profile_id } => {
+                        Call::RevokeConsent {
+                            profile_id: profile_id.clone(),
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+                let response = imail_http::translation_settings::embedded_call(
+                    data_dir,
+                    user_id,
+                    application_call,
+                )
+                .await;
+                Ok(Some(json_response(response.status, response.body)))
             }
             EmbeddedDomainCall::ExternalAccessUpdate { input } => {
                 let Some(user_id) = self.current_user_id()? else {

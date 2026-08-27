@@ -24,6 +24,7 @@ pub mod privacy;
 pub mod sync_execution;
 pub mod sync_runtime;
 pub mod theme;
+pub mod translation_settings;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError<E: Error + Send + Sync + 'static> {
@@ -107,6 +108,37 @@ pub struct LogoFetchAttemptRecord {
     pub status: String,
     pub detail: String,
     pub attempted_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TranslationProviderRecord {
+    pub owner_id: String,
+    pub profile: imail_protocol::TranslationProviderProfile,
+    pub consent: Option<imail_protocol::TranslationProviderConsent>,
+    pub encrypted_credential: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+pub trait TranslationProviderRepository: AccountRepository {
+    fn translation_provider(
+        &self,
+        user_id: &str,
+        profile_id: &str,
+    ) -> Result<Option<TranslationProviderRecord>, Self::Error>;
+    fn list_translation_providers(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<TranslationProviderRecord>, Self::Error>;
+    fn upsert_translation_provider(
+        &mut self,
+        record: &TranslationProviderRecord,
+    ) -> Result<(), Self::Error>;
+    fn delete_translation_provider(
+        &mut self,
+        user_id: &str,
+        profile_id: &str,
+    ) -> Result<bool, Self::Error>;
 }
 
 pub trait ReadOnlyRepository {

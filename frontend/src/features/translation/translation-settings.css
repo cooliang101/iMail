@@ -1,0 +1,23 @@
+.translation-settings-panel .settings-panel-body { display: grid; align-content: start; gap: 20px; }
+.translation-provider-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 0 2px; }
+.translation-provider-heading strong { color: var(--color-text-strong); font-size: var(--font-size-3); }
+.translation-provider-heading small { color: var(--color-text-tertiary); font-size: var(--font-size-1); }
+.translation-provider-list { gap: 8px; }
+.translation-provider-group { display: grid; gap: 8px; }
+.translation-settings-error { margin: 0; border: 1px solid color-mix(in srgb, var(--color-danger) 24%, var(--color-border)); border-radius: var(--radius-md); padding: 11px 13px; background: var(--color-danger-subtle); color: var(--color-danger-strong); font-size: var(--font-size-2); }
+.translation-provider-editor { gap: 18px !important; }
+.translation-provider-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 18px; background: var(--color-surface-raised); }
+.translation-provider-form label { min-width: 0; display: grid; gap: 7px; }
+.translation-provider-form label > span { color: var(--color-text-secondary); font-size: var(--font-size-2); font-weight: 650; }
+.translation-credential-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.translation-credential-heading > button { border: 0; padding: 0; background: transparent; color: var(--color-danger-strong); font: inherit; font-weight: 650; cursor: pointer; }
+.translation-credential-heading > button:hover:not(:disabled) { text-decoration: underline; }
+.translation-provider-form .app-input, .translation-provider-form .app-select-wrap { width: 100%; }
+.translation-provider-switches { margin-top: 0; }
+.translation-provider-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.translation-provider-actions > span { flex: 1 1 auto; }
+.translation-provider-actions > .app-button:first-child { color: var(--color-danger-strong); }
+@media (max-width: 760px) {
+  .translation-provider-form { grid-template-columns: minmax(0, 1fr); }
+  .translation-provider-actions { flex-wrap: wrap; }
+}

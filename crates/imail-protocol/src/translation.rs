@@ -144,6 +144,62 @@ pub struct TranslationProviderConsent {
     pub accepted_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationProviderDescriptor {
+    pub kind: TranslationProviderKind,
+    pub display_name: String,
+    pub execution_targets: Vec<TranslationExecutionTarget>,
+    pub credential_kinds: Vec<TranslationCredentialKind>,
+    pub sends_content_off_device: bool,
+    pub experimental: bool,
+    pub disclosure_revision: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TranslationProviderStatus {
+    Configured,
+    Disabled,
+    NeedsCredential,
+    NeedsConsent,
+    RuntimeCheckRequired,
+    Experimental,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationProviderProfileView {
+    pub profile: TranslationProviderProfile,
+    pub status: TranslationProviderStatus,
+    pub consent: Option<TranslationProviderConsent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationSettingsView {
+    pub preferences: TranslationPreferences,
+    pub environment: TranslationEnvironmentPreferences,
+    pub registry: Vec<TranslationProviderDescriptor>,
+    pub profiles: Vec<TranslationProviderProfileView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationProviderProfileInput {
+    pub display_name: String,
+    pub execution_target: TranslationExecutionTarget,
+    pub provider: TranslationProviderConfiguration,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationSettingsUpdate {
+    pub preferences: TranslationPreferences,
+    pub environment: TranslationEnvironmentPreferences,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,6 +270,26 @@ mod tests {
                 "projectId": "project-1",
                 "location": "global"
             })
+        );
+    }
+
+    #[test]
+    fn settings_view_does_not_define_credential_secret_fields() {
+        let field_names = serde_json::to_value(TranslationSettingsView {
+            preferences: TranslationPreferences::default(),
+            environment: TranslationEnvironmentPreferences::default(),
+            registry: Vec::new(),
+            profiles: Vec::new(),
+        })
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+        assert_eq!(
+            field_names,
+            ["environment", "preferences", "profiles", "registry"]
         );
     }
 }

@@ -6,7 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
 
-const CURRENT_SCHEMA_SQL: &str = include_str!("../sql/schema-v8.sql");
+const CURRENT_SCHEMA_SQL: &str = include_str!("../sql/schema-v9.sql");
 const MIGRATION_V2_ACCOUNTS: &str = include_str!("../sql/migration-v2-accounts.sql");
 const MIGRATION_V3_SYNC_FKS: &str = include_str!("../sql/migration-v3-sync-fks.sql");
 const MIGRATION_V6_PUSH_FIRST: &str = include_str!("../sql/migration-v6-push-first.sql");
@@ -103,6 +103,14 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
     }
     if from_version < 8 {
         applied_versions.push(8);
+    }
+    if from_version < 9 {
+        if !columns(&transaction, "developer_tokens")?.contains("user_id") {
+            transaction.execute_batch(
+                "ALTER TABLE developer_tokens ADD COLUMN user_id TEXT NOT NULL DEFAULT '__legacy__';",
+            )?;
+        }
+        applied_versions.push(9);
     }
     ensure_message_query_indexes(&transaction)?;
     if from_version < CURRENT_SCHEMA_VERSION {

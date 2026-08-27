@@ -48,6 +48,14 @@ export type EmbeddedDomainCall =
   | { operation: 'draftDelete'; draftId: string }
   | { operation: 'preferencesGet' }
   | { operation: 'preferencesUpdate'; input: Record<string, unknown> }
+  | { operation: 'translationSettingsGet' }
+  | { operation: 'translationSettingsUpdate'; input: Record<string, unknown> }
+  | { operation: 'translationProfileUpsert'; profileId: string; input: Record<string, unknown> }
+  | { operation: 'translationProfileDelete'; profileId: string }
+  | { operation: 'translationCredentialUpdate'; profileId: string; input: Record<string, unknown> }
+  | { operation: 'translationCredentialClear'; profileId: string }
+  | { operation: 'translationConsentAccept'; profileId: string }
+  | { operation: 'translationConsentRevoke'; profileId: string }
   | { operation: 'developerTokensList' }
   | { operation: 'developerTokenCreate'; input: Record<string, unknown> }
   | { operation: 'developerTokenDelete'; tokenId: string }
@@ -82,6 +90,7 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
       '/api/notifications': { operation: 'notificationsList' },
       '/api/drafts': { operation: 'draftsList' },
       '/api/preferences': { operation: 'preferencesGet' },
+      '/api/translation-settings': { operation: 'translationSettingsGet' },
       '/api/developer-tokens': { operation: 'developerTokensList' },
       '/api/external-access': { operation: 'externalAccessGet' },
     };
@@ -157,6 +166,16 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   if (draft && method === 'PUT' && body) return { operation: 'draftUpdate', draftId: decodeURIComponent(draft[1]), input: body };
   if (draft && method === 'DELETE' && options.body === undefined) return { operation: 'draftDelete', draftId: decodeURIComponent(draft[1]) };
   if (method === 'PATCH' && url.pathname === '/api/preferences' && body) return { operation: 'preferencesUpdate', input: body };
+  if (method === 'PUT' && url.pathname === '/api/translation-settings' && body) return { operation: 'translationSettingsUpdate', input: body };
+  const translationProfile = url.pathname.match(/^\/api\/translation-profiles\/([^/]+)$/);
+  if (translationProfile && method === 'PUT' && body) return { operation: 'translationProfileUpsert', profileId: decodeURIComponent(translationProfile[1]), input: body };
+  if (translationProfile && method === 'DELETE' && options.body === undefined) return { operation: 'translationProfileDelete', profileId: decodeURIComponent(translationProfile[1]) };
+  const translationCredential = url.pathname.match(/^\/api\/translation-profiles\/([^/]+)\/credential$/);
+  if (translationCredential && method === 'PUT' && body) return { operation: 'translationCredentialUpdate', profileId: decodeURIComponent(translationCredential[1]), input: body };
+  if (translationCredential && method === 'DELETE' && options.body === undefined) return { operation: 'translationCredentialClear', profileId: decodeURIComponent(translationCredential[1]) };
+  const translationConsent = url.pathname.match(/^\/api\/translation-profiles\/([^/]+)\/consent$/);
+  if (translationConsent && method === 'POST' && options.body === undefined) return { operation: 'translationConsentAccept', profileId: decodeURIComponent(translationConsent[1]) };
+  if (translationConsent && method === 'DELETE' && options.body === undefined) return { operation: 'translationConsentRevoke', profileId: decodeURIComponent(translationConsent[1]) };
   if (method === 'POST' && url.pathname === '/api/developer-tokens' && body) return { operation: 'developerTokenCreate', input: body };
   const token = url.pathname.match(/^\/api\/developer-tokens\/([^/]+)$/);
   if (token && method === 'DELETE' && options.body === undefined) return { operation: 'developerTokenDelete', tokenId: decodeURIComponent(token[1]) };

@@ -48,6 +48,8 @@ pub enum AuthStoreError {
     ContentOwnershipViolation,
     #[error("内容记录字段组合无效")]
     InvalidContentData,
+    #[error("翻译服务配置属于其他用户")]
+    TranslationProfileOwnershipViolation,
     #[error("安全审计查询无效")]
     InvalidAuditQuery,
     #[error(transparent)]

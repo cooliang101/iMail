@@ -34,6 +34,16 @@ impl PrivacyRepository for SqliteAuthStore {
             [user_id],
         )?;
         transaction.execute("DELETE FROM developer_tokens WHERE user_id=?1", [user_id])?;
+        transaction.execute(
+            "DELETE FROM translation_provider_profiles WHERE user_id=?1",
+            [user_id],
+        )?;
+        for key in ["translation_preferences_v1", "translation_environment_v1"] {
+            transaction.execute(
+                "DELETE FROM metadata WHERE key=?1",
+                [format!("user:{user_id}:{key}")],
+            )?;
+        }
         for statement in [
             "DELETE FROM messages WHERE account_id IN (SELECT id FROM accounts WHERE user_id=?1)",
             "DELETE FROM drafts WHERE account_id IN (SELECT id FROM accounts WHERE user_id=?1)",

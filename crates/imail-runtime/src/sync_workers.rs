@@ -524,7 +524,7 @@ mod tests {
             ));
             let connection = Connection::open(&path).unwrap();
             connection
-                .execute_batch(include_str!("../../imail-storage-sqlite/sql/schema-v8.sql"))
+                .execute_batch(include_str!("../../imail-storage-sqlite/sql/schema-v9.sql"))
                 .unwrap();
             connection
                 .execute(

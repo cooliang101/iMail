@@ -5,6 +5,9 @@
   "DELETE /api/attachment-previews/:preview_id",
   "DELETE /api/developer-tokens/:id",
   "DELETE /api/drafts/:id",
+  "DELETE /api/translation-profiles/:id",
+  "DELETE /api/translation-profiles/:id/consent",
+  "DELETE /api/translation-profiles/:id/credential",
   "GET /api/accounts",
   "GET /api/accounts/:id/apple-hme",
   "GET /api/accounts/:id/apple-hme/addresses",
@@ -36,6 +39,7 @@
   "GET /api/sync-policy",
   "GET /api/sync-status",
   "GET /api/system/info",
+  "GET /api/translation-settings",
   "PATCH /api/accounts/:id",
   "PATCH /api/accounts/:id/sync-policy",
   "PATCH /api/external-access",
@@ -68,7 +72,11 @@
   "POST /api/send",
   "POST /api/sync",
   "POST /api/system/shutdown",
+  "POST /api/translation-profiles/:id/consent",
   "PUT /api/accounts/:id/credential",
   "PUT /api/accounts/:id/proxy",
-  "PUT /api/drafts/:id"
+  "PUT /api/drafts/:id",
+  "PUT /api/translation-profiles/:id",
+  "PUT /api/translation-profiles/:id/credential",
+  "PUT /api/translation-settings"
 ]

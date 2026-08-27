@@ -1139,6 +1139,9 @@ fn validate_embedded_switch_data(data_dir: &Path) -> Result<(u32, u64, u64), Str
     if credentials.account_count != credentials.decrypted_count {
         return Err("iMail 凭据解密检查未覆盖全部账户".into());
     }
+    if credentials.translation_credential_count != credentials.translation_decrypted_count {
+        return Err("iMail 凭据解密检查未覆盖全部翻译服务".into());
+    }
     let host = EmbeddedServiceHost::start(
         HttpAdapterConfig::production(data_dir.to_path_buf()).with_sync_worker(false),
     )

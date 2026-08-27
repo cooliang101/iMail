@@ -7,7 +7,7 @@ mod translation;
 
 pub use translation::*;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 8;
+pub const CURRENT_SCHEMA_VERSION: u32 = 9;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -578,6 +578,8 @@ pub struct CredentialCompatibilitySummary {
     pub account_count: u64,
     pub decrypted_count: u64,
     pub field_counts: BTreeMap<String, u64>,
+    pub translation_credential_count: u64,
+    pub translation_decrypted_count: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

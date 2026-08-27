@@ -284,13 +284,13 @@ try {
   const backup = JSON.parse((await docker([
     'exec', container, '/app/imail-maintenance', 'backup', '/backups/smoke-backup',
   ])).stdout);
-  if (!backup.ok || backup.schemaVersion !== 8 || backup.fileCount < 3) {
+  if (!backup.ok || backup.schemaVersion !== 9 || backup.fileCount < 3) {
     throw new Error(`Rust 容器备份失败：${JSON.stringify(backup)}`);
   }
   const restore = JSON.parse((await docker([
     'exec', container, '/app/imail-maintenance', 'restore', '/backups/smoke-backup', '/backups/smoke-restore',
   ])).stdout);
-  if (!restore.ok || !restore.databaseVerified || !restore.integrityManifestVerified || restore.schemaVersion !== 8) {
+  if (!restore.ok || !restore.databaseVerified || !restore.integrityManifestVerified || restore.schemaVersion !== 9) {
     throw new Error(`Rust 容器恢复预检失败：${JSON.stringify(restore)}`);
   }
   let duplicateRestoreRejected = false;

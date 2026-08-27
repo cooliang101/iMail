@@ -2,7 +2,7 @@
   "name": "imail",
   "version": "0.0.17",
   "imail": {
-    "schemaVersion": 8
+    "schemaVersion": 9
   },
   "private": true,
   "type": "module",

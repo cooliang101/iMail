@@ -58,6 +58,7 @@ mod preferences;
 mod security;
 mod sync_control;
 mod system;
+pub mod translation_settings;
 mod web_client;
 
 const SERVICE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -978,6 +979,7 @@ fn build_router_state(
         .merge(security::routes())
         .merge(sync_control::routes())
         .merge(system::protected_routes())
+        .merge(translation_settings::routes())
         .route("/api/*path", any(api_not_found))
         .route_layer(middleware::from_fn_with_state(
             Arc::clone(&state),

@@ -29,6 +29,7 @@ mod export_encryption;
 mod migration;
 mod privacy_data;
 mod sync_runtime;
+mod translation_providers;
 pub use apple_hme_addresses::{AppleHmeAddressRecord, AppleHmeAddressSnapshot};
 pub use apple_hme_sessions::AppleHmeSessionRecord;
 pub use auth::{AuthStoreError, SqliteAuthStore};
@@ -252,10 +253,37 @@ impl SqliteReadOnlyStore {
             }
             decrypted_count += 1;
         }
+        let translation_payloads: Vec<String> = self
+            .connection
+            .prepare(
+                "SELECT encrypted_credential FROM translation_provider_profiles
+                 WHERE encrypted_credential IS NOT NULL ORDER BY id",
+            )?
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+        let mut translation_decrypted_count = 0_u64;
+        for payload in &translation_payloads {
+            let value: Value = key.decrypt_json(payload).map_err(|_| {
+                StorageError::Integrity("翻译服务加密凭据无法使用当前主密钥解密".into())
+            })?;
+            let fields = value
+                .as_object()
+                .ok_or_else(|| StorageError::Integrity("翻译服务加密凭据不是 JSON 对象".into()))?;
+            if !fields.get("kind").is_some_and(Value::is_string)
+                || !fields.get("secret").is_some_and(Value::is_string)
+            {
+                return Err(StorageError::Integrity(
+                    "翻译服务加密凭据缺少必要字段".into(),
+                ));
+            }
+            translation_decrypted_count += 1;
+        }
         Ok(CredentialCompatibilitySummary {
             account_count: payloads.len() as u64,
             decrypted_count,
             field_counts,
+            translation_credential_count: translation_payloads.len() as u64,
+            translation_decrypted_count,
         })
     }
 }
