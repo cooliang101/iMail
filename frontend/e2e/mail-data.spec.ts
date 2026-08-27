@@ -188,6 +188,20 @@ test('reader shows complete routing details and opens the sender contact card', 
   await expect(card).toContainText('18 封往来邮件');
   await expect(card.getByRole('button', { name: '复制邮箱' })).toBeVisible();
   await expect(card.getByRole('button', { name: '写邮件' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(card).toBeHidden();
+  await expect(senderTrigger).toBeFocused();
+
+  const recipientTrigger = page.getByRole('button', { name: '查看收件人 Owner <owner@example.test>' });
+  await recipientTrigger.click();
+  const recipientCard = page.getByRole('dialog', { name: 'Owner 的收件人信息' });
+  await expect(recipientCard).toBeVisible();
+  await expect(recipientCard).toContainText('owner@example.test');
+  await expect(recipientCard).not.toContainText('封往来邮件');
+  await expect(recipientCard.getByRole('button', { name: '复制邮箱' })).toBeVisible();
+  await expect(recipientCard.getByRole('button', { name: '写邮件' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(recipientTrigger).toBeFocused();
 });
 
 test('mail notices and external access keep their layout before compose is opened', async ({ page }) => {
