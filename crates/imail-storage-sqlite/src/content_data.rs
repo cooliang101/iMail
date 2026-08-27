@@ -407,6 +407,41 @@ impl MessageRepository for SqliteAuthStore {
             let pattern = SqlValue::Text(format!("%{text}%"));
             values.extend([pattern.clone(), pattern.clone(), pattern.clone(), pattern]);
         }
+        if let Some(sender) = query
+            .sender
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            clauses.push(
+                "lower(CASE json_type(m.from_json)
+                    WHEN 'object' THEN json_extract(m.from_json, '$.address')
+                    WHEN 'text' THEN json_extract(m.from_json, '$')
+                    ELSE ''
+                END) = lower(?)"
+                    .into(),
+            );
+            values.push(SqlValue::Text(sender.to_string()));
+        }
+        if let Some(recipient) = query
+            .recipient
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            clauses.push(
+                "EXISTS (
+                    SELECT 1 FROM json_each(m.to_json) AS recipient
+                    WHERE lower(CASE recipient.type
+                        WHEN 'object' THEN json_extract(recipient.value, '$.address')
+                        WHEN 'text' THEN recipient.value
+                        ELSE ''
+                    END) = lower(?)
+                )"
+                .into(),
+            );
+            values.push(SqlValue::Text(recipient.to_string()));
+        }
         if let Some(cursor) = &query.cursor {
             clauses.push("(m.received_at < ? OR (m.received_at = ? AND m.id < ?))".into());
             values.extend([

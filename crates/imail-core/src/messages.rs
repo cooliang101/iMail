@@ -8,6 +8,8 @@ pub struct MessageQuery {
     pub account_id: Option<String>,
     pub group: Option<String>,
     pub text: Option<String>,
+    pub sender: Option<String>,
+    pub recipient: Option<String>,
     pub unread: bool,
     pub flagged: bool,
     pub has_attachments: bool,

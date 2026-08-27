@@ -70,6 +70,8 @@ struct MessageQueryInput {
     account_id: Option<String>,
     group: Option<String>,
     q: Option<String>,
+    sender: Option<String>,
+    recipient: Option<String>,
     unread: Option<String>,
     flagged: Option<String>,
     has_attachments: Option<String>,
@@ -105,6 +107,8 @@ pub fn embedded_message_query(
         account_id: fields.get("accountId").cloned(),
         group: fields.get("group").cloned(),
         q: fields.get("q").cloned(),
+        sender: fields.get("sender").cloned(),
+        recipient: fields.get("recipient").cloned(),
         unread: fields.get("unread").cloned(),
         flagged: fields.get("flagged").cloned(),
         has_attachments: fields.get("hasAttachments").cloned(),
@@ -1147,6 +1151,8 @@ fn validate_query(input: MessageQueryInput) -> Result<MessageQuery, ()> {
     let flagged = query_bool(input.flagged)?;
     let has_attachments = query_bool(input.has_attachments)?;
     let snoozed = query_bool(input.snoozed)?;
+    let sender = participant_address(input.sender)?;
+    let recipient = participant_address(input.recipient)?;
     let limit = input
         .limit
         .as_deref()
@@ -1173,6 +1179,8 @@ fn validate_query(input: MessageQueryInput) -> Result<MessageQuery, ()> {
         account_id: input.account_id,
         group: input.group,
         text: input.q,
+        sender,
+        recipient,
         unread,
         flagged,
         has_attachments,
@@ -1189,6 +1197,21 @@ fn validate_query(input: MessageQueryInput) -> Result<MessageQuery, ()> {
         offset,
         cursor,
     })
+}
+
+fn participant_address(value: Option<String>) -> Result<Option<String>, ()> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.trim();
+    if value.is_empty()
+        || utf16(value) > 320
+        || !value.contains('@')
+        || value.chars().any(char::is_control)
+    {
+        return Err(());
+    }
+    Ok(Some(value.to_string()))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1581,6 +1604,30 @@ fn unused_protocol() -> ProtocolFailure {
         Some("UNUSED_TRANSPORT"),
         "未使用的邮件协议端口被调用",
     )
+}
+
+#[cfg(test)]
+mod participant_query_tests {
+    use super::*;
+
+    #[test]
+    fn embedded_queries_normalize_participant_addresses() {
+        let fields = BTreeMap::from([
+            ("sender".into(), " Sender+Alerts@Example.com ".into()),
+            ("recipient".into(), "alias@icloud.com".into()),
+        ]);
+        let query = embedded_message_query(&fields).unwrap();
+        assert_eq!(query.sender.as_deref(), Some("Sender+Alerts@Example.com"));
+        assert_eq!(query.recipient.as_deref(), Some("alias@icloud.com"));
+    }
+
+    #[test]
+    fn embedded_queries_reject_invalid_participant_addresses() {
+        for address in ["", "missing-at.example.com", "bad\n@example.com"] {
+            let fields = BTreeMap::from([("sender".into(), address.into())]);
+            assert!(embedded_message_query(&fields).is_err());
+        }
+    }
 }
 
 fn refresh_account(

@@ -1,5 +1,5 @@
 import type { Account, MailboxRole } from '../types';
-import type { AppView, WorkspaceFolder } from '../app-model';
+import type { AppView, ParticipantFilters, WorkspaceFolder } from '../app-model';
 import { isWorkspaceMailbox } from '../features/organize';
 
 export function buildWorkspaceFolders(accounts: Account[], groups: string[]) {
@@ -18,13 +18,15 @@ export function buildWorkspaceFolders(accounts: Account[], groups: string[]) {
   }));
 }
 
-export function buildMessageQuery({ accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox }: {
-  accountFilter: string; groupFilter: string | null; search: string; view: AppView; mailFilter: 'all' | 'unread' | 'attachments'; activeLabel: string | null; activeMailbox: WorkspaceFolder | null;
+export function buildMessageQuery({ accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox, participantFilters }: {
+  accountFilter: string; groupFilter: string | null; search: string; view: AppView; mailFilter: 'all' | 'unread' | 'attachments'; activeLabel: string | null; activeMailbox: WorkspaceFolder | null; participantFilters?: ParticipantFilters;
 }) {
   const params = new URLSearchParams();
   if (accountFilter !== 'all') params.set('accountId', accountFilter);
   if (groupFilter) params.set('group', groupFilter);
   if (search.trim()) params.set('q', search.trim());
+  if (participantFilters?.sender?.address.trim()) params.set('sender', participantFilters.sender.address.trim());
+  if (participantFilters?.recipient?.address.trim()) params.set('recipient', participantFilters.recipient.address.trim());
   if (view === 'starred') params.set('flagged', 'true');
   if (view === 'folder' && activeMailbox) { params.set('group', activeMailbox.group); params.set('mailboxName', activeMailbox.name); }
   else {

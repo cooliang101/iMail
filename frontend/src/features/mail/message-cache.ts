@@ -52,6 +52,10 @@ export function messageMatchesQuery(message: Message, query: string, accounts: A
     const searchable = [message.subject, message.preview, message.from.name, message.from.address, ...message.to.flatMap((recipient) => [recipient.name, recipient.address])].join('\n').toLocaleLowerCase();
     if (!searchable.includes(search)) return false;
   }
+  const sender = params.get('sender')?.trim();
+  if (sender && message.from.address.trim().toLocaleLowerCase() !== sender.toLocaleLowerCase()) return false;
+  const recipient = params.get('recipient')?.trim();
+  if (recipient && !message.to.some((item) => item.address.trim().toLocaleLowerCase() === recipient.toLocaleLowerCase())) return false;
   return true;
 }
 

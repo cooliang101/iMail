@@ -46,6 +46,19 @@ describe('message cache reconciliation', () => {
       .toMatchObject({ total: 2, unread: 1, byAccount: [{ total: 2, unread: 1 }], byGroup: [{ total: 2, unread: 1 }] });
   });
 
+  it('matches sender and recipient filters by complete address without using message text', () => {
+    const matching = message({
+      from: { name: 'Wayne', address: 'Sender+Alerts@Example.com', logo: { url: '/logo' } },
+      to: [{ name: 'Shopping alias', address: 'Private-Alias@iCloud.com' }],
+      subject: 'A normal subject',
+    });
+    expect(messageMatchesQuery(matching, 'sender=sender%2Balerts%40example.com', [account])).toBe(true);
+    expect(messageMatchesQuery(matching, 'recipient=private-alias%40icloud.com', [account])).toBe(true);
+    expect(messageMatchesQuery(matching, 'sender=other%40example.com', [account])).toBe(false);
+    expect(messageMatchesQuery(message({ subject: 'sender@example.com' }), 'sender=sender%2Balerts%40example.com', [account])).toBe(false);
+    expect(messageMatchesQuery(matching, 'sender=sender%2Balerts%40example.com&recipient=other%40icloud.com', [account])).toBe(false);
+  });
+
   it('appends a cursor page after live mail insertion without duplicating the boundary', () => {
     const first = message({ id: 'message-3', date: '2026-07-30T03:00:00.000Z' });
     const boundary = message({ id: 'message-2', date: '2026-07-30T02:00:00.000Z' });

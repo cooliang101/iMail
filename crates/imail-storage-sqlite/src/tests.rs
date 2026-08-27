@@ -296,6 +296,110 @@ fn translation_cache_is_user_scoped_and_requires_message_ownership() {
 }
 
 #[test]
+fn message_queries_filter_exact_participant_addresses_without_a_schema_change() {
+    let fixture = Fixture::new(10);
+    let mut store = SqliteAuthStore::open_database(fixture.root.join("imail.sqlite")).unwrap();
+    let base =
+        |id: &str, uid: i64, from: serde_json::Value, to: serde_json::Value| MessageReadModel {
+            id: id.into(),
+            account_id: "a-first".into(),
+            mailbox: "INBOX".into(),
+            mailbox_role: "inbox".into(),
+            uid,
+            message_id: None,
+            from,
+            to,
+            subject: "Participant query fixture".into(),
+            preview: "No participant address in searchable text".into(),
+            text: "Body".into(),
+            html: None,
+            date: format!("2026-03-0{uid}T00:00:00Z"),
+            unread: true,
+            flagged: false,
+            has_attachments: false,
+            attachments: json!([]),
+            labels: json!([]),
+            snoozed_until: None,
+        };
+    store
+        .upsert_message(
+            "user-1",
+            &base(
+                "participant-object",
+                2,
+                json!({"name":"Wayne","address":"Sender+Alerts@Example.com"}),
+                json!([{"name":"Alias","address":"Private-Alias@iCloud.com"}]),
+            ),
+        )
+        .unwrap();
+    store
+        .upsert_message(
+            "user-1",
+            &base(
+                "participant-string",
+                3,
+                json!("string-sender@example.com"),
+                json!(["private-alias@icloud.com"]),
+            ),
+        )
+        .unwrap();
+
+    let sender = store
+        .query_messages(
+            "user-1",
+            &MessageQuery {
+                sender: Some("sender+alerts@example.com".into()),
+                mailbox_role: Some("inbox".into()),
+                limit: 60,
+                ..Default::default()
+            },
+            "2026-08-27T00:00:00Z",
+        )
+        .unwrap();
+    assert_eq!(sender.messages.len(), 1);
+    assert_eq!(sender.messages[0].id, "participant-object");
+
+    let recipient = store
+        .query_messages(
+            "user-1",
+            &MessageQuery {
+                recipient: Some("PRIVATE-ALIAS@ICLOUD.COM".into()),
+                mailbox_role: Some("inbox".into()),
+                limit: 60,
+                ..Default::default()
+            },
+            "2026-08-27T00:00:00Z",
+        )
+        .unwrap();
+    assert_eq!(recipient.messages.len(), 2);
+
+    let combined = store
+        .query_messages(
+            "user-1",
+            &MessageQuery {
+                sender: Some("string-sender@example.com".into()),
+                recipient: Some("private-alias@icloud.com".into()),
+                mailbox_role: Some("inbox".into()),
+                limit: 60,
+                ..Default::default()
+            },
+            "2026-08-27T00:00:00Z",
+        )
+        .unwrap();
+    assert_eq!(combined.messages.len(), 1);
+    assert_eq!(combined.messages[0].id, "participant-string");
+    drop(store);
+    assert_eq!(
+        SqliteReadOnlyStore::open_data_dir(&fixture.root)
+            .unwrap()
+            .inventory()
+            .unwrap()
+            .schema_version,
+        10
+    );
+}
+
+#[test]
 fn edge_client_completion_revalidates_segments_and_persists_owned_results() {
     let fixture = Fixture::new(10);
     let database_path = fixture.root.join("imail.sqlite");

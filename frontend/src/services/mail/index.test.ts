@@ -37,6 +37,9 @@ describe('mail service client adapters', () => {
     expect(embeddedDomainCall('/api/messages?limit=60&offset=0&search=hello%20world')).toEqual({
       operation: 'messagesList', query: { limit: '60', offset: '0', search: 'hello world' },
     });
+    expect(embeddedDomainCall('/api/messages?sender=Sender%2BAlerts%40Example.com&recipient=alias%40icloud.com')).toEqual({
+      operation: 'messagesList', query: { sender: 'Sender+Alerts@Example.com', recipient: 'alias@icloud.com' },
+    });
     expect(embeddedDomainCall('/api/messages/id%20with%20space')).toEqual({ operation: 'messageDetail', messageId: 'id with space' });
     expect(embeddedDomainCall('/api/messages', { method: 'POST', body: '{}' })).toBeNull();
 
