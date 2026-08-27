@@ -106,7 +106,7 @@
 .reader-content h1 { font: 700 clamp(22px, 2.5vw, 31px)/1.25 var(--font-family-display); letter-spacing: -.045em; margin: 12px 0 17px; color: var(--color-text-strong); text-wrap: pretty; }
 .sender-line { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border); }
 .message-participants { position: relative; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 4px; }
-.sender-contact-trigger { min-width: 0; display: flex; align-items: center; gap: 9px; border: 0; border-radius: 11px; margin: -4px; padding: 4px 7px 4px 4px; background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background var(--duration-fast) var(--ease-standard); }
+.sender-contact-trigger { justify-self: start; width: fit-content; min-width: 0; max-width: min(100%, 34rem); display: flex; align-items: center; gap: 9px; border: 0; border-radius: 11px; margin: -4px; padding: 4px 7px 4px 4px; background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background var(--duration-fast) var(--ease-standard); }
 .sender-contact-trigger:hover, .sender-contact-trigger[aria-expanded='true'] { background: var(--color-surface-sunken); }
 .sender-contact-trigger:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .sender-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }.sender-copy strong, .sender-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.sender-copy strong { color: var(--color-text-strong); font-size: 12px; }.sender-copy small { color: var(--color-text-secondary); font-size: 10px; }

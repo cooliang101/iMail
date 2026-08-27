@@ -169,6 +169,7 @@ test('reader shows complete routing details and opens the sender contact card', 
     return {
       recipientTop: recipients.top,
       senderBottom: sender.bottom,
+      senderWidth: sender.width,
       contentWidth: content.width,
       readerWidth: reader.width,
       contentCenter: content.left + content.width / 2,
@@ -177,6 +178,7 @@ test('reader shows complete routing details and opens the sender contact card', 
     };
   });
   expect(layout.recipientTop).toBeGreaterThanOrEqual(layout.senderBottom - 2);
+  expect(layout.senderWidth).toBeLessThan(layout.contentWidth / 2);
   expect(layout.contentWidth).toBeGreaterThan(1000);
   expect(layout.contentWidth / layout.readerWidth).toBeGreaterThan(0.75);
   expect(Math.abs(layout.contentCenter - layout.bodyCenter)).toBeLessThanOrEqual(2);

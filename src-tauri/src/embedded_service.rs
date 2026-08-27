@@ -44,6 +44,7 @@ use tokio::sync::OnceCell;
 use tower::ServiceExt;
 
 const MAX_REQUEST_BYTES: usize = 25 * 1024 * 1024;
+const EXTERNAL_HTTP_PORT_FILE: &str = "external-http-port";
 
 fn desktop_oauth_environment() -> OAuthEnvironment {
     OAuthEnvironment {
@@ -834,12 +835,19 @@ impl EmbeddedMailServiceState {
             });
         }
 
-        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-            .await
-            .map_err(|error| format!("启动嵌入式 HTTP Adapter 失败：{error}"))?;
+        let data_dir = self
+            .data_dir
+            .lock()
+            .map_err(|_| "嵌入式服务状态锁已损坏")?
+            .clone()
+            .ok_or_else(|| "嵌入式服务尚未初始化".to_string())?;
+        let listener = bind_external_http_listener(&data_dir).await?;
         let address = listener
             .local_addr()
             .map_err(|error| format!("读取嵌入式 HTTP Adapter 地址失败：{error}"))?;
+        if let Err(error) = persist_external_http_port(&data_dir, address.port()) {
+            log::warn!(target: "desktop", "[embedded.http.port_persist_failed] {error}");
+        }
         let base_url = format!(
             "http://{}:{}",
             IpAddr::V4(Ipv4Addr::LOCALHOST),
@@ -2386,6 +2394,52 @@ impl EmbeddedMailServiceState {
     }
 }
 
+fn preferred_external_http_port(data_dir: &Path) -> Option<u16> {
+    let path = data_dir.join(EXTERNAL_HTTP_PORT_FILE);
+    let value = fs::read_to_string(&path).ok()?;
+    match value.trim().parse::<u16>().ok().filter(|port| *port != 0) {
+        Some(port) => Some(port),
+        None => {
+            log::warn!(target: "desktop", "[embedded.http.port_invalid] path={}", path.display());
+            None
+        }
+    }
+}
+
+async fn bind_external_http_listener(data_dir: &Path) -> Result<tokio::net::TcpListener, String> {
+    if let Some(port) = preferred_external_http_port(data_dir) {
+        match tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await {
+            Ok(listener) => {
+                log::info!(target: "desktop", "[embedded.http.port_reused] port={port}");
+                return Ok(listener);
+            }
+            Err(error) => {
+                log::warn!(target: "desktop", "[embedded.http.port_unavailable] port={port} error={error}");
+            }
+        }
+    }
+    tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .await
+        .map_err(|error| format!("启动嵌入式 HTTP Adapter 失败：{error}"))
+}
+
+fn persist_external_http_port(data_dir: &Path, port: u16) -> Result<(), String> {
+    let path = data_dir.join(EXTERNAL_HTTP_PORT_FILE);
+    let temporary = data_dir.join(format!(
+        "{EXTERNAL_HTTP_PORT_FILE}.tmp-{}",
+        std::process::id()
+    ));
+    fs::write(&temporary, port.to_string())
+        .map_err(|error| format!("写入嵌入式 HTTP Adapter 端口失败：{error}"))?;
+    #[cfg(windows)]
+    if path.exists() {
+        fs::remove_file(&path)
+            .map_err(|error| format!("更新嵌入式 HTTP Adapter 端口失败：{error}"))?;
+    }
+    fs::rename(&temporary, &path)
+        .map_err(|error| format!("更新嵌入式 HTTP Adapter 端口失败：{error}"))
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmbeddedHttpEndpoint {
@@ -2673,6 +2727,7 @@ async fn ensure_runtime_allowed(
 mod tests {
     use super::*;
     use imail_core::{AccountRecord, AccountRepository};
+    use imail_protocol::CURRENT_SCHEMA_VERSION;
     use imail_storage_sqlite::AppleHmeAddressRecord;
     use rusqlite::Connection;
     use sha2::{Digest, Sha256};
@@ -2811,7 +2866,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(schema_version, "8");
+        assert_eq!(schema_version, CURRENT_SCHEMA_VERSION.to_string());
         assert_eq!(marker, "preserved");
         assert!(hme_table_exists);
 
@@ -2821,7 +2876,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn starts_one_loopback_http_adapter_for_mcp_and_gateway() {
+    async fn starts_one_loopback_http_adapter_for_mcp_and_gateway_and_reuses_its_port() {
         let root = std::env::temp_dir().join(format!(
             "imail-tauri-external-http-{}",
             uuid::Uuid::new_v4()
@@ -2834,6 +2889,17 @@ mod tests {
         assert_eq!(first.base_url, second.base_url);
         assert!(first.base_url.starts_with("http://127.0.0.1:"));
         assert!(!first.base_url.ends_with(":8787"));
+        let first_port = first
+            .base_url
+            .rsplit_once(':')
+            .unwrap()
+            .1
+            .parse::<u16>()
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("data").join(EXTERNAL_HTTP_PORT_FILE)).unwrap(),
+            first_port.to_string()
+        );
 
         let response = reqwest::get(format!("{}/api/system/info", first.base_url))
             .await
@@ -2853,6 +2919,50 @@ mod tests {
         assert_eq!(mcp.status(), reqwest::StatusCode::METHOD_NOT_ALLOWED);
 
         state.shutdown().unwrap();
+        tokio::task::yield_now().await;
+
+        let restarted = EmbeddedMailServiceState::default();
+        restarted.initialize(root.join("data")).await.unwrap();
+        let after_restart = restarted.start_external_http().await.unwrap();
+        assert_eq!(after_restart.base_url, first.base_url);
+        restarted.shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn replaces_a_persisted_external_http_port_when_it_is_unavailable() {
+        let root = std::env::temp_dir().join(format!(
+            "imail-tauri-external-http-fallback-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let data_dir = root.join("data");
+        prepare_empty_data_dir(&data_dir).unwrap();
+        let occupied = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let occupied_port = occupied.local_addr().unwrap().port();
+        fs::write(
+            data_dir.join(EXTERNAL_HTTP_PORT_FILE),
+            occupied_port.to_string(),
+        )
+        .unwrap();
+
+        let state = EmbeddedMailServiceState::default();
+        state.initialize(data_dir.clone()).await.unwrap();
+        let endpoint = state.start_external_http().await.unwrap();
+        let replacement_port = endpoint
+            .base_url
+            .rsplit_once(':')
+            .unwrap()
+            .1
+            .parse::<u16>()
+            .unwrap();
+        assert_ne!(replacement_port, occupied_port);
+        assert_eq!(
+            fs::read_to_string(data_dir.join(EXTERNAL_HTTP_PORT_FILE)).unwrap(),
+            replacement_port.to_string()
+        );
+
+        state.shutdown().unwrap();
+        drop(occupied);
         let _ = std::fs::remove_dir_all(root);
     }
 

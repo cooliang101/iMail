@@ -10,6 +10,8 @@ iMail 的 Rust 领域服务独立拥有邮箱凭据、SQLite、同步任务、We
 
 本地模式没有端口、暂停或移除守护程序的控制面。卸载默认保留应用数据；删除邮箱数据只能从“隐私与数据”执行。`127.0.0.1:8787` 只用于本机 HTTP 开发服务，不属于桌面本地模式。
 
+桌面本地模式只在需要 Gateway 或 MCP 外部接入时启动回环 HTTP Adapter。首次由操作系统分配可用端口，成功端口记录在会随升级和默认卸载保留的本地服务数据目录。后续进程优先重新绑定该端口，只有端口已被占用时才回退到新的系统分配端口并更新记录。该端口同时服务 Gateway 与 MCP，不为两个控制面分别监听。
+
 Windows 桌面 OAuth 使用系统浏览器、authorization code + PKCE 和单次临时 `localhost` callback listener；端口由操作系统动态分配，该 listener 不承载业务 API。远程服务通过同一 OAuth 引擎显式配置 HTTPS `OAUTH_CALLBACK_BASE_URL` 与 Web Client 凭据。
 
 远程服务发布单元同时托管 Web 客户端，浏览器默认同源访问 API；需要跨源部署时才使用 `CORS_ORIGIN`。桌面 WebView 始终加载安装包内的前端资源。`http-service/` 只负责独立进程启动和部署，通用 Web API/MCP/Gateway 实现仍由 `crates/imail-http/` 提供。当前部署边界见[部署模式](deployment-modes.md)。
