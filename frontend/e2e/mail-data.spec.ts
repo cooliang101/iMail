@@ -11,7 +11,9 @@ function fixtureMessage(index: number) {
   return {
     id, accountId: account.id, mailbox: 'INBOX', mailboxRole: 'inbox',
     from: { name: `Fixture Sender ${index}`, address: `sender${index}@example.test`, logo: { url: '' } },
-    to: [{ name: 'Owner', address: account.email }], subject: `Fixture subject ${index}`, preview: `Fixture preview ${index}`,
+    to: index === 1
+      ? [{ name: 'Owner', address: account.email }, { name: 'Project Archive', address: 'archive@example.test' }]
+      : [{ name: 'Owner', address: account.email }], subject: `Fixture subject ${index}`, preview: `Fixture preview ${index}`,
     date: new Date(Date.UTC(2026, 7, 13, 12, 0, 70 - index)).toISOString(), unread: index === 2 || index === 3, flagged: false,
     hasAttachments: index === 1, attachments: index === 1 ? [{ filename: 'fixture.txt', contentType: 'text/plain', size: 18, index: 0 }] : [],
     labels: index === 1 ? ['重要'] : [],
@@ -62,7 +64,10 @@ async function installMailFixture(page: Page) {
       state.drafts = [draft]; return json(route, { draft });
     }
     if (path === '/api/labels') return json(route, { labels: ['重要', '待办'] });
-    if (path === '/api/contacts') return json(route, { contacts: [{ address: 'recipient@example.test', name: 'Recipient', messageCount: 3, lastContactAt: '2026-08-12T00:00:00Z', logo: { url: '' } }] });
+    if (path === '/api/contacts') return json(route, { contacts: [
+      { address: 'sender1@example.test', name: 'Wayne Fixture', messageCount: 18, lastContactAt: '2026-08-12T00:00:00Z', logo: { url: '' } },
+      { address: 'recipient@example.test', name: 'Recipient', messageCount: 3, lastContactAt: '2026-08-12T00:00:00Z', logo: { url: '' } },
+    ] });
     if (path === '/api/messages' && method === 'GET') {
       state.messagePageCalls += 1;
       const cursor = url.searchParams.get('cursor');
@@ -144,6 +149,23 @@ test('narrow desktop keeps the reader inside the viewport', async ({ page }) => 
   expect(geometry.layoutRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
   expect(geometry.contentLeft).toBeGreaterThanOrEqual(0);
   expect(geometry.contentRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+});
+
+test('reader shows complete routing details and opens the sender contact card', async ({ page }) => {
+  await installMailFixture(page);
+  const senderTrigger = page.locator('.sender-contact-trigger');
+  await expect(senderTrigger).toContainText('Wayne Fixture');
+  await expect(senderTrigger).toContainText('sender1@example.test');
+  await expect(page.locator('.recipient-line')).toContainText('Owner <owner@example.test>');
+  await expect(page.locator('.recipient-line')).toContainText('Project Archive <archive@example.test>');
+  await expect(page.locator('.mail-body')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+
+  await senderTrigger.click();
+  const card = page.getByRole('dialog', { name: 'Wayne Fixture 的联系人名片' });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('18 封往来邮件');
+  await expect(card.getByRole('button', { name: '复制邮箱' })).toBeVisible();
+  await expect(card.getByRole('button', { name: '写邮件' })).toBeVisible();
 });
 
 test('mail notices and external access keep their layout before compose is opened', async ({ page }) => {
