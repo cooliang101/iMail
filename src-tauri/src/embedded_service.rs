@@ -261,6 +261,12 @@ pub enum EmbeddedDomainCall {
         #[serde(rename = "profileId")]
         profile_id: String,
     },
+    TranslationPrepare {
+        #[serde(rename = "messageId")]
+        message_id: String,
+        input: serde_json::Value,
+    },
+    TranslationCacheClear,
     DeveloperTokensList,
     DeveloperTokenCreate {
         input: serde_json::Value,
@@ -558,6 +564,15 @@ impl EmbeddedDomainCall {
                 "DELETE",
                 None,
             ),
+            Self::TranslationPrepare { message_id, input } => json_request(
+                format!(
+                    "/api/messages/{}/translations/prepare",
+                    path_segment(&message_id)
+                ),
+                "POST",
+                input,
+            ),
+            Self::TranslationCacheClear => ("/api/translation-cache".into(), "DELETE", None),
             Self::DeveloperTokensList => ("/api/developer-tokens".into(), "GET", None),
             Self::DeveloperTokenCreate { input } => {
                 json_request("/api/developer-tokens", "POST", input)
@@ -1710,10 +1725,39 @@ impl EmbeddedMailServiceState {
             | EmbeddedDomainCall::TranslationCredentialUpdate { .. }
             | EmbeddedDomainCall::TranslationCredentialClear { .. }
             | EmbeddedDomainCall::TranslationConsentAccept { .. }
-            | EmbeddedDomainCall::TranslationConsentRevoke { .. } => {
+            | EmbeddedDomainCall::TranslationConsentRevoke { .. }
+            | EmbeddedDomainCall::TranslationPrepare { .. }
+            | EmbeddedDomainCall::TranslationCacheClear => {
                 let Some(user_id) = self.current_user_id()? else {
                     return Ok(Some(unauthorized_response()));
                 };
+                if matches!(
+                    call,
+                    EmbeddedDomainCall::TranslationPrepare { .. }
+                        | EmbeddedDomainCall::TranslationCacheClear
+                ) {
+                    use imail_http::translations::{
+                        embedded_call, TranslationApplicationCall as Call,
+                    };
+                    let application_call = match call {
+                        EmbeddedDomainCall::TranslationPrepare { message_id, input } => {
+                            let Ok(input) = serde_json::from_value(input.clone()) else {
+                                return Ok(Some(json_response(
+                                    400,
+                                    serde_json::json!({"error":"请求参数无效"}),
+                                )));
+                            };
+                            Call::Prepare {
+                                message_id: message_id.clone(),
+                                input,
+                            }
+                        }
+                        EmbeddedDomainCall::TranslationCacheClear => Call::ClearCache,
+                        _ => unreachable!(),
+                    };
+                    let response = embedded_call(data_dir, user_id, application_call).await;
+                    return Ok(Some(json_response(response.status, response.body)));
+                }
                 use imail_http::translation_settings::TranslationSettingsApplicationCall as Call;
                 let application_call = match call {
                     EmbeddedDomainCall::TranslationSettingsGet => Call::Read,

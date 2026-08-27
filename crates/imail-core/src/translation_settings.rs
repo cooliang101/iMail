@@ -15,6 +15,14 @@ const PREFERENCES_KEY: &str = "translation_preferences_v1";
 const ENVIRONMENT_KEY: &str = "translation_environment_v1";
 const MAX_SECRET_BYTES: usize = 128 * 1024;
 
+pub(crate) fn translation_preferences<R: AccountRepository>(
+    repository: &R,
+    user_id: &str,
+) -> Result<TranslationPreferences, ApplicationError<R::Error>> {
+    Ok(read_metadata(repository, user_id, PREFERENCES_KEY)?
+        .unwrap_or_else(TranslationPreferences::default))
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error("翻译凭据加密或解密失败")]
 pub struct TranslationCredentialCodecError;
@@ -44,8 +52,7 @@ impl<'a, R: TranslationProviderRepository> TranslationSettingsService<'a, R> {
         &self,
         user_id: &str,
     ) -> Result<TranslationSettingsView, ApplicationError<R::Error>> {
-        let preferences = read_metadata(self.repository, user_id, PREFERENCES_KEY)?
-            .unwrap_or_else(TranslationPreferences::default);
+        let preferences = translation_preferences(self.repository, user_id)?;
         let mut environment = read_metadata(self.repository, user_id, ENVIRONMENT_KEY)?
             .unwrap_or_else(TranslationEnvironmentPreferences::default);
         let records = self
@@ -319,6 +326,7 @@ pub fn provider_registry() -> Vec<TranslationProviderDescriptor> {
             credential_kinds: Vec::new(),
             sends_content_off_device: false,
             experimental: false,
+            provider_revision: "edge-local-v1".into(),
             disclosure_revision: "edge-local-v1".into(),
         },
         TranslationProviderDescriptor {
@@ -331,6 +339,7 @@ pub fn provider_registry() -> Vec<TranslationProviderDescriptor> {
             credential_kinds: vec![TranslationCredentialKind::DeepLApiKey],
             sends_content_off_device: true,
             experimental: false,
+            provider_revision: "deepl-v1".into(),
             disclosure_revision: "deepl-cloud-v1".into(),
         },
         TranslationProviderDescriptor {
@@ -346,6 +355,7 @@ pub fn provider_registry() -> Vec<TranslationProviderDescriptor> {
             ],
             sends_content_off_device: true,
             experimental: false,
+            provider_revision: "google-cloud-v1".into(),
             disclosure_revision: "google-cloud-v1".into(),
         },
         TranslationProviderDescriptor {
@@ -358,6 +368,7 @@ pub fn provider_registry() -> Vec<TranslationProviderDescriptor> {
             credential_kinds: vec![TranslationCredentialKind::AzureApiKey],
             sends_content_off_device: true,
             experimental: false,
+            provider_revision: "azure-translator-v1".into(),
             disclosure_revision: "azure-translator-v1".into(),
         },
         TranslationProviderDescriptor {
@@ -370,19 +381,20 @@ pub fn provider_registry() -> Vec<TranslationProviderDescriptor> {
             credential_kinds: Vec::new(),
             sends_content_off_device: true,
             experimental: true,
+            provider_revision: "bing-web-experimental-v1".into(),
             disclosure_revision: "bing-web-experimental-v1".into(),
         },
     ]
 }
 
-fn descriptor(kind: TranslationProviderKind) -> TranslationProviderDescriptor {
+pub(crate) fn descriptor(kind: TranslationProviderKind) -> TranslationProviderDescriptor {
     provider_registry()
         .into_iter()
         .find(|provider| provider.kind == kind)
         .expect("every provider kind has a descriptor")
 }
 
-fn profile_view(record: TranslationProviderRecord) -> TranslationProviderProfileView {
+pub(crate) fn profile_view(record: TranslationProviderRecord) -> TranslationProviderProfileView {
     let status = profile_status(&record);
     TranslationProviderProfileView {
         profile: record.profile,

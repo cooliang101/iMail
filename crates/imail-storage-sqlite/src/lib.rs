@@ -29,6 +29,7 @@ mod export_encryption;
 mod migration;
 mod privacy_data;
 mod sync_runtime;
+mod translation_cache;
 mod translation_providers;
 pub use apple_hme_addresses::{AppleHmeAddressRecord, AppleHmeAddressSnapshot};
 pub use apple_hme_sessions::AppleHmeSessionRecord;

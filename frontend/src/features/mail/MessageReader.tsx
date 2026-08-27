@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'preact/compat';
-import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowLeft, ArrowRight, Clock, Code, Envelope, Eye, Star, Tag, Trash } from '../../components/icons';
+import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowLeft, ArrowRight, Clock, Code, Envelope, Eye, Globe, Star, Tag, Trash } from '../../components/icons';
 import type { Account, Message } from '../../types';
 import type { MessageBodyView } from '../../app-model';
 import { AccountProviderMark, providerLabel, SenderAvatar } from '../../components/shared';
 import { emailPlainText, MessageBody } from './MessageBody';
 import { findVerificationCode } from './verification-code';
 import { VerificationCodeBanner } from './VerificationCodeBanner';
+import { TranslationReaderControl } from '../translation';
 
 const AttachmentList = lazy(() => import('../attachments/AttachmentList').then((module) => ({ default: module.AttachmentList })));
 
@@ -13,7 +14,8 @@ export function MessageReader({ message, account, defaultBodyView, onReply, onFo
   message?: Message; account?: Account; defaultBodyView: MessageBodyView; onReply: () => void; onForward: () => void; onCloseMobile: () => void; onToggleFlag: () => void; onArchive: () => void; onDelete: () => void; onSnooze: () => void; onManageLabels: () => void; onMarkUnread: () => void; onPrevious: () => void; onNext: () => void; onContextMenu?: (message: Message, point: { x: number; y: number }) => void; hasPrevious: boolean; hasNext: boolean; actionBusy: boolean;
 }) {
   const [bodyView, setBodyView] = useState<MessageBodyView>(defaultBodyView);
-  useEffect(() => setBodyView(defaultBodyView), [defaultBodyView, message?.id]);
+  const [translationOpen, setTranslationOpen] = useState(false);
+  useEffect(() => { setBodyView(defaultBodyView); setTranslationOpen(false); }, [defaultBodyView, message?.id]);
 
   if (!message || !account) return <section className="reader empty-reader"><Envelope size={54} weight="duotone" /><h2>选择一封邮件开始阅读</h2><p>来自所有账户的邮件都会汇总在这里。</p></section>;
   const verificationCode = findVerificationCode([message.subject, message.preview, message.text === undefined ? '' : emailPlainText(message.text, message.html)].join('\n'));
@@ -27,8 +29,9 @@ export function MessageReader({ message, account, defaultBodyView, onReply, onFo
       <h1>{message.subject}</h1>{message.labels.length > 0 && <div className="reader-labels">{message.labels.map((label) => <span key={label}><Tag size={12} />{label}</span>)}</div>}
       <div className="sender-line"><SenderAvatar logo={message.from.logo} name={message.from.name || message.from.address} color={account.color} large /><span className="sender-copy"><strong>{message.from.name || message.from.address}</strong><small>{message.from.address} 发给 {message.to[0]?.address || account.email}</small></span><time>{new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(message.date))}</time><button data-icon-tone="warning" title={message.flagged ? '取消星标' : '添加星标'} aria-label={message.flagged ? '取消星标' : '添加星标'} onClick={onToggleFlag}><Star size={18} weight={message.flagged ? 'fill' : 'regular'} /></button><button data-icon-tone="primary" title="回复" aria-label="回复邮件" onClick={onReply}><ArrowBendUpLeft size={18} /></button><button data-icon-tone="info" title="转发" aria-label="转发邮件" onClick={onForward}><ArrowBendUpRight size={18} /></button><button data-icon-tone="neutral" title={message.unread ? '邮件已是未读' : '标记未读'} aria-label={message.unread ? '邮件已是未读' : '标记邮件为未读'} disabled={message.unread || actionBusy} onClick={onMarkUnread}><Envelope size={18} /></button></div>
       {verificationCode && <VerificationCodeBanner code={verificationCode} />}
+      {translationOpen && <TranslationReaderControl messageId={message.id} onClose={() => setTranslationOpen(false)} />}
       <div className={`mail-body ${message.text === undefined ? 'mail-body-loading' : ''}`}>
-        {message.html && <div className="mail-body-view-action"><button type="button" title={bodyView === 'source' ? '切换到渲染效果' : '切换到原始内容'} aria-label={bodyView === 'source' ? '切换到渲染效果' : '切换到原始内容'} onClick={() => setBodyView((current) => current === 'source' ? 'rendered' : 'source')}>{bodyView === 'source' ? <><Eye size={16} /><span>渲染效果</span></> : <><Code size={16} /><span>原始内容</span></>}</button></div>}
+        {message.text !== undefined && <div className="mail-body-view-action"><button type="button" title="翻译邮件" aria-label="翻译邮件" aria-pressed={translationOpen} onClick={() => setTranslationOpen((current) => !current)}><Globe size={16} /><span>翻译</span></button>{message.html && <button type="button" title={bodyView === 'source' ? '切换到渲染效果' : '切换到原始内容'} aria-label={bodyView === 'source' ? '切换到渲染效果' : '切换到原始内容'} onClick={() => setBodyView((current) => current === 'source' ? 'rendered' : 'source')}>{bodyView === 'source' ? <><Eye size={16} /><span>渲染效果</span></> : <><Code size={16} /><span>原始内容</span></>}</button>}</div>}
         {message.text === undefined
           ? <p>正在从本地缓存加载正文…</p>
           : <MessageBody text={message.text} html={message.html} subject={message.subject} view={bodyView} />}

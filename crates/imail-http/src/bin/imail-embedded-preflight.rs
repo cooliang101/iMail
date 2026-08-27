@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(report["noHttpListener"], true);
         assert_eq!(report["syncWorker"], false);
         assert_eq!(report["protectedFilesUnchanged"], true);
-        assert_eq!(report["inventory"]["schemaVersion"], 9);
+        assert_eq!(report["inventory"]["schemaVersion"], 10);
     }
 
     #[test]

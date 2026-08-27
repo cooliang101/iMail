@@ -17,6 +17,7 @@ export type TranslationProviderDescriptor = {
   credentialKinds: TranslationCredentialKind[];
   sendsContentOffDevice: boolean;
   experimental: boolean;
+  providerRevision: string;
   disclosureRevision: string;
 };
 
@@ -51,4 +52,36 @@ export type TranslationProviderProfileInput = {
   executionTarget: TranslationExecutionTarget;
   provider: TranslationProviderConfiguration;
   enabled: boolean;
+};
+
+export type TranslationSegment = { id: string; kind: 'paragraph' | 'list-item'; text: string };
+export type TranslatedSegment = { id: string; text: string };
+export type TranslationDocument = {
+  messageId: string;
+  bodyHash: string;
+  segmentVersion: number;
+  omittedQuotedText: boolean;
+  segments: TranslationSegment[];
+};
+export type TranslationArtifact = {
+  key: {
+    userId: string;
+    messageId: string;
+    bodyHash: string;
+    sourceLanguage?: string | null;
+    targetLanguage: string;
+    profileId: string;
+    providerRevision: string;
+    segmentVersion: number;
+  };
+  segments: TranslatedSegment[];
+  createdAt: string;
+  updatedAt: string;
+};
+export type TranslationPreparation = {
+  document: TranslationDocument;
+  profile: TranslationProviderProfileView;
+  providerRevision: string;
+  cacheKey: TranslationArtifact['key'];
+  cached?: TranslationArtifact | null;
 };

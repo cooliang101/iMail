@@ -56,6 +56,8 @@ export type EmbeddedDomainCall =
   | { operation: 'translationCredentialClear'; profileId: string }
   | { operation: 'translationConsentAccept'; profileId: string }
   | { operation: 'translationConsentRevoke'; profileId: string }
+  | { operation: 'translationPrepare'; messageId: string; input: Record<string, unknown> }
+  | { operation: 'translationCacheClear' }
   | { operation: 'developerTokensList' }
   | { operation: 'developerTokenCreate'; input: Record<string, unknown> }
   | { operation: 'developerTokenDelete'; tokenId: string }
@@ -176,6 +178,9 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   const translationConsent = url.pathname.match(/^\/api\/translation-profiles\/([^/]+)\/consent$/);
   if (translationConsent && method === 'POST' && options.body === undefined) return { operation: 'translationConsentAccept', profileId: decodeURIComponent(translationConsent[1]) };
   if (translationConsent && method === 'DELETE' && options.body === undefined) return { operation: 'translationConsentRevoke', profileId: decodeURIComponent(translationConsent[1]) };
+  const translationPrepare = url.pathname.match(/^\/api\/messages\/([^/]+)\/translations\/prepare$/);
+  if (translationPrepare && method === 'POST' && body) return { operation: 'translationPrepare', messageId: decodeURIComponent(translationPrepare[1]), input: body };
+  if (method === 'DELETE' && options.body === undefined && url.pathname === '/api/translation-cache') return { operation: 'translationCacheClear' };
   if (method === 'POST' && url.pathname === '/api/developer-tokens' && body) return { operation: 'developerTokenCreate', input: body };
   const token = url.pathname.match(/^\/api\/developer-tokens\/([^/]+)$/);
   if (token && method === 'DELETE' && options.body === undefined) return { operation: 'developerTokenDelete', tokenId: decodeURIComponent(token[1]) };

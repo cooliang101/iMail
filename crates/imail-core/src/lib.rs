@@ -25,6 +25,7 @@ pub mod sync_execution;
 pub mod sync_runtime;
 pub mod theme;
 pub mod translation_settings;
+pub mod translations;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError<E: Error + Send + Sync + 'static> {
@@ -139,6 +140,20 @@ pub trait TranslationProviderRepository: AccountRepository {
         user_id: &str,
         profile_id: &str,
     ) -> Result<bool, Self::Error>;
+}
+
+pub trait TranslationCacheRepository {
+    type Error: Error + Send + Sync + 'static;
+
+    fn translation_artifact(
+        &self,
+        key: &imail_protocol::TranslationCacheKey,
+    ) -> Result<Option<imail_protocol::TranslationArtifact>, Self::Error>;
+    fn upsert_translation_artifact(
+        &mut self,
+        artifact: &imail_protocol::TranslationArtifact,
+    ) -> Result<(), Self::Error>;
+    fn clear_translation_artifacts(&mut self, user_id: &str) -> Result<u64, Self::Error>;
 }
 
 pub trait ReadOnlyRepository {

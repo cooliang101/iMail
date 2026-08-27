@@ -82,6 +82,19 @@ export function TranslationSettingsPanel({ setNotice }: { setNotice: (notice: No
     }
   }
 
+  async function clearTranslationCache() {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await translationSettingsApi.clearCache();
+      setNotice({ kind: 'success', text: result.cleared > 0 ? `已清除 ${result.cleared} 条译文缓存` : '当前没有译文缓存' });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '清除译文缓存失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!settings) return <section className="settings-feature-panel"><SettingsPanelHeading title="邮件翻译" /><div className="settings-panel-body"><p className={error ? 'translation-settings-error' : 'settings-note'}>{error || '正在读取翻译设置…'}</p></div></section>;
   if (editor) return <ProviderEditor settings={settings} editor={editor} busy={busy} error={error} onBack={() => { setEditor(undefined); setError(''); }} onSettings={setSettings} onBusy={setBusy} onError={setError} setNotice={setNotice} />;
 
@@ -97,6 +110,7 @@ export function TranslationSettingsPanel({ setNotice }: { setNotice: (notice: No
         <div className="settings-row"><span><strong>默认目标语言</strong></span><AppSelect value={settings.preferences.defaultTargetLanguage ?? ''} disabled={busy} options={targetLanguages} onValueChange={(defaultTargetLanguage) => void updatePreferences({ ...settings, preferences: { ...settings.preferences, defaultTargetLanguage: defaultTargetLanguage || undefined } })} /></div>
         <div className="settings-row"><span><strong>自动翻译外语邮件</strong></span><AppSwitch aria-label="自动翻译外语邮件" checked={settings.preferences.autoTranslate} disabled={busy} onChange={(_, data) => void updatePreferences({ ...settings, preferences: { ...settings.preferences, autoTranslate: data.checked } })} /></div>
         <div className="settings-row"><span><strong>缓存译文</strong></span><AppSwitch aria-label="缓存译文" checked={settings.preferences.cacheTranslations} disabled={busy} onChange={(_, data) => void updatePreferences({ ...settings, preferences: { ...settings.preferences, cacheTranslations: data.checked } })} /></div>
+        <div className="settings-row"><span><strong>清除译文缓存</strong></span><AppButton appearance="secondary" disabled={busy} onClick={() => void clearTranslationCache()}>清除</AppButton></div>
       </section>
       <div className="translation-provider-heading"><strong>翻译服务</strong><small>凭据仅加密保存在当前服务</small></div>
       <div className="settings-link-list translation-provider-list">

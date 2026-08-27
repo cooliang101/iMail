@@ -153,6 +153,7 @@ pub struct TranslationProviderDescriptor {
     pub credential_kinds: Vec<TranslationCredentialKind>,
     pub sends_content_off_device: bool,
     pub experimental: bool,
+    pub provider_revision: String,
     pub disclosure_revision: String,
 }
 
@@ -198,6 +199,80 @@ pub struct TranslationProviderProfileInput {
 pub struct TranslationSettingsUpdate {
     pub preferences: TranslationPreferences,
     pub environment: TranslationEnvironmentPreferences,
+}
+
+pub const TRANSLATION_SEGMENT_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TranslationSegmentKind {
+    Paragraph,
+    ListItem,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationSegment {
+    pub id: String,
+    pub kind: TranslationSegmentKind,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationDocument {
+    pub message_id: String,
+    pub body_hash: String,
+    pub segment_version: u32,
+    pub omitted_quoted_text: bool,
+    pub segments: Vec<TranslationSegment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslatedSegment {
+    pub id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationCacheKey {
+    pub user_id: String,
+    pub message_id: String,
+    pub body_hash: String,
+    pub source_language: Option<String>,
+    pub target_language: String,
+    pub profile_id: String,
+    pub provider_revision: String,
+    pub segment_version: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationArtifact {
+    pub key: TranslationCacheKey,
+    pub segments: Vec<TranslatedSegment>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationPreparationRequest {
+    pub profile_id: String,
+    pub source_language: Option<String>,
+    pub target_language: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationPreparationView {
+    pub document: TranslationDocument,
+    pub profile: TranslationProviderProfileView,
+    pub provider_revision: String,
+    pub cache_key: TranslationCacheKey,
+    pub cached: Option<TranslationArtifact>,
 }
 
 #[cfg(test)]

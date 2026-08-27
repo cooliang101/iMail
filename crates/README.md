@@ -7,7 +7,7 @@
 - `imail-protocol`：稳定错误、数据库清单和共享协议模型。
 - `imail-core`：不依赖 HTTP、Tauri 或 MCP 的应用端口。
 - `imail-security`：AES-256-GCM、scrypt、Token SHA-256 和审计 HMAC。
-- `imail-storage-sqlite`：SQLite schema v9、迁移、备份、认证、内容与同步事务；拒绝未来 schema，不向公开模型返回加密凭据或 Token 哈希。
+- `imail-storage-sqlite`：SQLite schema v10、迁移、备份、认证、内容与同步事务；拒绝未来 schema，不向公开模型返回加密凭据或 Token 哈希。
 - `imail-mail`、`imail-mail-network`：邮件解析以及 IMAP/SMTP、TLS 与账户代理。
 - `imail-oauth`、`imail-oauth-http`：OAuth 协议与 HTTP callback 适配。
 - `imail-runtime`：持久同步 worker、scheduler 与 IDLE watcher。

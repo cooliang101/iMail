@@ -50,6 +50,8 @@ pub enum AuthStoreError {
     InvalidContentData,
     #[error("翻译服务配置属于其他用户")]
     TranslationProfileOwnershipViolation,
+    #[error("译文缓存不属于当前用户或对应邮件")]
+    TranslationCacheOwnershipViolation,
     #[error("安全审计查询无效")]
     InvalidAuditQuery,
     #[error(transparent)]

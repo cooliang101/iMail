@@ -38,6 +38,10 @@ impl PrivacyRepository for SqliteAuthStore {
             "DELETE FROM translation_provider_profiles WHERE user_id=?1",
             [user_id],
         )?;
+        transaction.execute(
+            "DELETE FROM message_translation_cache WHERE user_id=?1",
+            [user_id],
+        )?;
         for key in ["translation_preferences_v1", "translation_environment_v1"] {
             transaction.execute(
                 "DELETE FROM metadata WHERE key=?1",
