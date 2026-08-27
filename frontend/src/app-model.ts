@@ -13,6 +13,7 @@ export type MailParticipant = { name: string; address: string };
 export type ParticipantRole = 'sender' | 'recipient';
 export type ParticipantFilters = { sender: MailParticipant | null; recipient: MailParticipant | null };
 export type StartupView = 'inbox' | 'starred';
+export type AppLanguage = 'zh-CN' | 'en-US';
 export type AppThemeId = 'mint-fresh' | 'tech' | 'business-blue' | 'soft-neubrutalism' | 'constructivist-red' | 'custom';
 export type CustomThemeRadius = 'compact' | 'balanced' | 'rounded';
 export type CustomThemeShadow = 'none' | 'soft' | 'offset';
@@ -36,6 +37,7 @@ export type CustomThemeDefinition = {
 export type NotificationKind = MailNotification['kind'];
 
 export type AppPreferences = {
+  language: AppLanguage;
   theme: AppThemeId;
   customTheme: CustomThemeDefinition;
   startupView: StartupView;

@@ -11,6 +11,7 @@ import { DesktopFrame } from './components/DesktopFrame';
 import { AppErrorBoundary } from './components/ErrorBoundary';
 import { desktopLog, installDesktopLogging } from './services';
 import { preventBrowserRefresh } from './features/shortcuts';
+import { I18nProvider } from './features/i18n';
 
 const TrayMenuApp = lazy(() => import('./features/tray-menu/TrayMenuApp').then((module) => ({ default: module.TrayMenuApp })));
 
@@ -27,7 +28,7 @@ root.render(trayMenu
   : <StrictMode>
       <DesktopFrame><AppErrorBoundary>
         <PlatformProvider>
-          <AppThemeProvider><AuthGate><App /></AuthGate></AppThemeProvider>
+          <I18nProvider><AppThemeProvider><AuthGate><App /></AuthGate></AppThemeProvider></I18nProvider>
         </PlatformProvider>
       </AppErrorBoundary></DesktopFrame>
     </StrictMode>);

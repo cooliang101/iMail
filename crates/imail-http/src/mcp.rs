@@ -1316,6 +1316,7 @@ fn tool_schema(name: &str) -> Value {
         "settings_update" => json!({"type":"object","properties":{
             "theme":{"type":"string","enum":["mint-fresh","tech","business-blue","soft-neubrutalism","constructivist-red","custom"]},
             "customTheme":custom_theme_schema(),
+            "language":{"type":"string","enum":["zh-CN","en-US"]},
             "startupView":{"type":"string","enum":["inbox","starred"]},"markReadOnOpen":{"type":"boolean"},
             "defaultMessageView":{"type":"string","enum":["source","rendered"]},
             "notificationKinds":{"type":"object","properties":{"unread":{"type":"boolean"},"snooze":{"type":"boolean"},"error":{"type":"boolean"}},"additionalProperties":false},

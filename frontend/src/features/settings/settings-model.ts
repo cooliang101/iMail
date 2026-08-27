@@ -1,12 +1,14 @@
 import type { AppPreferences } from '../../app-model';
 import { defaultCustomTheme, defaultThemeId, normalizeCustomTheme, normalizeThemeId } from '../appearance';
 import { defaultShortcutBindings } from '../shortcuts/shortcut-model';
+import { normalizeLanguage } from '../i18n';
 
 export const preferencesStorageKey = 'imail.preferences.v1';
 export function preferencesStorageKeyFor(userId: string) { return `${preferencesStorageKey}:${userId}`; }
 export type GatewayPreferences = AppPreferences;
 
 export const defaultAppPreferences: AppPreferences = {
+  language: 'zh-CN',
   theme: defaultThemeId,
   customTheme: { ...defaultCustomTheme },
   startupView: 'inbox',
@@ -20,6 +22,7 @@ export function loadAppPreferences(storage: Pick<Storage, 'getItem'> = localStor
   try {
     const saved = JSON.parse(storage.getItem(key) ?? '{}') as Partial<AppPreferences>;
     return {
+      language: normalizeLanguage(saved.language),
       theme: normalizeThemeId(saved.theme),
       customTheme: normalizeCustomTheme(saved.customTheme),
       startupView: saved.startupView === 'starred' ? 'starred' : 'inbox',

@@ -9,6 +9,7 @@ import {
   type GatewayPreferences,
 } from './settings-model';
 import { shortcutStorageKeyFor } from '../shortcuts';
+import { setAppLanguage } from '../i18n';
 
 export type PreferencesSyncIssue = {
   message: string;
@@ -23,7 +24,10 @@ export function useAppPreferences(userId: string, setNotice: Dispatch<SetStateAc
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const localEditRevision = useRef(0);
 
+  useEffect(() => { setAppLanguage(preferences.language); }, [preferences.language]);
+
   const persistLocal = useCallback((next: AppPreferences) => {
+    setAppLanguage(next.language);
     setPreferences(next);
     setShortcutBindings(next.shortcutBindings);
     try {

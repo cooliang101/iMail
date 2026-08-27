@@ -27,7 +27,7 @@ use imail_core::{
     TranslationProviderRepository,
 };
 use imail_protocol::{
-    AccountMetadataPatch, AccountProxyUpdate, AppPreferences, AppPreferencesPatch,
+    AccountMetadataPatch, AccountProxyUpdate, AppLanguage, AppPreferences, AppPreferencesPatch,
     ContactReadModel, CustomTheme, DraftInput, DraftReadModel, MailAuthorizationExportPayload,
     MessageReadModel, MessageView, NotificationKind, NotificationKindsPatch, ProxyProtocol,
     ShortcutBindingsPatch, ThemeId, TranslatedSegment, TranslationArtifact, TranslationCacheKey,
@@ -1188,6 +1188,7 @@ fn rust_preferences_service_matches_node_defaults_merging_and_validation() {
             .update(
                 &owner.id,
                 AppPreferencesPatch {
+                    language: Some(AppLanguage::EnUs),
                     theme: Some(ThemeId::Tech),
                     default_message_view: Some(MessageView::Rendered),
                     notification_kinds: Some(NotificationKindsPatch {
@@ -1202,6 +1203,7 @@ fn rust_preferences_service_matches_node_defaults_merging_and_validation() {
                 },
             )
             .unwrap();
+        assert_eq!(updated.language, AppLanguage::EnUs);
         assert_eq!(updated.theme, ThemeId::Tech);
         assert_eq!(updated.default_message_view, MessageView::Rendered);
         assert!(updated.notification_kinds.unread);

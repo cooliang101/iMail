@@ -18,17 +18,20 @@ import { useAuth } from './features/auth';
 import { useAppTheme } from './features/appearance';
 import { subscribeDesktopAccountSelection, subscribeDesktopCompose, updateDesktopTrayMenu } from './platform/desktop-events';
 import { useNewMailNotifications } from './features/notifications';
+import { useI18n } from './features/i18n';
 import { FeatureErrorBoundary, WorkspaceErrorBoundary } from './components/ErrorBoundary';
 import { AddAccountModal, AppContextMenu, ComposePane, CreateApiTokenModal, CreateMcpTokenModal, LabelModal, NotificationsModal, PreferencesSyncErrorDialog, preloadDeferredFeaturesDuringIdle, SettingsModal, SnoozeModal, WorkspaceModal } from './app/lazy-features';
 
 function FeatureFallback({ label, kind = 'overlay' }: { label: string; kind?: 'workspace' | 'pane' | 'overlay' }) {
-  return <div className={`feature-loading feature-loading-${kind}`} role="status">正在加载{label}…</div>;
+  const { t } = useI18n();
+  return <div className={`feature-loading feature-loading-${kind}`} role="status">{t('正在加载{label}…', { label: t(label) })}</div>;
 }
 
 type PendingMove = { message: Message; index: number; nextId: string | null; destination: 'archive' | 'trash'; unreadDelta: number };
 type AddAccountIntent = { initialProvider?: ProviderId; managedIcloud?: boolean; returnToSettings?: SettingsTab };
 
 function App() {
+  const { t } = useI18n();
   const { user, logout } = useAuth();
   const { setTheme } = useAppTheme();
   const [realAccounts, setRealAccounts] = useState<Account[]>([]);
@@ -391,11 +394,11 @@ function App() {
     return () => window.removeEventListener('keydown', onShortcut);
   });
 
-  const scopeTitle = activeMailbox?.name ?? (activeLabel ? `标签 · ${activeLabel}` : view === 'starred' ? '星标邮件' : view === 'sent' ? '已发送' : view === 'snoozed' ? '稍后处理' : view === 'archive' ? '归档' : view === 'trash' ? '已删除邮件' : view === 'junk' ? '垃圾邮件' : '统一收件箱');
+  const scopeTitle = activeMailbox?.name ?? (activeLabel ? t('标签 · {label}', { label: activeLabel }) : t(view === 'starred' ? '星标邮件' : view === 'sent' ? '已发送' : view === 'snoozed' ? '稍后处理' : view === 'archive' ? '归档' : view === 'trash' ? '已删除邮件' : view === 'junk' ? '垃圾邮件' : '统一收件箱'));
 
   return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     {notice && <div className={`toast toast-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'} aria-live={notice.kind === 'error' ? 'assertive' : 'polite'}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
-    {pendingMove && <div className="toast toast-success toast-action" role="status" aria-live="polite"><span>{pendingMove.destination === 'archive' ? '邮件即将归档' : '邮件即将移至垃圾箱'}</span><button type="button" onClick={undoPendingMove}><ArrowCounterClockwise size={15} />撤销</button></div>}
+    {pendingMove && <div className="toast toast-success toast-action" role="status" aria-live="polite"><span>{t(pendingMove.destination === 'archive' ? '邮件即将归档' : '邮件即将移至垃圾箱')}</span><button type="button" onClick={undoPendingMove}><ArrowCounterClockwise size={15} />{t('撤销')}</button></div>}
 
     <AppAccountRail user={user} accounts={accounts} accountFilter={accountFilter} onSelect={(accountId) => selectScope('inbox', accountId)} onAdd={() => setAddAccountIntent({})} onSettings={() => setSettingsTab('general')} onSwitchAccount={() => void logout()} onContextMenu={(event, accountId) => { event.preventDefault(); setContextTarget(accountId ? { kind: 'account', accountId, x: event.clientX, y: event.clientY } : { kind: 'background', x: event.clientX, y: event.clientY }); }} />
     <AppSidebar user={user} accounts={accounts} groups={groups} workspaceFolders={workspaceFolders} labels={labels} messageStats={messageStats} draftsCount={drafts.length} contactsCount={contacts.length} view={view} accountFilter={accountFilter} groupFilter={groupFilter} activeLabel={activeLabel} activeMailbox={activeMailbox} expandedWorkspaces={expandedWorkspaces} sidebarOpen={sidebarOpen}

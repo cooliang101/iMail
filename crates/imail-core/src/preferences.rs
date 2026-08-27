@@ -1,6 +1,6 @@
 use imail_protocol::{
-    AppPreferences, AppPreferencesPatch, MessageView, NotificationKinds, ShortcutBindings,
-    ShortcutBindingsPatch, StartupView, ThemeId,
+    AppLanguage, AppPreferences, AppPreferencesPatch, MessageView, NotificationKinds,
+    ShortcutBindings, ShortcutBindingsPatch, StartupView, ThemeId,
 };
 use serde::Deserialize;
 
@@ -55,6 +55,9 @@ impl<'a, R: AccountRepository> PreferencesService<'a, R> {
             ));
         }
         let mut next = self.read(user_id)?;
+        if let Some(value) = patch.language {
+            next.language = value;
+        }
         if let Some(value) = patch.theme {
             next.theme = value;
         }
@@ -95,6 +98,7 @@ impl<'a, R: AccountRepository> PreferencesService<'a, R> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredPreferences {
+    language: Option<AppLanguage>,
     theme: Option<ThemeId>,
     startup_view: Option<StartupView>,
     mark_read_on_open: Option<bool>,
@@ -113,6 +117,9 @@ fn parse_stored(raw: &str) -> Option<AppPreferences> {
         return None;
     }
     let mut preferences = AppPreferences::default();
+    if let Some(value) = stored.language {
+        preferences.language = value;
+    }
     if let Some(value) = stored.theme {
         preferences.theme = value;
     }
@@ -135,7 +142,8 @@ fn parse_stored(raw: &str) -> Option<AppPreferences> {
 }
 
 fn patch_is_empty(patch: &AppPreferencesPatch) -> bool {
-    patch.theme.is_none()
+    patch.language.is_none()
+        && patch.theme.is_none()
         && patch.custom_theme.is_none()
         && patch.startup_view.is_none()
         && patch.mark_read_on_open.is_none()

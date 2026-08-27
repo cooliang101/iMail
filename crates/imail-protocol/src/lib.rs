@@ -109,6 +109,7 @@ pub struct ShortcutBindings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
+    pub language: AppLanguage,
     pub theme: ThemeId,
     pub custom_theme: CustomTheme,
     pub startup_view: StartupView,
@@ -121,6 +122,7 @@ pub struct AppPreferences {
 impl Default for AppPreferences {
     fn default() -> Self {
         Self {
+            language: AppLanguage::ZhCn,
             theme: ThemeId::MintFresh,
             custom_theme: CustomTheme::default(),
             startup_view: StartupView::Inbox,
@@ -147,6 +149,14 @@ impl Default for AppPreferences {
             },
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AppLanguage {
+    #[serde(rename = "zh-CN")]
+    ZhCn,
+    #[serde(rename = "en-US")]
+    EnUs,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,6 +187,7 @@ pub struct ShortcutBindingsPatch {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferencesPatch {
+    pub language: Option<AppLanguage>,
     pub theme: Option<ThemeId>,
     pub custom_theme: Option<CustomTheme>,
     pub startup_view: Option<StartupView>,

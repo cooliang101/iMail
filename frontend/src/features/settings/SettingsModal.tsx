@@ -17,6 +17,7 @@ import { ServicePanel } from '../service';
 import { AppleHmeSettingsPanel } from './AppleHmeSettingsPanel';
 import { AboutPanel } from './AboutPanel';
 import { TranslationSettingsPanel } from '../translation';
+import { useI18n } from '../i18n';
 
 export type SettingsTab = 'general' | 'service' | 'appearance' | 'accounts' | 'apple-hme' | 'translation' | 'shortcuts' | 'notifications' | 'display' | 'privacy' | 'about';
 
@@ -47,16 +48,17 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
   onClose: () => void;
 }) {
   const [activeTab, setActiveTab] = useState(initialTab);
+  const { t } = useI18n();
   return <Overlay onClose={onClose} wide dialogClassName="settings-shell">
     <section className="settings-modal"><div className="settings-layout">
       <aside className="settings-sidebar">
-        <header className="settings-sidebar-header"><div><span>iMail 偏好设置</span><h1>设置</h1></div></header>
-        <nav className="settings-tabs" aria-label="设置分类">{tabs.map((tab) => { const Icon = tab.icon; return <button type="button" key={tab.id} className={activeTab === tab.id ? 'is-active' : ''} aria-current={activeTab === tab.id ? 'page' : undefined} onClick={() => setActiveTab(tab.id)}><Icon size={18} /><span><strong>{tab.label}</strong><small>{tab.detail}</small></span></button>; })}</nav>
+        <header className="settings-sidebar-header"><div><span>{t('iMail 偏好设置')}</span><h1>{t('设置')}</h1></div></header>
+        <nav className="settings-tabs" aria-label={t('设置分类')}>{tabs.map((tab) => { const Icon = tab.icon; return <button type="button" key={tab.id} className={activeTab === tab.id ? 'is-active' : ''} aria-current={activeTab === tab.id ? 'page' : undefined} onClick={() => setActiveTab(tab.id)}><Icon size={18} /><span><strong>{t(tab.label)}</strong><small>{t(tab.detail)}</small></span></button>; })}</nav>
       </aside>
       <main className={`settings-content ${activeTab === 'shortcuts' ? 'has-shortcut-reset' : ''}`}>
         <div className="settings-window-actions">
-          {activeTab === 'shortcuts' && <button className="settings-reset-shortcuts" type="button" aria-label="恢复默认快捷键" title="恢复默认快捷键" onClick={() => onBindingsChange({ ...defaultShortcutBindings })}><ArrowCounterClockwise size={20} /></button>}
-          <button className="settings-close" type="button" aria-label="关闭设置" title="关闭设置" onClick={onClose}><X size={21} /></button>
+          {activeTab === 'shortcuts' && <button className="settings-reset-shortcuts" type="button" aria-label={t('恢复默认快捷键')} title={t('恢复默认快捷键')} onClick={() => onBindingsChange({ ...defaultShortcutBindings })}><ArrowCounterClockwise size={20} /></button>}
+          <button className="settings-close" type="button" aria-label={t('关闭设置')} title={t('关闭设置')} onClick={onClose}><X size={21} /></button>
         </div>
         {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'service' && <ServicePanel />}

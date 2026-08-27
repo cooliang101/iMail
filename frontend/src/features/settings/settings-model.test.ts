@@ -6,6 +6,11 @@ describe('settings model', () => {
     expect(loadAppPreferences({ getItem: () => null })).toEqual(defaultAppPreferences);
   });
 
+  it('loads a supported interface language and rejects unknown locales', () => {
+    expect(loadAppPreferences({ getItem: () => JSON.stringify({ language: 'en-US' }) }).language).toBe('en-US');
+    expect(loadAppPreferences({ getItem: () => JSON.stringify({ language: 'fr-FR' }) }).language).toBe('zh-CN');
+  });
+
   it('merges older partial preferences with current defaults', () => {
     const storage = { getItem: (key: string) => key === preferencesStorageKey ? JSON.stringify({ defaultMessageView: 'rendered', notificationKinds: { error: false } }) : null };
     expect(loadAppPreferences(storage)).toEqual({ ...defaultAppPreferences, defaultMessageView: 'rendered', notificationKinds: { unread: true, snooze: true, error: false } });
