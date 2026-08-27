@@ -20,8 +20,9 @@ use serde::Serialize;
 use crate::{
     auth::AuthenticatedUser,
     translation_providers::{
-        AzureClient, AzureTranslationRequest, DeepLClient, DeepLTranslationRequest, GoogleClient,
-        GoogleCredential, GoogleTranslationRequest, ProviderExecutionError,
+        AzureClient, AzureTranslationRequest, BingWebClient, BingWebTranslationRequest,
+        DeepLClient, DeepLTranslationRequest, GoogleClient, GoogleCredential,
+        GoogleTranslationRequest, ProviderExecutionError,
     },
     AppState,
 };
@@ -151,6 +152,18 @@ fn execute_network_provider(
         ));
     }
     let provider = preparation.profile.profile.provider.clone();
+    if let TranslationProviderConfiguration::BingWeb { market } = provider {
+        let segments = BingWebClient::default()
+            .translate(BingWebTranslationRequest {
+                market: market.as_deref(),
+                source_language: input.source_language.as_deref(),
+                target_language: &input.target_language,
+                segments: &preparation.document.segments,
+            })
+            .map_err(provider_error)?;
+        let now = chrono::Utc::now().to_rfc3339();
+        return TranslationService::new(store).store_artifact(&preparation, segments, &now, &now);
+    }
     let credential_kind = preparation
         .profile
         .profile

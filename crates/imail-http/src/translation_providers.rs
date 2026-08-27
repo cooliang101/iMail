@@ -1,4 +1,5 @@
 mod azure;
+mod bing;
 mod deepl;
 mod google;
 
@@ -7,6 +8,7 @@ use std::{thread, time::Duration};
 use serde::Serialize;
 
 pub(crate) use azure::{AzureClient, AzureTranslationRequest};
+pub(crate) use bing::{BingWebClient, BingWebTranslationRequest};
 pub(crate) use deepl::{DeepLClient, DeepLTranslationRequest};
 pub(crate) use google::{GoogleClient, GoogleCredential, GoogleTranslationRequest};
 

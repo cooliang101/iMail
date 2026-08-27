@@ -97,7 +97,7 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
         }
         setPendingEdge({ preparation: precise, sourceLanguage });
         setMessage(`已识别为${languageLabel(sourceLanguage)}，点击“开始翻译”使用本地模型。`);
-      } else if (['deepl', 'google-cloud', 'azure-translator'].includes(preparation.profile.profile.provider.type)) {
+      } else if (['deepl', 'google-cloud', 'azure-translator', 'bing-web'].includes(preparation.profile.profile.provider.type)) {
         setMessage(`正在通过${preparation.profile.profile.displayName}翻译…`);
         setArtifact(await translationSettingsApi.executeMessage(messageId, { profileId, targetLanguage }));
         setMessage('');
