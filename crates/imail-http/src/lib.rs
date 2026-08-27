@@ -58,6 +58,7 @@ mod preferences;
 mod security;
 mod sync_control;
 mod system;
+mod translation_providers;
 pub mod translation_settings;
 pub mod translations;
 mod web_client;

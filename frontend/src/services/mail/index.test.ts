@@ -97,6 +97,7 @@ describe('mail service client adapters', () => {
       ['/api/translation-profiles/deepl-1/consent', { method: 'POST' }, 'translationConsentAccept'],
       ['/api/translation-profiles/deepl-1/consent', { method: 'DELETE' }, 'translationConsentRevoke'],
       ['/api/messages/message%201/translations/prepare', { method: 'POST', body: '{"profileId":"edge","targetLanguage":"zh-Hans"}' }, 'translationPrepare'],
+      ['/api/messages/message%201/translations/run', { method: 'POST', body: '{"profileId":"deepl","targetLanguage":"zh-Hans"}' }, 'translationExecute'],
       ['/api/messages/message%201/translations/complete', { method: 'POST', body: '{"profileId":"edge","targetLanguage":"zh-Hans","segments":[]}' }, 'translationComplete'],
       ['/api/translation-cache', { method: 'DELETE' }, 'translationCacheClear'],
       ['/api/developer-tokens', undefined, 'developerTokensList'],

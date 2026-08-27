@@ -241,6 +241,69 @@ impl<'a, R: TranslationProviderRepository> TranslationSettingsService<'a, R> {
         self.read(user_id)
     }
 
+    pub fn credential_secret(
+        &self,
+        user_id: &str,
+        profile_id: &str,
+        expected_kind: TranslationCredentialKind,
+        codec: &dyn TranslationCredentialCodec,
+    ) -> Result<String, ApplicationError<R::Error>> {
+        let record = self
+            .repository
+            .translation_provider(user_id, profile_id)
+            .map_err(ApplicationError::Repository)?
+            .ok_or_else(|| domain("TRANSLATION_PROFILE_NOT_FOUND", 404, "翻译服务配置不存在"))?;
+        let reference = record.profile.credential.as_ref().ok_or_else(|| {
+            domain(
+                "TRANSLATION_CREDENTIAL_REQUIRED",
+                409,
+                "翻译服务缺少访问凭据",
+            )
+        })?;
+        if reference.kind != expected_kind {
+            return Err(domain(
+                "TRANSLATION_CREDENTIAL_KIND_INVALID",
+                409,
+                "翻译服务凭据类型不匹配",
+            ));
+        }
+        let encrypted = record.encrypted_credential.as_deref().ok_or_else(|| {
+            domain(
+                "TRANSLATION_CREDENTIAL_REQUIRED",
+                409,
+                "翻译服务缺少访问凭据",
+            )
+        })?;
+        let value = codec.decrypt(encrypted).map_err(|_| {
+            domain(
+                "TRANSLATION_CREDENTIAL_DECRYPT_FAILED",
+                500,
+                "无法读取翻译服务凭据",
+            )
+        })?;
+        let kind = serde_json::from_value::<TranslationCredentialKind>(
+            value
+                .get("kind")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
+        )
+        .map_err(|_| domain("TRANSLATION_CREDENTIAL_INVALID", 500, "翻译服务凭据无效"))?;
+        let secret = value
+            .get("secret")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|secret| !secret.is_empty())
+            .ok_or_else(|| domain("TRANSLATION_CREDENTIAL_INVALID", 500, "翻译服务凭据无效"))?;
+        if kind != expected_kind {
+            return Err(domain(
+                "TRANSLATION_CREDENTIAL_KIND_INVALID",
+                500,
+                "翻译服务凭据类型不匹配",
+            ));
+        }
+        Ok(secret.to_string())
+    }
+
     pub fn accept_consent(
         &mut self,
         user_id: &str,

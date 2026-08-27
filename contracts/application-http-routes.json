@@ -67,6 +67,7 @@
   "POST /api/messages/:id/move",
   "POST /api/messages/:id/translations/complete",
   "POST /api/messages/:id/translations/prepare",
+  "POST /api/messages/:id/translations/run",
   "POST /api/messages/:message_id/attachments/:index/preview",
   "POST /api/oauth/start",
   "POST /api/oauth/status",

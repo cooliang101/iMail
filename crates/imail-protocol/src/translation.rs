@@ -274,6 +274,17 @@ pub struct TranslationCompletionRequest {
     pub segments: Vec<TranslatedSegment>,
 }
 
+/// Requests server-side execution for a configured network translation provider.
+/// Provider credentials are intentionally resolved from encrypted storage and never cross this
+/// protocol boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationExecutionRequest {
+    pub profile_id: String,
+    pub source_language: Option<String>,
+    pub target_language: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslationPreparationView {

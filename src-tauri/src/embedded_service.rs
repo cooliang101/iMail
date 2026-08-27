@@ -266,6 +266,11 @@ pub enum EmbeddedDomainCall {
         message_id: String,
         input: serde_json::Value,
     },
+    TranslationExecute {
+        #[serde(rename = "messageId")]
+        message_id: String,
+        input: serde_json::Value,
+    },
     TranslationComplete {
         #[serde(rename = "messageId")]
         message_id: String,
@@ -572,6 +577,14 @@ impl EmbeddedDomainCall {
             Self::TranslationPrepare { message_id, input } => json_request(
                 format!(
                     "/api/messages/{}/translations/prepare",
+                    path_segment(&message_id)
+                ),
+                "POST",
+                input,
+            ),
+            Self::TranslationExecute { message_id, input } => json_request(
+                format!(
+                    "/api/messages/{}/translations/run",
                     path_segment(&message_id)
                 ),
                 "POST",
@@ -1740,6 +1753,7 @@ impl EmbeddedMailServiceState {
             | EmbeddedDomainCall::TranslationConsentAccept { .. }
             | EmbeddedDomainCall::TranslationConsentRevoke { .. }
             | EmbeddedDomainCall::TranslationPrepare { .. }
+            | EmbeddedDomainCall::TranslationExecute { .. }
             | EmbeddedDomainCall::TranslationComplete { .. }
             | EmbeddedDomainCall::TranslationCacheClear => {
                 let Some(user_id) = self.current_user_id()? else {
@@ -1748,6 +1762,7 @@ impl EmbeddedMailServiceState {
                 if matches!(
                     call,
                     EmbeddedDomainCall::TranslationPrepare { .. }
+                        | EmbeddedDomainCall::TranslationExecute { .. }
                         | EmbeddedDomainCall::TranslationComplete { .. }
                         | EmbeddedDomainCall::TranslationCacheClear
                 ) {
@@ -1763,6 +1778,18 @@ impl EmbeddedMailServiceState {
                                 )));
                             };
                             Call::Prepare {
+                                message_id: message_id.clone(),
+                                input,
+                            }
+                        }
+                        EmbeddedDomainCall::TranslationExecute { message_id, input } => {
+                            let Ok(input) = serde_json::from_value(input.clone()) else {
+                                return Ok(Some(json_response(
+                                    400,
+                                    serde_json::json!({"error":"请求参数无效"}),
+                                )));
+                            };
+                            Call::Execute {
                                 message_id: message_id.clone(),
                                 input,
                             }

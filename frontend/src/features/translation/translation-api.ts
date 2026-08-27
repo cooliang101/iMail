@@ -27,5 +27,9 @@ export const translationSettingsApi = {
     method: 'POST',
     body: JSON.stringify(input),
   }),
+  executeMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string }) => api<TranslationArtifact>(`/api/messages/${encodeURIComponent(messageId)}/translations/run`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }),
   clearCache: () => api<{ cleared: number }>('/api/translation-cache', { method: 'DELETE' }),
 };

@@ -97,6 +97,10 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
         }
         setPendingEdge({ preparation: precise, sourceLanguage });
         setMessage(`已识别为${languageLabel(sourceLanguage)}，点击“开始翻译”使用本地模型。`);
+      } else if (preparation.profile.profile.provider.type === 'deepl') {
+        setMessage('正在通过 DeepL 翻译…');
+        setArtifact(await translationSettingsApi.executeMessage(messageId, { profileId, targetLanguage }));
+        setMessage('');
       } else {
         setMessage('正文已准备完成；所选翻译服务的执行器尚未接入。');
       }
