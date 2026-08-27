@@ -7,6 +7,8 @@ import type { Notice } from '../../app-model';
 import { AccountSettingsCard } from './AccountSettingsCard';
 import { proxyInputFromForm } from './ProxyFields';
 import { usePlatform } from '../../platform/runtime';
+import { SettingsLinkRow, SettingsPanelHeading } from '../../components/settings-navigation';
+import { ProviderIcon, providerLabel } from '../../components/shared';
 
 export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNotice }: { accounts: Account[]; onAddAccount: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
   const platform = usePlatform();
@@ -15,6 +17,7 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
   const [editingId, setEditingId] = useState<string | null>(null);
   const [proxyEditingId, setProxyEditingId] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const popupRef = useRef<Window | null>(null);
   const oauthOriginsRef = useRef(oauthCallbackOrigins(['http://localhost:8787/api/oauth'], window.location.origin));
@@ -47,6 +50,10 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
   }, [onReload, setNotice]);
 
   useEffect(() => () => { oauthAttemptRef.current += 1; popupRef.current?.close(); }, []);
+
+  useEffect(() => {
+    if (selectedAccountId && !accounts.some((account) => account.id === selectedAccountId)) setSelectedAccountId(null);
+  }, [accounts, selectedAccountId]);
 
   async function reconnect(account: Account) {
     setError('');
@@ -144,6 +151,7 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
     try {
       await api(`/api/accounts/${account.id}`, { method: 'DELETE' });
       setConfirmRemoveId(null);
+      setSelectedAccountId(null);
       await onReload();
       setNotice({ kind: 'success', text: `${account.displayName} 已从本机移除` });
     } catch (value) { setError(value instanceof Error ? value.message : '移除失败'); }
@@ -153,14 +161,35 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
   const workspaceOptions = Array.from(new Set(accounts.map((account) => account.group)))
     .map((group) => ({ value: group, label: group }));
 
+  const selectedAccount = accounts.find((account) => account.id === selectedAccountId);
+  const closeSelectedAction = () => {
+    setEditingId(null);
+    setProxyEditingId(null);
+    setCredentialId(null);
+    setConfirmRemoveId(null);
+    setError('');
+  };
+
+  if (selectedAccount) return <section className="settings-feature-panel">
+    <SettingsPanelHeading
+      title={selectedAccount.displayName}
+      ancestors={['邮箱管理']}
+      onBack={() => { closeSelectedAction(); setSelectedAccountId(null); }}
+    />
+    <div className="settings-panel-body settings-detail-body">
+      <AccountSettingsCard account={selectedAccount} proxyPresets={accounts.filter((candidate) => candidate.id !== selectedAccount.id && candidate.proxy).map((candidate) => ({ accountId: candidate.id, label: `${candidate.displayName} · ${candidate.email}`, proxy: candidate.proxy! }))} workspaceOptions={workspaceOptions} busy={busyId === selectedAccount.id} editing={editingId === selectedAccount.id} proxyEditing={proxyEditingId === selectedAccount.id} credentialOpen={credentialId === selectedAccount.id} removeConfirmOpen={confirmRemoveId === selectedAccount.id}
+        onEdit={() => { setProxyEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setEditingId(selectedAccount.id); }} onCancelEdit={() => setEditingId(null)} onUpdateProfile={(event) => void updateProfile(event, selectedAccount)}
+        onOpenProxy={() => { setEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setProxyEditingId(selectedAccount.id); }} onCloseProxy={() => setProxyEditingId(null)} onUpdateProxy={(event) => void updateProxy(event, selectedAccount)} onRetry={() => void retryConnection(selectedAccount)} onReconnect={() => void reconnect(selectedAccount)}
+        onOpenCredential={() => { setEditingId(null); setProxyEditingId(null); setConfirmRemoveId(null); setCredentialId(selectedAccount.id); }} onCloseCredential={() => setCredentialId(null)} onUpdateCredential={(event) => void updateCredential(event, selectedAccount)} onOpenRemove={() => { setEditingId(null); setProxyEditingId(null); setCredentialId(null); setConfirmRemoveId(selectedAccount.id); }} onCloseRemove={() => setConfirmRemoveId(null)} onRemove={() => void remove(selectedAccount)} />
+      {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
+    </div>
+  </section>;
+
   return <section className="settings-feature-panel">
-    <header className="settings-panel-heading"><div><span>连接与身份</span><h2>邮箱管理</h2><p>按邮箱管理资料、授权状态、网络代理与工作空间。</p></div></header>
+    <SettingsPanelHeading title="邮箱管理" />
     <div className="settings-panel-body">
-    {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>接入第一个邮箱后，即可在这里查看邮件接收状态。</p><button type="button" className="settings-primary-action" onClick={onAddAccount}>添加邮箱</button></div> : <div className="settings-account-list">
-      {accounts.map((account) => <div className="settings-account-entry" key={account.id}><AccountSettingsCard account={account} proxyPresets={accounts.filter((candidate) => candidate.id !== account.id && candidate.proxy).map((candidate) => ({ accountId: candidate.id, label: `${candidate.displayName} · ${candidate.email}`, proxy: candidate.proxy! }))} workspaceOptions={workspaceOptions} busy={busyId === account.id} editing={editingId === account.id} proxyEditing={proxyEditingId === account.id} credentialOpen={credentialId === account.id} removeConfirmOpen={confirmRemoveId === account.id}
-        onEdit={() => { setProxyEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setEditingId(account.id); }} onCancelEdit={() => setEditingId(null)} onUpdateProfile={(event) => void updateProfile(event, account)}
-        onOpenProxy={() => { setEditingId(null); setCredentialId(null); setConfirmRemoveId(null); setProxyEditingId(account.id); }} onCloseProxy={() => setProxyEditingId(null)} onUpdateProxy={(event) => void updateProxy(event, account)} onRetry={() => void retryConnection(account)} onReconnect={() => void reconnect(account)}
-        onOpenCredential={() => { setEditingId(null); setProxyEditingId(null); setConfirmRemoveId(null); setCredentialId(account.id); }} onCloseCredential={() => setCredentialId(null)} onUpdateCredential={(event) => void updateCredential(event, account)} onOpenRemove={() => { setEditingId(null); setProxyEditingId(null); setCredentialId(null); setConfirmRemoveId(account.id); }} onCloseRemove={() => setConfirmRemoveId(null)} onRemove={() => void remove(account)} /></div>)}
+    {accounts.length === 0 ? <div className="settings-empty"><Envelope size={38} weight="duotone" /><h3>还没有真实邮箱</h3><p>接入第一个邮箱后，即可在这里查看邮件接收状态。</p><button type="button" className="settings-primary-action" onClick={onAddAccount}>添加邮箱</button></div> : <div className="settings-link-list">
+      {accounts.map((account) => <SettingsLinkRow key={account.id} icon={<ProviderIcon provider={account.provider} />} title={`${providerLabel[account.provider]} · ${account.displayName}`} detail={`${account.email} · ${account.group}`} value={account.status === 'connected' ? '连接正常' : account.status === 'syncing' ? '正在同步' : '需要处理'} onClick={() => { closeSelectedAction(); setSelectedAccountId(account.id); }} />)}
     </div>}
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}</div>
   </section>;

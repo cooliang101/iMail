@@ -112,6 +112,7 @@ describe('frontend workspace layout', () => {
   it('keeps Hide My Email as an independent settings feature', async () => {
     const settings = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'settings', 'SettingsModal.tsx'), 'utf8');
     const accounts = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'accounts', 'AccountSettingsModal.tsx'), 'utf8');
+    const hmeSettings = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'settings', 'AppleHmeSettingsPanel.tsx'), 'utf8');
     const hmePanel = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'apple-hme', 'AppleHmePanel.tsx'), 'utf8');
     const settingsStyles = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'styles', 'settings.css'), 'utf8');
     expect(settings).toContain("id: 'apple-hme'");
@@ -122,7 +123,13 @@ describe('frontend workspace layout', () => {
     expect(hmePanel).toContain('appleAccountLastSuccessfulKeepaliveAt');
     expect(hmePanel).toContain('icloudWebLastSuccessfulKeepaliveAt');
     expect(hmePanel.indexOf('className="apple-hme-error"')).toBeLessThan(hmePanel.indexOf('className="apple-hme-login"'));
-    expect(hmePanel).toContain('className="apple-hme-view-switch"');
+    expect(hmePanel).toContain("export type AppleHmeView = 'overview' | 'addresses' | 'create'");
+    expect(hmePanel).toContain("if (view === 'addresses')");
+    expect(hmePanel).toContain('<SettingsLinkRow');
+    expect(hmePanel).not.toContain('className="apple-hme-view-switch"');
+    expect(hmeSettings).toContain('icloudAccounts.map((account) => <AppleHmePanel');
+    expect(hmeSettings).not.toContain('apple-hme-account-picker');
+    expect(hmePanel).toContain('apple-hme-account-settings-list');
     expect(settingsStyles).toContain('.apple-hme-login-actions');
     expect(settingsStyles).toContain('.settings-panel-body { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto');
     expect(settingsStyles).toContain('.apple-hme-settings-panel .settings-panel-body { display: block');

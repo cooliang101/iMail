@@ -179,63 +179,70 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
             return Err(AppleHmeError::invalid("缺少 Apple 账户或密码"));
         }
         let password = Zeroizing::new(std::mem::take(&mut request.password));
-        let mut state = AuthState::new(&request);
-        if state.flow == LoginStateKind::AppleAccount {
-            self.prime_apple_account(&mut state)
-                .map_err(|error| login_stage(error, "Apple Account 初始化"))?;
-        }
-        self.authorize(&mut state)
-            .map_err(|error| login_stage(error, "Apple 授权初始化"))?;
-        if state.flow == LoginStateKind::AppleAccount {
-            self.device_key_challenge(&mut state)
-                .map_err(|error| login_stage(error, "Apple 设备挑战"))?;
-        }
-        self.federate(&mut state)
-            .map_err(|error| login_stage(error, "Apple 账户识别"))?;
-        let needs_two_factor = self
-            .srp_sign_in(&mut state, password.as_str())
-            .map_err(|error| login_stage(error, "Apple 密码验证"))?;
-        if state.flow == LoginStateKind::ICloudWeb {
-            state.switch_for_account_country();
-        }
-        if needs_two_factor {
-            if requires_explicit_two_factor_code_request(state.two_factor_method) {
-                let phone = request.phone_number.as_ref().ok_or_else(|| {
+        for attempt in 0..2 {
+            let mut state = AuthState::new(&request);
+            if state.flow == LoginStateKind::AppleAccount {
+                self.prime_apple_account(&mut state)
+                    .map_err(|error| login_stage(error, "Apple Account 初始化"))?;
+            }
+            self.authorize(&mut state)
+                .map_err(|error| login_stage(error, "Apple 授权初始化"))?;
+            if state.flow == LoginStateKind::AppleAccount {
+                self.device_key_challenge(&mut state)
+                    .map_err(|error| login_stage(error, "Apple 设备挑战"))?;
+            }
+            self.federate(&mut state)
+                .map_err(|error| login_stage(error, "Apple 账户识别"))?;
+            let needs_two_factor = self
+                .srp_sign_in(&mut state, password.as_str())
+                .map_err(|error| login_stage(error, "Apple 密码验证"))?;
+
+            if let Some(host) = state.account_country_redirect_host() {
+                if attempt == 0 {
+                    // Apple authentication state is scoped to the issuing domain. Do not
+                    // carry cookies/scnt/session-id across the .com and .com.cn boundary;
+                    // restart the entire SRP flow on the account's actual regional host.
+                    request.icloud_host = Some(host.into());
+                    continue;
+                }
+                return Err(AppleHmeError::new(
+                    AppleHmeErrorCode::Protocol,
+                    "Apple 登录区域切换后仍未进入正确域名，请重新登录",
+                    true,
+                ));
+            }
+
+            if needs_two_factor {
+                let message = self.prepare_two_factor(&mut state, request.phone_number.as_ref())?;
+                let expires_at = Utc::now() + Duration::minutes(PENDING_TTL_MINUTES);
+                let payload = serde_json::to_vec(&state).map_err(|_| {
                     AppleHmeError::new(
-                        AppleHmeErrorCode::InvalidInput,
-                        "短信验证需要 Apple 返回的 phoneNumber",
-                        false,
+                        AppleHmeErrorCode::Protocol,
+                        "Apple 待验证登录状态无法保存",
+                        true,
                     )
                 })?;
-                self.request_phone_code(&mut state, phone)?;
+                let pending_id = self.pending.put(payload, expires_at)?;
+                return Ok(LoginResult {
+                    session: None,
+                    pending_id: Some(pending_id),
+                    needs_two_factor: true,
+                    expires_at: Some(expires_at),
+                    message: message.into(),
+                });
             }
-            let expires_at = Utc::now() + Duration::minutes(PENDING_TTL_MINUTES);
-            let payload = serde_json::to_vec(&state).map_err(|_| {
-                AppleHmeError::new(
-                    AppleHmeErrorCode::Protocol,
-                    "Apple 待验证登录状态无法保存",
-                    true,
-                )
-            })?;
-            let pending_id = self.pending.put(payload, expires_at)?;
+            let session = self
+                .finish_login(&mut state)
+                .map_err(|error| login_stage(error, "Apple 会话建立"))?;
             return Ok(LoginResult {
-                session: None,
-                pending_id: Some(pending_id),
-                needs_two_factor: true,
-                expires_at: Some(expires_at),
-                message: "Apple 已要求双重认证，请提交 6 位验证码".into(),
+                session: Some(session),
+                pending_id: None,
+                needs_two_factor: false,
+                expires_at: None,
+                message: "Apple 登录成功".into(),
             });
         }
-        let session = self
-            .finish_login(&mut state)
-            .map_err(|error| login_stage(error, "Apple 会话建立"))?;
-        Ok(LoginResult {
-            session: Some(session),
-            pending_id: None,
-            needs_two_factor: false,
-            expires_at: None,
-            message: "Apple 登录成功".into(),
-        })
+        unreachable!("Apple regional login retries are bounded")
     }
 
     pub fn submit_two_factor(
@@ -448,6 +455,52 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
             format!("{}/verify/phone", state.auth_base),
             true,
             Some(json!({"phoneNumber": phone, "mode": "sms"})),
+        )?;
+        self.require_success(&response, false)
+    }
+
+    fn prepare_two_factor(
+        &self,
+        state: &mut AuthState,
+        phone_number: Option<&Value>,
+    ) -> Result<&'static str> {
+        match state.two_factor_method {
+            TwoFactorMethod::TrustedDevice => {
+                if state.flow == LoginStateKind::AppleAccount {
+                    return Ok("Apple Account 已向受信任设备发送验证码，请提交 6 位验证码");
+                }
+                // signin/complete has already moved the Apple session into HSA2 and
+                // frequently pushes the code before this best-effort request returns.
+                // Apple may answer this extra request with 401/409 even though the
+                // challenge is usable, so it must never prevent us from preserving the
+                // pending state and showing the code form.
+                Ok(if self.request_trusted_device_code(state).is_ok() {
+                    "Apple 已向受信任设备发送验证码，请提交 6 位验证码"
+                } else {
+                    "Apple 已要求双重认证；请查看受信任设备并提交 6 位验证码"
+                })
+            }
+            TwoFactorMethod::Phone => {
+                let phone = phone_number.ok_or_else(|| {
+                    AppleHmeError::new(
+                        AppleHmeErrorCode::InvalidInput,
+                        "短信验证需要 Apple 返回的 phoneNumber",
+                        false,
+                    )
+                })?;
+                self.request_phone_code(state, phone)?;
+                Ok("Apple 已向受信任手机号发送短信验证码，请提交 6 位验证码")
+            }
+        }
+    }
+
+    fn request_trusted_device_code(&self, state: &mut AuthState) -> Result<()> {
+        let response = self.request(
+            state,
+            HttpMethod::Put,
+            format!("{}/verify/trusteddevice/securitycode", state.auth_base),
+            true,
+            None,
         )?;
         self.require_success(&response, false)
     }
@@ -793,6 +846,7 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
             ("X-Apple-OAuth-Client-Id", state.client_id.clone()),
             ("X-Apple-OAuth-Client-Type", "firstPartyAuth".into()),
             ("X-Apple-OAuth-Redirect-URI", state.home.clone()),
+            ("X-Apple-OAuth-Require-Grant-Code", "true".into()),
             ("X-Apple-OAuth-Response-Mode", "web_message".into()),
             ("X-Apple-OAuth-Response-Type", "code".into()),
             ("X-Apple-OAuth-State", frame.clone()),
@@ -802,6 +856,8 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
                 "X-Apple-I-FD-Client-Info",
                 fd_client_info(&state.user_agent),
             ),
+            ("X-Apple-Mandate-Security-Upgrade", "0".into()),
+            ("X-Apple-I-Require-UE", "true".into()),
         ]);
         if json_content {
             headers.insert("Content-Type".into(), "application/json".into());
@@ -819,6 +875,9 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
             headers.insert("X-Apple-Session-Token".into(), value.clone());
         }
         if state.flow == LoginStateKind::AppleAccount {
+            headers.remove("X-Apple-OAuth-Require-Grant-Code");
+            headers.remove("X-Apple-Mandate-Security-Upgrade");
+            headers.remove("X-Apple-I-Require-UE");
             headers.insert("X-Apple-Domain-Id".into(), "11".into());
             headers.insert("X-Apple-Privacy-Consent".into(), "true".into());
             headers.insert("X-Apple-Privacy-Consent-Accepted".into(), "true".into());
@@ -838,7 +897,7 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
         if response.status == 401 || response.status == 419 {
             return Err(AppleHmeError::new(
                 AppleHmeErrorCode::SessionExpired,
-                "Apple 登录态已失效，请重新登录",
+                "Apple 拒绝了当前登录步骤，请重新提交账户和密码",
                 true,
             ));
         }
@@ -864,12 +923,14 @@ impl<T: HttpTransport, S: PendingLoginStore> AppleAuthClient<T, S> {
     }
 
     fn require_two_factor_success(&self, response: &HttpResponse) -> Result<()> {
-        if (200..300).contains(&response.status) {
+        if (200..300).contains(&response.status)
+            || (response.status == 409 && two_factor_code_was_accepted(response))
+        {
             return Ok(());
         }
         Err(AppleHmeError::new(
             AppleHmeErrorCode::TwoFactorInvalid,
-            "Apple 双重认证失败",
+            format!("Apple 双重认证失败，HTTP {}", response.status),
             response.status >= 500,
         ))
     }
@@ -972,16 +1033,19 @@ impl AuthState {
         }
     }
 
-    fn switch_for_account_country(&mut self) -> bool {
+    fn account_country_redirect_host(&self) -> Option<&'static str> {
+        if self.flow != LoginStateKind::ICloudWeb {
+            return None;
+        }
         let Some(country) = self.account_country.as_deref() else {
-            return false;
+            return None;
         };
         let host = if matches!(country.trim().to_ascii_uppercase().as_str(), "CN" | "CHN") {
             "www.icloud.com.cn"
         } else {
             "www.icloud.com"
         };
-        self.switch_icloud_host(host)
+        (!self.host.eq_ignore_ascii_case(host)).then_some(host)
     }
 
     fn switch_icloud_host(&mut self, host: &str) -> bool {
@@ -1310,10 +1374,18 @@ fn validate_phone_number(phone: &Value) -> Result<()> {
     Ok(())
 }
 
-fn requires_explicit_two_factor_code_request(method: TwoFactorMethod) -> bool {
-    // A 409 from signin/complete has already initiated trusted-device 2FA.
-    // Requesting it again can invalidate the fresh challenge with 401/419.
-    matches!(method, TwoFactorMethod::Phone)
+fn two_factor_code_was_accepted(response: &HttpResponse) -> bool {
+    serde_json::from_slice::<Value>(&response.body)
+        .ok()
+        .and_then(|body| {
+            body.pointer("/securityCode/valid")
+                .and_then(Value::as_bool)
+                .or_else(|| {
+                    body.pointer("/security_code/valid")
+                        .and_then(Value::as_bool)
+                })
+        })
+        .unwrap_or(false)
 }
 
 fn nonempty(value: String) -> Option<String> {
@@ -1378,12 +1450,150 @@ mod tests {
         assert_eq!(radix36(35), "z");
         assert_eq!(radix36(36), "10");
         assert_eq!(leading_zero_bits(&[0, 0b0001_0000]), 11);
-        assert!(!requires_explicit_two_factor_code_request(
-            TwoFactorMethod::TrustedDevice
-        ));
-        assert!(requires_explicit_two_factor_code_request(
-            TwoFactorMethod::Phone
-        ));
+    }
+
+    #[test]
+    fn regional_icloud_redirect_requires_a_fresh_auth_state() {
+        let initial = LoginRequest::icloud_web("owner@example.test", "secret");
+        let mut state = AuthState::new(&initial);
+        state.account_country = Some("USA".into());
+        state.scnt = Some("old-domain-scnt".into());
+        state.session_id = Some("old-domain-session".into());
+        state.cookies.push(AppleCookie {
+            name: "session".into(),
+            value: "old-domain-cookie".into(),
+            domain: "idmsa.apple.com.cn".into(),
+            path: "/".into(),
+            secure: true,
+            http_only: true,
+            expires_at: None,
+        });
+
+        let redirect = state.account_country_redirect_host().unwrap();
+        let mut redirected = initial;
+        redirected.icloud_host = Some(redirect.into());
+        let fresh = AuthState::new(&redirected);
+
+        assert_eq!(fresh.host, "www.icloud.com");
+        assert!(fresh.scnt.is_none());
+        assert!(fresh.session_id.is_none());
+        assert!(fresh.cookies.is_empty());
+    }
+
+    #[test]
+    fn icloud_auth_headers_match_reference_security_contract() {
+        let client = AppleAuthClient::default();
+        let state = AuthState::new(&LoginRequest::icloud_web("owner@example.test", "secret"));
+
+        let headers = client.auth_headers(&state, true);
+
+        assert_eq!(
+            headers
+                .get("X-Apple-OAuth-Require-Grant-Code")
+                .map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            headers
+                .get("X-Apple-Mandate-Security-Upgrade")
+                .map(String::as_str),
+            Some("0")
+        );
+        assert_eq!(
+            headers.get("X-Apple-I-Require-UE").map(String::as_str),
+            Some("true")
+        );
+    }
+
+    #[test]
+    fn accepts_conflict_when_apple_marks_two_factor_code_valid() {
+        let accepted = HttpResponse {
+            status: 409,
+            headers: BTreeMap::new(),
+            body: br#"{"securityCode":{"code":"******","valid":true}}"#.to_vec(),
+        };
+        let rejected = HttpResponse {
+            status: 409,
+            headers: BTreeMap::new(),
+            body: br#"{"securityCode":{"code":"******","valid":false}}"#.to_vec(),
+        };
+        assert!(two_factor_code_was_accepted(&accepted));
+        assert!(!two_factor_code_was_accepted(&rejected));
+    }
+
+    #[test]
+    fn login_rejection_does_not_claim_an_established_session_expired() {
+        let client = AppleAuthClient::default();
+        let response = HttpResponse {
+            status: 401,
+            headers: BTreeMap::new(),
+            body: Vec::new(),
+        };
+
+        let error = client.require_success(&response, false).unwrap_err();
+
+        assert!(error.message.contains("当前登录步骤"));
+        assert!(!error.message.contains("登录态"));
+    }
+
+    #[test]
+    fn trusted_device_code_request_matches_reference_protocol() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = ScriptedTransport {
+            responses: Arc::new(Mutex::new(vec![HttpResponse {
+                status: 202,
+                headers: BTreeMap::new(),
+                body: Vec::new(),
+            }])),
+            requests: Arc::clone(&requests),
+        };
+        let client = AppleAuthClient::new(transport, MemoryPendingLoginStore::default());
+        let mut state = AuthState::new(&LoginRequest::icloud_web("owner@example.test", "secret"));
+
+        client.request_trusted_device_code(&mut state).unwrap();
+
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].method, HttpMethod::Put);
+        assert!(requests[0]
+            .url
+            .ends_with("/verify/trusteddevice/securitycode"));
+    }
+
+    #[test]
+    fn trusted_device_trigger_rejection_does_not_block_two_factor_form() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = ScriptedTransport {
+            responses: Arc::new(Mutex::new(vec![HttpResponse {
+                status: 401,
+                headers: BTreeMap::new(),
+                body: Vec::new(),
+            }])),
+            requests,
+        };
+        let client = AppleAuthClient::new(transport, MemoryPendingLoginStore::default());
+        let mut state = AuthState::new(&LoginRequest::icloud_web("owner@example.test", "secret"));
+
+        let message = client.prepare_two_factor(&mut state, None).unwrap();
+
+        assert!(message.contains("提交 6 位验证码"));
+    }
+
+    #[test]
+    fn apple_account_two_factor_does_not_send_icloud_trigger_request() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = ScriptedTransport {
+            responses: Arc::new(Mutex::new(Vec::new())),
+            requests: Arc::clone(&requests),
+        };
+        let client = AppleAuthClient::new(transport, MemoryPendingLoginStore::default());
+        let mut state =
+            AuthState::new(&LoginRequest::apple_account("owner@example.test", "secret"));
+
+        let message = client.prepare_two_factor(&mut state, None).unwrap();
+
+        assert!(message.contains("提交 6 位验证码"));
+        assert!(requests.lock().unwrap().is_empty());
     }
 
     #[test]

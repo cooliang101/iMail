@@ -1,13 +1,20 @@
-import type { CSSProperties } from 'preact/compat';
+import { useState, type CSSProperties } from 'preact/compat';
 import { Check, Palette } from '../../components/icons';
 import type { AppPreferences } from '../../app-model';
 import { themeOptions } from '../appearance';
-import { PanelHeading } from './PanelHeading';
+import { SettingsLinkRow, SettingsPanelHeading } from '../../components/settings-navigation';
 import { CustomThemeEditor } from './CustomThemeEditor';
 
 export function AppearancePanel({ preferences, onChange }: { preferences: AppPreferences; onChange: (value: AppPreferences) => void }) {
+  const [customEditorOpen, setCustomEditorOpen] = useState(false);
+
+  if (customEditorOpen) return <section className="settings-feature-panel">
+    <SettingsPanelHeading title="自定义主题" ancestors={['主题']} onBack={() => setCustomEditorOpen(false)} />
+    <div className="settings-panel-body settings-detail-body"><CustomThemeEditor preferences={preferences} onChange={onChange} /></div>
+  </section>;
+
   return <section className="settings-feature-panel">
-    <PanelHeading eyebrow="界面个性" title="主题" description="选择一套完整视觉语言并立即应用；内置主题和安全自定义主题都会同步到服务端。" />
+    <SettingsPanelHeading title="主题" />
     <div className="settings-panel-body">
       <div className="theme-choice-grid" role="radiogroup" aria-label="应用主题">
         {themeOptions.map((theme) => {
@@ -43,7 +50,9 @@ export function AppearancePanel({ preferences, onChange }: { preferences: AppPre
           </button>;
         })}
       </div>
-      {preferences.theme === 'custom' && <CustomThemeEditor preferences={preferences} onChange={onChange} />}
+      <div className="settings-link-list settings-link-list-spaced">
+        <SettingsLinkRow icon={<Palette size={20} />} title="自定义主题" detail="单独编辑配色、圆角、阴影和界面密度。" value={preferences.theme === 'custom' ? '已启用' : '未启用'} onClick={() => { if (preferences.theme !== 'custom') onChange({ ...preferences, theme: 'custom' }); setCustomEditorOpen(true); }} />
+      </div>
     </div>
   </section>;
 }

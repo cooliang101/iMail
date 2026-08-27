@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle, Code, Info, WarningCircle } from '../../compon
 import { usePlatform } from '../../platform/runtime';
 import { api } from '../../services';
 import type { ServiceInfo } from '../../types';
-import { PanelHeading } from './PanelHeading';
+import { SettingsPanelHeading } from '../../components/settings-navigation';
 
 const PROJECT_URL = 'https://github.com/cooliang101/imail';
 
@@ -30,7 +30,7 @@ export function AboutPanel() {
   }
 
   return <section className="settings-feature-panel">
-    <PanelHeading eyebrow="应用信息" title="关于 iMail" description="查看当前版本、服务状态与项目主页。" syncNote={false} />
+    <SettingsPanelHeading title="关于 iMail" />
     <div className="settings-panel-body about-panel-body">
       <section className="about-hero">
         <img src="/brand/imail-app-icon.png" alt="iMail" />

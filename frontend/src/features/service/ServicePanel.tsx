@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
+import { SettingsLinkRow, SettingsPanelHeading } from '../../components/settings-navigation';
 import { CheckCircle, Cloud, FolderOpen, HardDrives, SpinnerGap, WarningCircle } from '../../components/icons';
 import type { ServiceInfo } from '../../types';
 import {
@@ -35,7 +36,7 @@ export function ServicePanel() {
   const [info, setInfo] = useState<ServiceInfo>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [remoteEditorOpen, setRemoteEditorOpen] = useState(false);
+  const [remoteEditorOpen, setRemoteEditorOpen] = useState(!desktop);
 
   function transitionDependencies(): ServiceTransitionDependencies {
     return {
@@ -75,8 +76,15 @@ export function ServicePanel() {
   }
 
   const address = configuredServiceUrl();
+  if (remoteEditorOpen) return <section className="settings-feature-panel">
+    <SettingsPanelHeading title="远程服务" ancestors={['iMail 服务']} onBack={() => setRemoteEditorOpen(false)} />
+    <div className="settings-panel-body service-settings-panel settings-detail-body">
+      <ServiceAddressEditor onCancel={() => setRemoteEditorOpen(false)} onSaved={() => { setMode('remote'); setRemoteEditorOpen(false); void inspect(); }} />
+    </div>
+  </section>;
+
   return <section className="settings-feature-panel">
-    <header className="settings-panel-heading"><div><span>客户端连接</span><h2>iMail 服务</h2><p>选择此设备内嵌的 Rust 服务，或连接用于多设备共享的远程服务。</p></div></header>
+    <SettingsPanelHeading title="iMail 服务" />
     <div className="settings-panel-body service-settings-panel">
 
     {desktop && <section className="service-mode-grid" aria-label="服务模式">
@@ -96,7 +104,8 @@ export function ServicePanel() {
       <AppButton appearance="subtle" type="button" onClick={() => void inspect()} disabled={busy}>重新检查</AppButton>
     </section>
 
-    {(!desktop || mode === 'remote' || remoteEditorOpen) && <ServiceAddressEditor onCancel={remoteEditorOpen && mode !== 'remote' ? () => setRemoteEditorOpen(false) : undefined} onSaved={() => { setMode('remote'); setRemoteEditorOpen(false); void inspect(); }} />}
+    {!desktop && <div className="settings-link-list"><SettingsLinkRow icon={<Cloud size={20} />} title="远程服务" detail="修改并验证当前 iMail 服务地址。" value={address} onClick={() => setRemoteEditorOpen(true)} /></div>}
+
     {desktop && <div className="service-local-lifecycle"><p className="service-rollout-note">{localServiceNote(mode)}</p>
       <div className="service-lifecycle-actions">
         <AppButton appearance="subtle" icon={<FolderOpen size={16} />} onClick={() => void desktopOpenAppLogs().catch((reason) => setError(serviceErrorMessage(reason, '打开应用日志失败')))} disabled={busy}>应用日志</AppButton>
