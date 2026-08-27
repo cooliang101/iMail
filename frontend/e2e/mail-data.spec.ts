@@ -152,6 +152,7 @@ test('narrow desktop keeps the reader inside the viewport', async ({ page }) => 
 });
 
 test('reader shows complete routing details and opens the sender contact card', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 900 });
   await installMailFixture(page);
   const senderTrigger = page.locator('.sender-contact-trigger');
   await expect(senderTrigger).toContainText('Wayne Fixture');
@@ -159,6 +160,27 @@ test('reader shows complete routing details and opens the sender contact card', 
   await expect(page.locator('.recipient-line')).toContainText('Owner <owner@example.test>');
   await expect(page.locator('.recipient-line')).toContainText('Project Archive <archive@example.test>');
   await expect(page.locator('.mail-body')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  const layout = await page.evaluate(() => {
+    const content = document.querySelector('.reader-content')!.getBoundingClientRect();
+    const sender = document.querySelector('.sender-contact-trigger')!.getBoundingClientRect();
+    const recipients = document.querySelector('.recipient-line')!.getBoundingClientRect();
+    const body = document.querySelector('.mail-plain-body')!.getBoundingClientRect();
+    const reader = document.querySelector('.reader')!.getBoundingClientRect();
+    return {
+      recipientTop: recipients.top,
+      senderBottom: sender.bottom,
+      contentWidth: content.width,
+      readerWidth: reader.width,
+      contentCenter: content.left + content.width / 2,
+      bodyCenter: body.left + body.width / 2,
+      bodyWidth: body.width,
+    };
+  });
+  expect(layout.recipientTop).toBeGreaterThanOrEqual(layout.senderBottom - 2);
+  expect(layout.contentWidth).toBeGreaterThan(1000);
+  expect(layout.contentWidth / layout.readerWidth).toBeGreaterThan(0.75);
+  expect(Math.abs(layout.contentCenter - layout.bodyCenter)).toBeLessThanOrEqual(2);
+  expect(Math.abs(layout.contentWidth - layout.bodyWidth)).toBeLessThanOrEqual(2);
 
   await senderTrigger.click();
   const card = page.getByRole('dialog', { name: 'Wayne Fixture 的联系人名片' });

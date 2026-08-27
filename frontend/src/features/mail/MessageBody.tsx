@@ -5,7 +5,14 @@ export function MessageBody({ text, html, subject, view }: { text: string; html?
   const plainText = emailPlainText(text, html);
   return view === 'rendered' && html
     ? <HtmlEmailBody html={html} subject={subject} />
-    : <div className="mail-plain-body">{plainText || '（邮件没有可显示的文本内容）'}</div>;
+    : <div className="mail-plain-body">{plainText
+      ? plainText.split(/\n{2,}/).map((block, index) => <p className={isPreformattedBlock(block) ? 'mail-plain-preformatted' : undefined} key={`${index}-${block.slice(0, 24)}`}>{block}</p>)
+      : <p>（邮件没有可显示的文本内容）</p>}</div>;
+}
+
+function isPreformattedBlock(value: string) {
+  const lines = value.split('\n');
+  return lines.length > 1 && lines.some((line) => /^\s*(?:>|[-*+]\s|\d+[.)]\s|--\s*$)/.test(line));
 }
 
 export function emailPlainText(text: string, html?: string) {
