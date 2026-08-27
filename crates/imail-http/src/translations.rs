@@ -19,7 +19,10 @@ use serde::Serialize;
 
 use crate::{
     auth::AuthenticatedUser,
-    translation_providers::{DeepLClient, DeepLTranslationRequest, ProviderExecutionError},
+    translation_providers::{
+        AzureClient, AzureTranslationRequest, DeepLClient, DeepLTranslationRequest, GoogleClient,
+        GoogleCredential, GoogleTranslationRequest, ProviderExecutionError,
+    },
     AppState,
 };
 
@@ -147,33 +150,76 @@ fn execute_network_provider(
             "该翻译服务不能由服务端执行",
         ));
     }
-    let plan = match preparation.profile.profile.provider {
-        TranslationProviderConfiguration::DeepL { plan } => plan,
-        _ => {
-            return Err(domain(
-                "TRANSLATION_PROVIDER_NOT_IMPLEMENTED",
-                501,
-                "所选翻译服务尚未接入",
-            ))
-        }
-    };
+    let provider = preparation.profile.profile.provider.clone();
+    let credential_kind = preparation
+        .profile
+        .profile
+        .credential
+        .as_ref()
+        .map(|credential| credential.kind)
+        .ok_or_else(|| {
+            domain(
+                "TRANSLATION_CREDENTIAL_REQUIRED",
+                409,
+                "翻译服务缺少访问凭据",
+            )
+        })?;
     let codec = MasterKeyCredentialCodec::new(key);
     let api_key = imail_core::translation_settings::TranslationSettingsService::new(store)
-        .credential_secret(
-            user_id,
-            &input.profile_id,
-            TranslationCredentialKind::DeepLApiKey,
-            &codec,
-        )?;
-    let segments = DeepLClient::default()
-        .translate(DeepLTranslationRequest {
-            api_key: &api_key,
-            plan,
-            source_language: input.source_language.as_deref(),
-            target_language: &input.target_language,
-            segments: &preparation.document.segments,
-        })
-        .map_err(provider_error)?;
+        .credential_secret(user_id, &input.profile_id, credential_kind, &codec)?;
+    let segments = match provider {
+        TranslationProviderConfiguration::DeepL { plan }
+            if credential_kind == TranslationCredentialKind::DeepLApiKey =>
+        {
+            DeepLClient::default().translate(DeepLTranslationRequest {
+                api_key: &api_key,
+                plan,
+                source_language: input.source_language.as_deref(),
+                target_language: &input.target_language,
+                segments: &preparation.document.segments,
+            })
+        }
+        TranslationProviderConfiguration::GoogleCloud {
+            project_id,
+            location,
+        } => {
+            let credential = match credential_kind {
+                TranslationCredentialKind::GoogleApiKey => GoogleCredential::ApiKey(&api_key),
+                TranslationCredentialKind::GoogleServiceAccount => {
+                    GoogleCredential::ServiceAccountJson(&api_key)
+                }
+                _ => {
+                    return Err(domain(
+                        "TRANSLATION_CREDENTIAL_KIND_INVALID",
+                        409,
+                        "翻译服务凭据类型不匹配",
+                    ))
+                }
+            };
+            GoogleClient::default().translate(GoogleTranslationRequest {
+                credential,
+                project_id: &project_id,
+                location: location.as_deref(),
+                source_language: input.source_language.as_deref(),
+                target_language: &input.target_language,
+                segments: &preparation.document.segments,
+            })
+        }
+        TranslationProviderConfiguration::AzureTranslator { endpoint, region }
+            if credential_kind == TranslationCredentialKind::AzureApiKey =>
+        {
+            AzureClient::default().translate(AzureTranslationRequest {
+                api_key: &api_key,
+                endpoint: &endpoint,
+                region: region.as_deref(),
+                source_language: input.source_language.as_deref(),
+                target_language: &input.target_language,
+                segments: &preparation.document.segments,
+            })
+        }
+        _ => Err(ProviderExecutionError::InvalidConfiguration),
+    }
+    .map_err(provider_error)?;
     let now = chrono::Utc::now().to_rfc3339();
     TranslationService::new(store).store_artifact(&preparation, segments, &now, &now)
 }

@@ -41,6 +41,8 @@ iMail 的邮件翻译不绑定单一厂商。Edge WebView2 本地模型、正式
 - DeepL 使用 Rust 侧统一网络执行入口，Free 与 Pro Profile 分别访问官方对应域名。API Key 只在服务端从 `master.key` 加密存储中解密，并仅写入 `Authorization` 请求头。
 - 正文按稳定分段顺序批量发送；每批不超过 50 段，并在官方 128 KiB 总请求上限内保留安全余量。返回段数或顺序不完整时不写入缓存。
 - 429 与 5xx 使用有限指数退避；鉴权、额度、限流、语言和上游故障转换为不包含供应商响应正文的安全错误。
+- Google API Key 配置调用 Cloud Translation Basic v2，并通过 `x-goog-api-key` 请求头传递；Service Account JSON 在 Rust 内签发短期 JWT、换取 OAuth Token 后调用 Advanced v3。Service Account 的 Token 地址固定为 Google 官方端点，防止把签名断言发送到任意地址。
+- Azure Translator 通过订阅密钥头和可选区域头调用 v3 文本翻译；全局资源与自定义域名分别使用官方路径规则，每批正文控制在 45,000 字符以内，为官方 50,000 字符上限保留余量。
 
 ## 不采用的方案
 

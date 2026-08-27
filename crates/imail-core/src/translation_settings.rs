@@ -536,6 +536,21 @@ fn validate_profile<E: std::error::Error + Send + Sync + 'static>(
         } => {
             validate_optional_field(project_id, 160)?;
             validate_optional(location.as_deref(), 80)?;
+            if !project_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b':'))
+                || location.as_deref().is_some_and(|location| {
+                    !location
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                })
+            {
+                return Err(domain(
+                    "TRANSLATION_PROVIDER_CONFIG_INVALID",
+                    400,
+                    "Google Cloud 项目或区域无效",
+                ));
+            }
         }
         TranslationProviderConfiguration::AzureTranslator { endpoint, region } => {
             if !endpoint.starts_with("https://") || endpoint.len() > 500 {

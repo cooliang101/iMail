@@ -21,6 +21,7 @@ imail-protocol = { path = "../imail-protocol" }
 imail-runtime = { path = "../imail-runtime" }
 imail-security = { path = "../imail-security" }
 imail-storage-sqlite = { path = "../imail-storage-sqlite" }
+jsonwebtoken = { workspace = true, features = ["use_pem"] }
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -3,6 +3,8 @@ use std::{thread, time::Duration};
 use imail_protocol::{DeepLApiPlan, TranslatedSegment, TranslationSegment};
 use serde::{Deserialize, Serialize};
 
+use super::ProviderExecutionError;
+
 const REQUEST_BODY_LIMIT: usize = 128 * 1024;
 const SAFE_REQUEST_BODY_LIMIT: usize = 120 * 1024;
 const MAX_TEXTS_PER_BATCH: usize = 50;
@@ -14,60 +16,6 @@ pub(crate) struct DeepLTranslationRequest<'a> {
     pub source_language: Option<&'a str>,
     pub target_language: &'a str,
     pub segments: &'a [TranslationSegment],
-}
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ProviderExecutionError {
-    #[error("翻译服务凭据无效或无权访问")]
-    Authentication,
-    #[error("翻译服务额度已用尽")]
-    QuotaExceeded,
-    #[error("翻译服务请求过于频繁，请稍后重试")]
-    RateLimited,
-    #[error("翻译服务暂时不可用，请稍后重试")]
-    Unavailable,
-    #[error("翻译服务不支持所选语言")]
-    UnsupportedLanguage,
-    #[error("翻译内容过大，无法发送")]
-    RequestTooLarge,
-    #[error("翻译服务返回了无效结果")]
-    InvalidResponse,
-}
-
-impl ProviderExecutionError {
-    pub(crate) const fn status(&self) -> u16 {
-        match self {
-            Self::Authentication => 403,
-            Self::QuotaExceeded | Self::RateLimited => 429,
-            Self::UnsupportedLanguage => 400,
-            Self::RequestTooLarge => 413,
-            Self::Unavailable | Self::InvalidResponse => 502,
-        }
-    }
-
-    pub(crate) const fn code(&self) -> &'static str {
-        match self {
-            Self::Authentication => "TRANSLATION_PROVIDER_AUTH_FAILED",
-            Self::QuotaExceeded => "TRANSLATION_PROVIDER_QUOTA_EXCEEDED",
-            Self::RateLimited => "TRANSLATION_PROVIDER_RATE_LIMITED",
-            Self::Unavailable => "TRANSLATION_PROVIDER_UNAVAILABLE",
-            Self::UnsupportedLanguage => "TRANSLATION_LANGUAGE_UNSUPPORTED",
-            Self::RequestTooLarge => "TRANSLATION_REQUEST_TOO_LARGE",
-            Self::InvalidResponse => "TRANSLATION_PROVIDER_RESPONSE_INVALID",
-        }
-    }
-
-    pub(crate) const fn message(&self) -> &'static str {
-        match self {
-            Self::Authentication => "翻译服务凭据无效或无权访问",
-            Self::QuotaExceeded => "翻译服务额度已用尽",
-            Self::RateLimited => "翻译服务请求过于频繁，请稍后重试",
-            Self::Unavailable => "翻译服务暂时不可用，请稍后重试",
-            Self::UnsupportedLanguage => "翻译服务不支持所选语言",
-            Self::RequestTooLarge => "翻译内容过大，无法发送",
-            Self::InvalidResponse => "翻译服务返回了无效结果",
-        }
-    }
 }
 
 pub(crate) struct DeepLClient {
