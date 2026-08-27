@@ -21,6 +21,7 @@ use imail_core::{
     privacy::PrivacyService,
     theme::CustomThemeService,
     translation_settings::{TranslationCredentialSecret, TranslationSettingsService},
+    translations::TranslationService,
     AccountRecord, AccountRepository, AuthRepository, ContentRepository, DeveloperTokenRepository,
     LogoFetchAttemptRecord, MessageRepository, ReadOnlyRepository, TranslationCacheRepository,
     TranslationProviderRepository,
@@ -30,9 +31,9 @@ use imail_protocol::{
     ContactReadModel, CustomTheme, DraftInput, DraftReadModel, MailAuthorizationExportPayload,
     MessageReadModel, MessageView, NotificationKind, NotificationKindsPatch, ProxyProtocol,
     ShortcutBindingsPatch, ThemeId, TranslatedSegment, TranslationArtifact, TranslationCacheKey,
-    TranslationCredentialKind, TranslationExecutionTarget, TranslationProviderConfiguration,
-    TranslationProviderProfileInput, WorkspaceIconId, MAIL_AUTHORIZATION_EXPORT_FORMAT,
-    MAIL_AUTHORIZATION_EXPORT_VERSION,
+    TranslationCompletionRequest, TranslationCredentialKind, TranslationExecutionTarget,
+    TranslationProviderConfiguration, TranslationProviderProfileInput, WorkspaceIconId,
+    MAIL_AUTHORIZATION_EXPORT_FORMAT, MAIL_AUTHORIZATION_EXPORT_VERSION,
 };
 use imail_security::{decrypt_portable_export, sha256_hex, MasterKey, PortableEncryptedPayload};
 use rusqlite::Connection;
@@ -292,6 +293,75 @@ fn translation_cache_is_user_scoped_and_requires_message_ownership() {
     store.upsert_translation_artifact(&artifact).unwrap();
     assert!(store.delete_message("user-1", "m1").unwrap());
     assert!(store.translation_artifact(&key).unwrap().is_none());
+}
+
+#[test]
+fn edge_client_completion_revalidates_segments_and_persists_owned_results() {
+    let fixture = Fixture::new(10);
+    let database_path = fixture.root.join("imail.sqlite");
+    let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
+    let owner = store
+        .create_user(
+            "edge-owner@example.com",
+            "Edge owner",
+            "Edge owner password 123!",
+        )
+        .unwrap();
+    store
+        .connection
+        .execute("UPDATE accounts SET user_id=?1", [&owner.id])
+        .unwrap();
+    TranslationSettingsService::new(&mut store)
+        .upsert_profile(
+            &owner.id,
+            "edge-local",
+            TranslationProviderProfileInput {
+                display_name: "Edge 本地翻译".into(),
+                execution_target: TranslationExecutionTarget::WebView,
+                provider: TranslationProviderConfiguration::EdgeLocal,
+                enabled: true,
+            },
+            "2026-08-27T00:00:00.000Z",
+        )
+        .unwrap();
+    let artifact = TranslationService::new(&mut store)
+        .complete(
+            &owner.id,
+            "m1",
+            TranslationCompletionRequest {
+                profile_id: "edge-local".into(),
+                source_language: Some("en".into()),
+                target_language: "zh-Hans".into(),
+                segments: vec![TranslatedSegment {
+                    id: "s-6ccaa6415b5ee449-1".into(),
+                    text: "正文".into(),
+                }],
+            },
+            "2026-08-27T00:00:00.000Z",
+        )
+        .unwrap();
+    assert_eq!(artifact.segments[0].text, "正文");
+    assert_eq!(
+        store.translation_artifact(&artifact.key).unwrap(),
+        Some(artifact)
+    );
+    let invalid = TranslationService::new(&mut store)
+        .complete(
+            &owner.id,
+            "m1",
+            TranslationCompletionRequest {
+                profile_id: "edge-local".into(),
+                source_language: Some("en".into()),
+                target_language: "fr".into(),
+                segments: vec![TranslatedSegment {
+                    id: "client-invented-id".into(),
+                    text: "Texte".into(),
+                }],
+            },
+            "2026-08-27T00:00:00.000Z",
+        )
+        .unwrap_err();
+    assert_eq!(invalid.code(), "TRANSLATION_RESULT_INVALID");
 }
 
 #[test]

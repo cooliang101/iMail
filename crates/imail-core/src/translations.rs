@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use imail_protocol::{
-    TranslatedSegment, TranslationArtifact, TranslationCacheKey, TranslationDocument,
-    TranslationPreparationRequest, TranslationPreparationView, TranslationProviderStatus,
+    TranslatedSegment, TranslationArtifact, TranslationCacheKey, TranslationCompletionRequest,
+    TranslationDocument, TranslationExecutionTarget, TranslationPreparationRequest,
+    TranslationPreparationView, TranslationProviderConfiguration, TranslationProviderStatus,
     TranslationSegment, TranslationSegmentKind, TRANSLATION_SEGMENT_VERSION,
 };
 use regex::Regex;
@@ -15,6 +16,8 @@ use crate::{
 
 const MAX_TRANSLATION_BODY_BYTES: usize = 2 * 1024 * 1024;
 const MAX_SEGMENT_CHARACTERS: usize = 4_000;
+const MAX_TRANSLATED_BODY_BYTES: usize = 4 * 1024 * 1024;
+const MAX_TRANSLATED_SEGMENT_CHARACTERS: usize = 16_000;
 
 pub struct TranslationService<'a, R> {
     repository: &'a mut R,
@@ -118,6 +121,37 @@ where
         Ok(artifact)
     }
 
+    pub fn complete(
+        &mut self,
+        user_id: &str,
+        message_id: &str,
+        request: TranslationCompletionRequest,
+        created_at: &str,
+    ) -> Result<TranslationArtifact, ApplicationError<<R as MessageRepository>::Error>> {
+        let preparation = self.prepare(
+            user_id,
+            message_id,
+            TranslationPreparationRequest {
+                profile_id: request.profile_id,
+                source_language: request.source_language,
+                target_language: request.target_language,
+            },
+        )?;
+        if preparation.profile.profile.execution_target != TranslationExecutionTarget::WebView
+            || !matches!(
+                &preparation.profile.profile.provider,
+                TranslationProviderConfiguration::EdgeLocal
+            )
+        {
+            return Err(domain(
+                "TRANSLATION_CLIENT_COMPLETION_FORBIDDEN",
+                403,
+                "该翻译服务不能由客户端提交结果",
+            ));
+        }
+        self.store_artifact(&preparation, request.segments, created_at, created_at)
+    }
+
     pub fn clear_cache(
         &mut self,
         user_id: &str,
@@ -183,6 +217,21 @@ fn validate_translated_segments<E: std::error::Error + Send + Sync + 'static>(
     document: &TranslationDocument,
     translated: &[TranslatedSegment],
 ) -> Result<(), ApplicationError<E>> {
+    if translated
+        .iter()
+        .map(|segment| segment.text.len())
+        .sum::<usize>()
+        > MAX_TRANSLATED_BODY_BYTES
+        || translated
+            .iter()
+            .any(|segment| segment.text.chars().count() > MAX_TRANSLATED_SEGMENT_CHARACTERS)
+    {
+        return Err(domain(
+            "TRANSLATION_RESULT_TOO_LARGE",
+            413,
+            "翻译结果过大，无法保存",
+        ));
+    }
     if translated.len() != document.segments.len()
         || translated
             .iter()

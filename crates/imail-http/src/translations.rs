@@ -8,7 +8,10 @@ use axum::{
     Extension, Json, Router,
 };
 use imail_core::{translations::TranslationService, ApplicationError};
-use imail_protocol::{TranslationPreparationRequest, TranslationPreparationView};
+use imail_protocol::{
+    TranslationArtifact, TranslationCompletionRequest, TranslationPreparationRequest,
+    TranslationPreparationView,
+};
 use imail_storage_sqlite::{AuthStoreError, SqliteAuthStore};
 use serde::Serialize;
 
@@ -17,6 +20,7 @@ use crate::{auth::AuthenticatedUser, AppState};
 pub(crate) fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/messages/:id/translations/prepare", post(prepare))
+        .route("/api/messages/:id/translations/complete", post(complete))
         .route("/api/translation-cache", delete(clear_cache))
 }
 
@@ -25,6 +29,10 @@ pub enum TranslationApplicationCall {
     Prepare {
         message_id: String,
         input: TranslationPreparationRequest,
+    },
+    Complete {
+        message_id: String,
+        input: TranslationCompletionRequest,
     },
     ClearCache,
 }
@@ -60,6 +68,17 @@ pub async fn embedded_call(
                 Err(error) => application_value(error),
             }
         }
+        TranslationApplicationCall::Complete { message_id, input } => {
+            match run(data_dir, move |store| {
+                let now = chrono::Utc::now().to_rfc3339();
+                TranslationService::new(store).complete(&user_id, &message_id, input, &now)
+            })
+            .await
+            {
+                Ok(artifact) => response_value(200, artifact),
+                Err(error) => application_value(error),
+            }
+        }
     }
 }
 
@@ -76,6 +95,25 @@ async fn prepare(
     respond(
         run(state.config.data_dir.clone(), move |store| {
             TranslationService::new(store).prepare(&user.user_id, &message_id, input)
+        })
+        .await,
+    )
+}
+
+async fn complete(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(message_id): Path<String>,
+    input: Result<Json<TranslationCompletionRequest>, JsonRejection>,
+) -> Response {
+    let Json(input) = match input {
+        Ok(input) => input,
+        Err(_) => return error(StatusCode::BAD_REQUEST, "请求参数无效"),
+    };
+    respond_artifact(
+        run(state.config.data_dir.clone(), move |store| {
+            let now = chrono::Utc::now().to_rfc3339();
+            TranslationService::new(store).complete(&user.user_id, &message_id, input, &now)
         })
         .await,
     )
@@ -122,6 +160,15 @@ fn respond(
 ) -> Response {
     match result {
         Ok(view) => Json(view).into_response(),
+        Err(error) => application_error(error),
+    }
+}
+
+fn respond_artifact(
+    result: Result<TranslationArtifact, ApplicationError<AuthStoreError>>,
+) -> Response {
+    match result {
+        Ok(artifact) => Json(artifact).into_response(),
         Err(error) => application_error(error),
     }
 }

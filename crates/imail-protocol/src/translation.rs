@@ -267,6 +267,15 @@ pub struct TranslationPreparationRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TranslationCompletionRequest {
+    pub profile_id: String,
+    pub source_language: Option<String>,
+    pub target_language: String,
+    pub segments: Vec<TranslatedSegment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TranslationPreparationView {
     pub document: TranslationDocument,
     pub profile: TranslationProviderProfileView,

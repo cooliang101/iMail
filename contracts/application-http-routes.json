@@ -65,6 +65,7 @@
   "POST /api/drafts",
   "POST /api/mailboxes/:role/sync",
   "POST /api/messages/:id/move",
+  "POST /api/messages/:id/translations/complete",
   "POST /api/messages/:id/translations/prepare",
   "POST /api/messages/:message_id/attachments/:index/preview",
   "POST /api/oauth/start",

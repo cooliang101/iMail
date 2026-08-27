@@ -1,5 +1,5 @@
 import { api } from '../../services';
-import type { TranslationCredentialKind, TranslationPreparation, TranslationProviderProfileInput, TranslationSettings } from './types';
+import type { TranslatedSegment, TranslationArtifact, TranslationCredentialKind, TranslationPreparation, TranslationProviderProfileInput, TranslationSettings } from './types';
 
 export const translationSettingsApi = {
   read: () => api<TranslationSettings>('/api/translation-settings'),
@@ -20,6 +20,10 @@ export const translationSettingsApi = {
   revokeConsent: (profileId: string) => api<TranslationSettings>(`/api/translation-profiles/${encodeURIComponent(profileId)}/consent`, { method: 'DELETE' }),
   deleteProfile: (profileId: string) => api<TranslationSettings>(`/api/translation-profiles/${encodeURIComponent(profileId)}`, { method: 'DELETE' }),
   prepareMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string }) => api<TranslationPreparation>(`/api/messages/${encodeURIComponent(messageId)}/translations/prepare`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }),
+  completeMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string; segments: TranslatedSegment[] }) => api<TranslationArtifact>(`/api/messages/${encodeURIComponent(messageId)}/translations/complete`, {
     method: 'POST',
     body: JSON.stringify(input),
   }),

@@ -94,6 +94,8 @@ Agent
 账户可选的 `http`、`https`、`socks5` 代理由 `imail-mail-network` 统一注入 IMAP 与 SMTP 连接，因此连接测试、同步、远程邮件操作、附件下载和发信遵循同一邮箱配置。SQLite schema v5 为 `accounts` 增加可空的 `proxy_json`，持久化协议、主机、端口和可选用户名；v4 升级只添加该列，不改写已有账户。代理密码继续合并进加密凭据载荷，公开账户视图和 MCP 输出不返回密码。关闭代理时同时清除 `proxy_json` 和加密载荷中的代理密码，备份/恢复保留两部分。
 
 SQLite schema v7 增加 `apple_hme_sessions`，schema v8 增加 `apple_hme_addresses` 与 `apple_hme_sync_state`，schema v9 增加按应用用户隔离的 `translation_provider_profiles`，schema v10 增加按用户、邮件正文哈希、语言、Profile、Provider 修订与分段版本隔离的 `message_translation_cache`。翻译服务 Profile 只公开提供商、执行位置和凭据是否已配置，真实 API Key 或服务账号使用 `master.key` 加密保存。Apple 会话记录以邮箱账户 ID 为主键并通过外键随账户级联删除，只保存 `master.key` 加密后的 `AppleSession` 与更新时间；Apple ID、Cookie、`scnt`、Session Token、API Key 和数据访问 Token 均不进入公开账户模型。地址表保存最近一次手动同步的 HME 管理快照，按应用用户和邮箱账户隔离，创建、停用和删除成功后同步更新本地记录。HME pending 2FA 状态仅在进程内保留十分钟，并额外绑定应用用户与邮箱账户。Apple Account 会话用于新建地址，iCloud Web 会话用于手动同步、创建、停用和删除；IMAP/SMTP 仍使用原邮箱应用专用密码。
+
+Edge 本地翻译通过当前 WebView 的官方 `Translator` 与 `LanguageDetector` Web API 执行，前端只在两个 API 都存在时声明运行时可用。首次模型下载保留显式用户手势并展示进度；每次翻译都按服务端生成的稳定分段执行，客户端结果回传后由 Rust 重新读取邮件、Profile 与语言参数并校验全部分段 ID，只有 WebView 目标的 Edge 本地 Profile 可以提交结果。正文与译文不会因本地 Provider 进入第三方网络请求，译文是否持久化继续服从当前用户的缓存开关。
 - `crates/imail-core/src/theme.rs`、`crates/imail-core/src/preferences.rs` 与 `crates/imail-http/src/mcp.rs`：校验并按应用用户保存自定义主题令牌，供 HTTP preferences 与 MCP 控制面共同使用。
 - `crates/imail-core/src/developer_tokens.rs`、`crates/imail-storage-sqlite/src/developer_tokens.rs` 与 `imail-security`：生成和验证高熵授权码、SHA-256 哈希、过期、撤销与用户作用域。
 

@@ -6,6 +6,7 @@ import { SettingsLinkRow, SettingsPanelHeading } from '../../components/settings
 import type { Notice } from '../../app-model';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
 import { translationSettingsApi } from './translation-api';
+import { supportsEdgeLocalTranslation } from './edge-local-translator';
 import type {
   TranslationCredentialKind,
   TranslationExecutionTarget,
@@ -48,6 +49,7 @@ export function TranslationSettingsPanel({ setNotice }: { setNotice: (notice: No
   const [editor, setEditor] = useState<EditorState>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const edgeRuntimeSupported = supportsEdgeLocalTranslation();
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +120,7 @@ export function TranslationSettingsPanel({ setNotice }: { setNotice: (notice: No
           const profiles = profilesByKind.get(descriptor.kind) ?? [];
           if (profiles.length === 0) return <SettingsLinkRow key={descriptor.kind} icon={descriptor.experimental ? <Key size={19} /> : <Globe size={19} />} title={descriptor.displayName} value="未配置" onClick={() => setEditor({ descriptor })} />;
           return <div className="translation-provider-group" key={descriptor.kind}>
-            {profiles.map((profile) => <SettingsLinkRow key={profile.profile.id} icon={descriptor.experimental ? <Key size={19} /> : <Globe size={19} />} title={profile.profile.displayName} value={statusLabels[profile.status]} onClick={() => setEditor({ descriptor, profile })} />)}
+            {profiles.map((profile) => <SettingsLinkRow key={profile.profile.id} icon={descriptor.experimental ? <Key size={19} /> : <Globe size={19} />} title={profile.profile.displayName} value={descriptor.kind === 'edge-local' && profile.status === 'runtimeCheckRequired' ? (edgeRuntimeSupported ? '本机 API 可用' : '当前运行时不支持') : statusLabels[profile.status]} onClick={() => setEditor({ descriptor, profile })} />)}
             <SettingsLinkRow icon={<Plus size={18} />} title={`添加 ${descriptor.displayName} 配置`} value="新增" onClick={() => setEditor({ descriptor })} />
           </div>;
         })}

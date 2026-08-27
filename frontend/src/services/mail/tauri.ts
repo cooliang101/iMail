@@ -57,6 +57,7 @@ export type EmbeddedDomainCall =
   | { operation: 'translationConsentAccept'; profileId: string }
   | { operation: 'translationConsentRevoke'; profileId: string }
   | { operation: 'translationPrepare'; messageId: string; input: Record<string, unknown> }
+  | { operation: 'translationComplete'; messageId: string; input: Record<string, unknown> }
   | { operation: 'translationCacheClear' }
   | { operation: 'developerTokensList' }
   | { operation: 'developerTokenCreate'; input: Record<string, unknown> }
@@ -180,6 +181,8 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   if (translationConsent && method === 'DELETE' && options.body === undefined) return { operation: 'translationConsentRevoke', profileId: decodeURIComponent(translationConsent[1]) };
   const translationPrepare = url.pathname.match(/^\/api\/messages\/([^/]+)\/translations\/prepare$/);
   if (translationPrepare && method === 'POST' && body) return { operation: 'translationPrepare', messageId: decodeURIComponent(translationPrepare[1]), input: body };
+  const translationComplete = url.pathname.match(/^\/api\/messages\/([^/]+)\/translations\/complete$/);
+  if (translationComplete && method === 'POST' && body) return { operation: 'translationComplete', messageId: decodeURIComponent(translationComplete[1]), input: body };
   if (method === 'DELETE' && options.body === undefined && url.pathname === '/api/translation-cache') return { operation: 'translationCacheClear' };
   if (method === 'POST' && url.pathname === '/api/developer-tokens' && body) return { operation: 'developerTokenCreate', input: body };
   const token = url.pathname.match(/^\/api\/developer-tokens\/([^/]+)$/);
