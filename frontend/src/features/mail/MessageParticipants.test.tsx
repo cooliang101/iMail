@@ -26,7 +26,7 @@ const message: Message = {
 
 describe('MessageParticipants', () => {
   it('renders every distinct recipient as an independent accessible trigger', () => {
-    const html = renderToStaticMarkup(<MessageParticipants message={message} contacts={[]} color="#168f78" onCompose={vi.fn()} />);
+    const html = renderToStaticMarkup(<MessageParticipants message={message} contacts={[]} color="#168f78" onCompose={vi.fn()} onFilter={vi.fn()} />);
     expect(html).toContain('aria-label="查看收件人 Owner &lt;owner@example.com>"');
     expect(html).toContain('aria-label="查看收件人 Archive &lt;archive@example.com>"');
     expect((html.match(/class="recipient-address"/g) ?? [])).toHaveLength(2);

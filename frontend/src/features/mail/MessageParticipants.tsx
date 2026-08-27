@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'preact/compat';
 import { SenderAvatar } from '../../components/shared';
-import type { MailParticipant } from '../../app-model';
+import type { MailParticipant, ParticipantRole } from '../../app-model';
 import type { Contact, Message } from '../../types';
-import { ParticipantPopover, type ParticipantRole } from './ParticipantPopover';
+import { ParticipantPopover } from './ParticipantPopover';
 
 function participantLabel(participant: { name: string; address: string }) {
   return participant.name && participant.name !== participant.address
@@ -17,11 +17,12 @@ type ActiveParticipant = {
   trigger: HTMLButtonElement;
 };
 
-export function MessageParticipants({ message, contacts, color, onCompose }: {
+export function MessageParticipants({ message, contacts, color, onCompose, onFilter }: {
   message: Message;
   contacts: Contact[];
   color: string;
   onCompose: (address: string) => void;
+  onFilter: (role: ParticipantRole, participant: MailParticipant) => void;
 }) {
   const [active, setActive] = useState<ActiveParticipant | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -83,6 +84,6 @@ export function MessageParticipants({ message, contacts, color, onCompose }: {
       <span>收件人</span>
       <span>{recipients.length > 0 ? recipients.map((recipient) => <button className="recipient-address" type="button" key={recipient.address.toLocaleLowerCase()} title={participantLabel(recipient)} aria-label={`查看收件人 ${participantLabel(recipient)}`} aria-haspopup="dialog" aria-controls={active?.role === 'recipient' && active.participant.address.toLocaleLowerCase() === recipient.address.toLocaleLowerCase() ? popoverId : undefined} aria-expanded={active?.role === 'recipient' && active.participant.address.toLocaleLowerCase() === recipient.address.toLocaleLowerCase()} onClick={(event) => toggle('recipient', recipient, event.currentTarget)}>{participantLabel(recipient)}</button>) : <span className="recipient-address-empty">未提供收件人信息</span>}</span>
     </div>
-    {active && <ParticipantPopover id={popoverId} role={active.role} participant={active.participant} contact={active.contact} logo={active.role === 'sender' ? message.from.logo : undefined} color={color} trigger={active.trigger} onClose={close} onCompose={onCompose} />}
+    {active && <ParticipantPopover id={popoverId} role={active.role} participant={active.participant} contact={active.contact} logo={active.role === 'sender' ? message.from.logo : undefined} color={color} trigger={active.trigger} onClose={close} onCompose={onCompose} onFilter={onFilter} />}
   </div>;
 }

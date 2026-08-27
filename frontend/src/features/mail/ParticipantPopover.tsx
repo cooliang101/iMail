@@ -1,10 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'preact/compat';
-import { Check, Copy, EnvelopeSimple } from '../../components/icons';
+import { Check, Copy, EnvelopeSimple, MagnifyingGlass } from '../../components/icons';
 import { SenderAvatar } from '../../components/shared';
-import type { MailParticipant } from '../../app-model';
+import type { MailParticipant, ParticipantRole } from '../../app-model';
 import type { Contact, ContactLogo } from '../../types';
-
-export type ParticipantRole = 'sender' | 'recipient';
 
 function contactRecency(value?: string) {
   if (!value) return '';
@@ -13,7 +11,7 @@ function contactRecency(value?: string) {
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
 }
 
-export function ParticipantPopover({ id, role, participant, contact, logo, color, trigger, onClose, onCompose }: {
+export function ParticipantPopover({ id, role, participant, contact, logo, color, trigger, onClose, onCompose, onFilter }: {
   id: string;
   role: ParticipantRole;
   participant: MailParticipant;
@@ -23,6 +21,7 @@ export function ParticipantPopover({ id, role, participant, contact, logo, color
   trigger: HTMLButtonElement;
   onClose: (restoreFocus?: boolean) => void;
   onCompose: (address: string) => void;
+  onFilter: (role: ParticipantRole, participant: MailParticipant) => void;
 }) {
   const popoverRef = useRef<HTMLElement>(null);
   const [copied, setCopied] = useState(false);
@@ -83,6 +82,7 @@ export function ParticipantPopover({ id, role, participant, contact, logo, color
     </header>
     {role === 'sender' && contact && <div className="participant-contact-facts"><span><strong>{contact.messageCount}</strong> 封往来邮件</span>{contact.lastContactAt && <span>最近联系 {contactRecency(contact.lastContactAt)}</span>}</div>}
     <footer>
+      <button type="button" title={role === 'sender' ? '查看来自此地址的邮件' : '查看发往此地址的邮件'} onClick={() => { onClose(false); onFilter(role, participant); }}><MagnifyingGlass size={16} />{role === 'sender' ? '来自此地址' : '发往此地址'}</button>
       <button type="button" className="participant-compose-action" onClick={() => { onClose(false); onCompose(participant.address); }}><EnvelopeSimple size={16} />写邮件</button>
     </footer>
   </section>;

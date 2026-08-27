@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'preact/compat';
-import type { AppView, WorkspaceFolder } from '../../app-model';
+import type { AppView, ParticipantFilters, WorkspaceFolder } from '../../app-model';
 
 export function useWorkspaceNavigation(initialView: AppView) {
   const [view, setView] = useState<AppView>(initialView);
   const [accountFilter, setAccountFilter] = useState('all');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [participantFilters, setParticipantFilters] = useState<ParticipantFilters>({ sender: null, recipient: null });
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [activeMailbox, setActiveMailbox] = useState<WorkspaceFolder | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -44,6 +45,7 @@ export function useWorkspaceNavigation(initialView: AppView) {
     accountFilter, setAccountFilter,
     groupFilter, setGroupFilter,
     search, setSearch,
+    participantFilters, setParticipantFilters,
     activeLabel,
     activeMailbox,
     sidebarOpen, setSidebarOpen,

@@ -10,6 +10,7 @@ export type MessageStats = {
 
 export type MessageBodyView = 'source' | 'rendered';
 export type MailParticipant = { name: string; address: string };
+export type ParticipantRole = 'sender' | 'recipient';
 export type ParticipantFilters = { sender: MailParticipant | null; recipient: MailParticipant | null };
 export type StartupView = 'inbox' | 'starred';
 export type AppThemeId = 'mint-fresh' | 'tech' | 'business-blue' | 'soft-neubrutalism' | 'constructivist-red' | 'custom';

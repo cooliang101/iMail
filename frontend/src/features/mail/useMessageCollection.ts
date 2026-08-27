@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { api, desktopLog, describeDesktopLogValue, subscribeSyncEvents } from '../../services';
 import { buildMessageQuery } from '../../app/selectors';
 import type { Account, Contact, Message } from '../../types';
-import type { AppView, MessageStats, Notice, WorkspaceFolder } from '../../app-model';
+import type { AppView, MessageStats, Notice, ParticipantFilters, WorkspaceFolder } from '../../app-model';
 import { appendMessagePage, applyMessageChanges, applyMessageStatsChanges, cacheMessageBody, messageTotalDelta, type MessageChange } from './message-cache';
 import type { MailListFilter } from './MessagePane';
 
@@ -14,6 +14,7 @@ type Options = {
   accountFilter: string;
   groupFilter: string | null;
   search: string;
+  participantFilters: ParticipantFilters;
   mailFilter: MailListFilter;
   activeLabel: string | null;
   activeMailbox: WorkspaceFolder | null;
@@ -25,7 +26,7 @@ type Options = {
 };
 
 export function useMessageCollection(options: Options) {
-  const { accounts, view, accountFilter, groupFilter, search, mailFilter, activeLabel, activeMailbox, selectedId, setSelectedId, setContacts, setNotice, isMessageActionActive } = options;
+  const { accounts, view, accountFilter, groupFilter, search, participantFilters, mailFilter, activeLabel, activeMailbox, selectedId, setSelectedId, setContacts, setNotice, isMessageActionActive } = options;
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageTotal, setMessageTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -34,7 +35,7 @@ export function useMessageCollection(options: Options) {
   const [ready, setReady] = useState(false);
   const [revision, setRevision] = useState(0);
   const [stats, setStats] = useState<MessageStats>({ total: 0, unread: 0, byAccount: [], byGroup: [] });
-  const query = useMemo(() => buildMessageQuery({ accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox }), [accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox]);
+  const query = useMemo(() => buildMessageQuery({ accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox, participantFilters }), [accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox, participantFilters]);
   const queryRef = useRef(query);
   const accountsRef = useRef(accounts);
   const implicitSelectedIdRef = useRef<string | null>(null);

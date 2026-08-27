@@ -200,8 +200,38 @@ test('reader shows complete routing details and opens the sender contact card', 
   await expect(recipientCard).not.toContainText('封往来邮件');
   await expect(recipientCard.getByRole('button', { name: '复制邮箱' })).toBeVisible();
   await expect(recipientCard.getByRole('button', { name: '写邮件' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(recipientTrigger).toBeFocused();
+  const recipientFilterRequest = page.waitForRequest((request) => new URL(request.url()).searchParams.get('recipient') === account.email);
+  await recipientCard.getByRole('button', { name: '发往此地址' }).click();
+  await recipientFilterRequest;
+  const filterBar = page.getByRole('region', { name: '邮件参与者筛选条件' });
+  await expect(filterBar).toContainText('发往');
+  await expect(filterBar).toContainText(account.email);
+
+  await senderTrigger.click();
+  const senderFilterRequest = page.waitForRequest((request) => new URL(request.url()).searchParams.get('sender') === 'sender1@example.test');
+  await card.getByRole('button', { name: '来自此地址' }).click();
+  await senderFilterRequest;
+  await expect(filterBar).toContainText('来自');
+  await expect(filterBar).toContainText('sender1@example.test');
+  await expect(filterBar.getByRole('button', { name: '清除全部' })).toBeVisible();
+
+  await filterBar.getByRole('button', { name: `清除发往${account.email}的筛选` }).click();
+  await expect(filterBar).not.toContainText('发往');
+  await expect(filterBar).toContainText('sender1@example.test');
+});
+
+test('participant filtering returns a narrow reader to the message list', async ({ page }) => {
+  await installMailFixture(page);
+  await page.setViewportSize({ width: 600, height: 820 });
+  await page.locator('.message-row').filter({ has: page.getByText('Fixture subject 1', { exact: true }) }).click();
+  await expect(page.locator('.mail-layout')).toHaveClass(/mobile-reader-open/);
+  await page.locator('.sender-contact-trigger').click();
+  const filterRequest = page.waitForRequest((request) => new URL(request.url()).searchParams.get('sender') === 'sender1@example.test');
+  await page.getByRole('dialog', { name: 'Wayne Fixture 的联系人名片' }).getByRole('button', { name: '来自此地址' }).click();
+  await filterRequest;
+  await expect(page.locator('.mail-layout')).not.toHaveClass(/mobile-reader-open/);
+  await expect(page.getByRole('region', { name: '邮件参与者筛选条件' })).toContainText('sender1@example.test');
+  await expect(page.locator('.message-pane')).toBeVisible();
 });
 
 test('mail notices and external access keep their layout before compose is opened', async ({ page }) => {
