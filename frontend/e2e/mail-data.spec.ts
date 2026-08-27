@@ -324,7 +324,7 @@ test('idle warmup preloads deferred interaction bundles without a loading flash'
 test('attachment preview and download affordance use the message fixture', async ({ page }) => {
   await installMailFixture(page);
   await expect(page.getByRole('link', { name: /下载/ })).toHaveAttribute('download', 'fixture.txt');
-  await page.getByRole('button', { name: '查看' }).click();
+  await page.getByRole('button', { name: '查看', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'fixture.txt' })).toBeVisible();
   await expect(page.getByText('fixture attachment')).toBeVisible();
 });
@@ -367,7 +367,7 @@ test('remote service selection verifies the endpoint before switching', async ({
   const state = await installMailFixture(page);
   await page.getByRole('button', { name: '打开设置' }).click();
   await page.getByRole('button', { name: /服务连接/ }).click();
-  await expect(page.getByText(/实例 fixture/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: '远程服务' })).toBeVisible();
   await page.getByLabel('服务地址').fill('http://127.0.0.1:18787');
   await page.getByRole('button', { name: '连接远程服务' }).click();
   await expect.poll(() => state.serviceInfoCalls).toBeGreaterThanOrEqual(2);

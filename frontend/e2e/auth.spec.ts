@@ -62,6 +62,7 @@ test('@a11y critical first-run and empty-workspace flows remain accessible', asy
 
   await test.step('7. 隐私清除的两阶段确认可安全取消', async () => {
     await page.getByRole('button', { name: /隐私与数据/ }).click();
+    await page.getByRole('button', { name: /清除邮箱数据/ }).click();
     await page.getByRole('button', { name: '开始清除…' }).click();
     await expect(page.getByText('第一次确认：核对清除范围')).toBeVisible();
     await page.getByRole('button', { name: '我已了解，继续验证' }).click();
