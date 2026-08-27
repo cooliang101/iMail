@@ -20,7 +20,6 @@ export function PrivacyPanel({ accountCount, onReload, setNotice }: { accountCou
 
   return <section className="settings-feature-panel"><SettingsPanelHeading title="隐私与数据" />
     <div className="settings-panel-body"><div className="privacy-summary"><LockKey size={26} /><div><strong>本地优先</strong><p>邮件缓存和账户配置保存在当前设备，邮箱凭据、OAuth Token 与加密字段不会出现在设置响应中。</p></div></div>
-      <dl className="settings-facts"><div><dt>已连接邮箱</dt><dd>{accountCount} 个</dd></div><div><dt>邮件内容</dt><dd>本机缓存</dd></div><div><dt>正文渲染</dt><dd>白名单清洗</dd></div><div><dt>账户管理授权</dt><dd>仅 MCP Full</dd></div></dl>
       <div className="settings-link-list settings-link-list-spaced">
         <SettingsLinkRow icon={<DownloadSimple size={20} />} title="导出邮箱授权" detail="创建受密码保护的授权文件，不包含邮件内容。" value={`${accountCount} 个邮箱`} disabled={accountCount === 0} onClick={() => setDetail('export')} />
         <SettingsLinkRow icon={<Trash size={20} />} title="清除邮箱数据" detail="清除当前用户的授权、邮件缓存、草稿和开发者令牌。" danger onClick={() => setDetail('clear')} />

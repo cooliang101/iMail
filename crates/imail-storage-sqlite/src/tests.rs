@@ -324,6 +324,19 @@ fn edge_client_completion_revalidates_segments_and_persists_owned_results() {
             "2026-08-27T00:00:00.000Z",
         )
         .unwrap();
+    assert!(TranslationSettingsService::new(&mut store)
+        .upsert_profile(
+            &owner.id,
+            "edge-local-duplicate",
+            TranslationProviderProfileInput {
+                display_name: "另一个 Edge 本地翻译".into(),
+                execution_target: TranslationExecutionTarget::WebView,
+                provider: TranslationProviderConfiguration::EdgeLocal,
+                enabled: true,
+            },
+            "2026-08-27T00:00:01.000Z",
+        )
+        .is_err());
     let artifact = TranslationService::new(&mut store)
         .complete(
             &owner.id,

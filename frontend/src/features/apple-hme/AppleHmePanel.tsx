@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'preact
 import type { Notice } from '../../app-model';
 import { AppButton } from '../../components/AppButton';
 import { AppInput, AppSelect, AppTextarea } from '../../components/form-controls';
-import { CheckCircle, Copy, Globe, Key, LockKey, WarningCircle } from '../../components/icons';
+import { CheckCircle, Copy, Globe, Key, LockKey, Plus, WarningCircle } from '../../components/icons';
 import { SettingsLinkRow } from '../../components/settings-navigation';
 import { api } from '../../services';
 import type { Account } from '../../types';
@@ -233,7 +233,7 @@ export function AppleHmePanel({ account, setNotice, view, onViewChange }: { acco
   if (view === 'addresses') return <section className="apple-hme-panel apple-hme-detail-view">
     {errorNotice}
     <div className="apple-hme-addresses">
-      <div className="apple-hme-address-heading"><div><strong>隐私邮箱列表</strong><small>{addresses.length} 个本地地址{lastSyncedAt ? ` · 最后同步 ${new Date(lastSyncedAt).toLocaleString()}` : ' · 尚未从 Apple 同步'}</small></div><AppButton appearance="secondary" disabled={busy} onClick={() => { if (status?.icloudWebConnected) void syncAddresses(); else onViewChange('icloudWebLogin'); }}>{busy ? '同步中…' : status?.icloudWebConnected ? '从 Apple 同步' : '连接 iCloud 后同步'}</AppButton></div>
+      <div className="apple-hme-address-heading"><div><strong>隐私邮箱列表</strong><small>{addresses.length} 个本地地址{lastSyncedAt ? ` · 最后同步 ${new Date(lastSyncedAt).toLocaleString()}` : ' · 尚未从 Apple 同步'}</small></div><div className="apple-hme-address-heading-actions"><AppButton appearance="primary" icon={<Plus size={15} />} disabled={busy} onClick={() => onViewChange('create')}>创建地址</AppButton><AppButton appearance="secondary" disabled={busy} onClick={() => { if (status?.icloudWebConnected) void syncAddresses(); else onViewChange('icloudWebLogin'); }}>{busy ? '同步中…' : status?.icloudWebConnected ? '从 Apple 同步' : '连接 iCloud 后同步'}</AppButton></div></div>
       {addresses.length === 0 ? <div className="apple-hme-empty"><Globe size={21} /><span><strong>本地还没有隐私邮箱</strong><small>{status?.icloudWebConnected ? '点击“从 Apple 同步”获取已创建的隐私邮箱并保存到本地。' : '先连接 iCloud 地址管理，再手动同步 Apple 已创建的隐私邮箱。'}</small></span></div> : addresses.map((address) => <article key={address.anonymousId}>
         <div className="apple-hme-address-details"><span className="apple-hme-address-line"><strong>{address.email}</strong><button type="button" className="apple-hme-copy-address" aria-label={`复制隐私邮箱 ${address.email}`} title="复制隐私邮箱" onClick={() => void copyAddress(address)}><Copy size={15} /></button>{copiedAddressId === address.anonymousId && <span className="apple-hme-copy-success" role="status" aria-label="复制成功" title="复制成功"><CheckCircle size={17} weight="fill" /></span>}</span><small>{address.label || '未命名'}{address.forwardToEmail ? ` · 转发至 ${address.forwardToEmail}` : ''}</small></div>
         <em className={address.active ? 'is-active' : ''}>{address.active ? '使用中' : '已停用'}</em>

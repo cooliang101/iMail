@@ -13,7 +13,7 @@ type AppInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'onCha
 export const AppInput = forwardRef<HTMLInputElement, AppInputProps>(function AppInput({ className, contentBefore, contentAfter, onChange, ...props }, ref) {
   return <span className={classes('app-input', className)}>
     {contentBefore && <span className="app-input-decoration" aria-hidden="true">{contentBefore}</span>}
-    <input ref={ref} {...props} onChange={(event) => onChange?.(event, { value: event.currentTarget.value })} />
+    <input ref={ref} {...props} autoComplete="off" data-form-type="other" data-lpignore="true" data-1p-ignore="true" onChange={(event) => onChange?.(event, { value: event.currentTarget.value })} />
     {contentAfter && <span className="app-input-decoration app-input-decoration-after">{contentAfter}</span>}
   </span>;
 });

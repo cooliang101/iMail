@@ -13,6 +13,8 @@ export function AppSwitch({ className, label, onChange, ...props }: AppSwitchPro
     <span className="app-switch-track" aria-hidden="true" />
   </>;
 
-  if (hasLabel) return <label className={className ? `${base} ${className}` : base}>{control}<span className="app-switch-label">{label}</span></label>;
-  return <span className={className ? `${base} ${className}` : base}>{control}</span>;
+  return <label className={className ? `${base} ${className}` : base}>
+    {control}
+    {hasLabel && <span className="app-switch-label">{label}</span>}
+  </label>;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { defaultShortcutBindings, isBrowserRefreshShortcut, loadShortcutBindings, preventBrowserRefresh, shortcutConflict, shortcutFromEvent, shortcutLabel, shortcutMatches } from './shortcut-model';
+import { defaultShortcutBindings, isBrowserRefreshShortcut, loadShortcutBindings, preventBrowserRefresh, shortcutConflict, shortcutDefinitions, shortcutFromEvent, shortcutLabel, shortcutMatches } from './shortcut-model';
 
 describe('shortcut model', () => {
   it('normalizes platform modifier keys and matches exact combinations', () => {
@@ -26,6 +26,7 @@ describe('shortcut model', () => {
     });
     expect(shortcutLabel(defaultShortcutBindings.nextMessage)).toBe('→');
     expect(shortcutLabel(defaultShortcutBindings.previousMessage)).toBe('←');
+    expect(shortcutDefinitions.find((item) => item.id === 'sync')).toMatchObject({ label: '立即同步', description: '刷新当前邮件范围' });
   });
 
   it('recognizes application reload shortcuts so the desktop shell can block them', () => {

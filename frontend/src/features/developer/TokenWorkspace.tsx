@@ -5,7 +5,7 @@ import { api, desktopLog, describeDesktopLogValue } from '../../services';
 import type { Account, DeveloperToken, ExternalAccessSettings } from '../../types';
 import type { Notice } from '../../app-model';
 import { providerLabel } from '../../components/shared';
-import { AppCheckbox, AppSelect } from '../../components/form-controls';
+import { AppSelect, AppSwitch } from '../../components/form-controls';
 import { McpIntegrationGuide } from './McpIntegrationGuide';
 import { useExternalAccessBaseUrl } from './external-access-endpoint';
 
@@ -68,7 +68,7 @@ export function TokenWorkspace({ accounts, tokens, onCreateApi, onCreateMcp, onR
 
     <nav className="access-tabs" role="tablist" aria-label="外部接入方式"><button role="tab" aria-selected={activeTab === 'mcp'} className={activeTab === 'mcp' ? 'active' : ''} onClick={() => setActiveTab('mcp')}><Code size={18} /><span><strong>MCP</strong><small>Agent 工具调用</small></span></button><button role="tab" aria-selected={activeTab === 'api'} className={activeTab === 'api' ? 'active' : ''} onClick={() => setActiveTab('api')}><AddressBook size={18} /><span><strong>API 网关</strong><small>REST 接口调用</small></span></button></nav>
 
-    <div className={`external-access-toggle${available && activeEnabled ? ' is-enabled' : ''}`}><span><strong>{activeTab === 'mcp' ? '启用 MCP 接入' : '启用 API 网关'}</strong><small>{!available ? endpointError || '正在启动本机 HTTP Adapter…' : activeEnabled ? '外部客户端可使用有效授权码连接' : '当前关闭，已有授权码也无法访问'}</small></span><AppCheckbox aria-label={activeTab === 'mcp' ? '启用 MCP 接入' : '启用 API 网关'} checked={available && activeEnabled} disabled={!available || !accessSettings || accessBusy} onChange={(_, data) => void setAccessEnabled(Boolean(data.checked))} /></div>
+    <div className={`external-access-toggle${available && activeEnabled ? ' is-enabled' : ''}`}><span><strong>{activeTab === 'mcp' ? '启用 MCP 接入' : '启用 API 网关'}</strong><small>{!available ? endpointError || '正在启动本机 HTTP Adapter…' : activeEnabled ? '外部客户端可使用有效授权码连接' : '当前关闭，已有授权码也无法访问'}</small></span><AppSwitch aria-label={activeTab === 'mcp' ? '启用 MCP 接入' : '启用 API 网关'} checked={available && activeEnabled} disabled={!available || !accessSettings || accessBusy} onChange={(_, data) => void setAccessEnabled(Boolean(data.checked))} /></div>
 
     <div className={`endpoint-strip${available && activeEnabled ? '' : ' is-disabled'}`}><Code size={21} /><span><small>{activeTab === 'mcp' ? 'Streamable HTTP 地址' : 'REST API 地址'}</small><code>{endpoint || '正在准备本机回环地址…'}</code></span><button disabled={!available || !activeEnabled} onClick={() => void copyEndpoint(endpoint)}><Copy size={17} />复制</button></div>
 

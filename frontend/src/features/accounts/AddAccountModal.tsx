@@ -15,9 +15,15 @@ import { proxyInputFromForm } from './ProxyFields';
 
 const defaultWorkspaceNames = ['工作', '个人', '对外支持', '开发测试', '同学联系'];
 
-export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Account[]; onClose: () => void; onAdded: (result?: { warning?: string }) => void | Promise<void> }) {
+export function AddAccountModal({ accounts, initialProvider = 'outlook', managedIcloud = false, onClose, onAdded }: {
+  accounts: Account[];
+  initialProvider?: ProviderId;
+  managedIcloud?: boolean;
+  onClose: () => void;
+  onAdded: (result?: { warning?: string }) => void | Promise<void>;
+}) {
   const platform = usePlatform();
-  const [provider, setProvider] = useState<ProviderId>('outlook');
+  const [provider, setProvider] = useState<ProviderId>(managedIcloud ? 'icloud' : initialProvider);
   const [advanced, setAdvanced] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [oauthCatalog, setOauthCatalog] = useState<Array<{ id: string; configured: boolean; redirectUri: string; configurationHint: string }>>([]);
@@ -153,10 +159,10 @@ export function AddAccountModal({ accounts, onClose, onAdded }: { accounts: Acco
     finally { setBusy(false); }
   }
   return <Overlay onClose={onClose} wide dialogClassName="account-modal-shell"><form className="account-modal" onSubmit={submit}>
-    <div className="modal-header"><div><span>连接新的收件箱</span><h2>添加邮箱</h2><p>选择你的邮箱平台，登录后即可在 iMail 中统一收发邮件。</p></div><button type="button" aria-label="关闭添加邮箱窗口" onClick={onClose}><X size={21} /></button></div>
-    <ProviderPicker value={provider} busy={busy} onChange={(nextProvider) => { const item = providers.find((candidate) => candidate.id === nextProvider)!; const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(nextProvider); setManualMode(nextProvider === 'yahoo' && status?.configured === false); setError(''); }} />
+    <div className="modal-header"><div><span>{managedIcloud ? 'iCloud 隐私邮箱' : '连接新的收件箱'}</span><h2>{managedIcloud ? '新增托管 iCloud' : '添加邮箱'}</h2><p>{managedIcloud ? '接入主 iCloud 邮箱后，即可继续授权、同步和管理它的隐私邮箱地址。' : '选择你的邮箱平台，登录后即可在 iMail 中统一收发邮件。'}</p></div><button type="button" aria-label="关闭添加邮箱窗口" onClick={onClose}><X size={21} /></button></div>
+    {!managedIcloud && <ProviderPicker value={provider} busy={busy} onChange={(nextProvider) => { const item = providers.find((candidate) => candidate.id === nextProvider)!; const status = item.oauthKey ? oauthCatalog.find((entry) => entry.id === item.oauthKey) : undefined; setProvider(nextProvider); setManualMode(nextProvider === 'yahoo' && status?.configured === false); setError(''); }} />}
     <AccountConnectionFields provider={provider} usesOAuth={usesOAuth} oauthConfigured={oauthStatus?.configured} credentialGuide={credentialGuide} workspaceOptions={workspaceOptions} busy={busy} advanced={advanced} onAdvancedChange={setAdvanced} onManualModeChange={setManualMode} onCancelOAuth={cancelOAuth} />
     {error && <div className="inline-error"><WarningCircle size={17} />{error}</div>}
-    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><AppButton appearance="primary" type="submit" disabled={busy || (usesOAuth && !oauthStatus?.configured)}>{busy ? (usesOAuth ? '等待授权…' : '正在验证连接…') : error && usesOAuth ? `重新使用 ${providerLabel[provider]} 登录` : usesOAuth ? `使用 ${providerLabel[provider]} 登录` : '验证并添加'}</AppButton></div>
+    <div className="modal-footer"><button type="button" onClick={onClose}>取消</button><AppButton appearance="primary" type="submit" disabled={busy || (usesOAuth && !oauthStatus?.configured)}>{busy ? (usesOAuth ? '等待授权…' : '正在验证连接…') : error && usesOAuth ? `重新使用 ${providerLabel[provider]} 登录` : usesOAuth ? `使用 ${providerLabel[provider]} 登录` : managedIcloud ? '验证并托管' : '验证并添加'}</AppButton></div>
   </form></Overlay>;
 }

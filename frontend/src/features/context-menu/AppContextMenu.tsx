@@ -52,7 +52,7 @@ export function AppContextMenu({ target, bindings, messages, accounts, activeAcc
   } else {
     items = [
       { id: 'compose', label: '写新邮件', icon: <PencilSimple size={17} />, shortcut: shortcut('compose'), onSelect: () => actions.compose(activeAccountId) },
-      { id: 'sync', label: '同步当前范围', icon: <ArrowClockwise size={17} />, shortcut: shortcut('sync'), onSelect: actions.syncCurrent },
+      { id: 'sync', label: '立即同步', icon: <ArrowClockwise size={17} />, shortcut: shortcut('sync'), onSelect: actions.syncCurrent },
       { id: 'shortcuts', label: '快捷键设置', icon: <Keyboard size={17} />, shortcut: shortcut('openShortcutSettings'), separatorBefore: true, onSelect: actions.shortcutSettings },
     ];
   }

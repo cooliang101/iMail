@@ -121,7 +121,7 @@ export function TranslationSettingsPanel({ setNotice }: { setNotice: (notice: No
           if (profiles.length === 0) return <SettingsLinkRow key={descriptor.kind} icon={descriptor.experimental ? <Key size={19} /> : <Globe size={19} />} title={descriptor.displayName} value="未配置" onClick={() => setEditor({ descriptor })} />;
           return <div className="translation-provider-group" key={descriptor.kind}>
             {profiles.map((profile) => <SettingsLinkRow key={profile.profile.id} icon={descriptor.experimental ? <Key size={19} /> : <Globe size={19} />} title={profile.profile.displayName} value={descriptor.kind === 'edge-local' && profile.status === 'runtimeCheckRequired' ? (edgeRuntimeSupported ? '本机 API 可用' : '当前运行时不支持') : statusLabels[profile.status]} onClick={() => setEditor({ descriptor, profile })} />)}
-            <SettingsLinkRow icon={<Plus size={18} />} title={`添加 ${descriptor.displayName} 配置`} value="新增" onClick={() => setEditor({ descriptor })} />
+            {descriptor.kind !== 'edge-local' && <SettingsLinkRow icon={<Plus size={18} />} title={`添加 ${descriptor.displayName} 配置`} value="新增" onClick={() => setEditor({ descriptor })} />}
           </div>;
         })}
       </div>
@@ -145,7 +145,7 @@ function ProviderEditor({ settings, editor, busy, error, onBack, onSettings, onB
   const [provider, setProvider] = useState<TranslationProviderConfiguration>(() => existing?.provider ?? defaultConfiguration(editor.descriptor.kind));
   const [credentialKind, setCredentialKind] = useState<TranslationCredentialKind>(existing?.credential?.kind ?? editor.descriptor.credentialKinds[0] ?? 'deepl-api-key');
   const [secret, setSecret] = useState('');
-  const [enabled, setEnabled] = useState(existing?.enabled ?? !editor.descriptor.experimental);
+  const [enabled, setEnabled] = useState(existing?.enabled ?? editor.descriptor.credentialKinds.length === 0);
   const [acceptsDisclosure, setAcceptsDisclosure] = useState(Boolean(editor.profile?.consent));
   const profileId = existing?.id ?? newProfileId(editor.descriptor.kind);
   const executionTarget = existing?.executionTarget ?? defaultExecutionTarget(editor.descriptor);

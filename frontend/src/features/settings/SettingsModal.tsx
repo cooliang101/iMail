@@ -2,7 +2,7 @@ import { useState } from 'preact/compat';
 import '../../styles/dialogs.css';
 import '../../styles/settings.css';
 import { ArrowCounterClockwise, Bell, Cloud, Envelope, Eye, Gear, Globe, HardDrives, Info, Keyboard, LockKey, Palette, X } from '../../components/icons';
-import type { Account } from '../../types';
+import type { Account, ProviderId } from '../../types';
 import type { AppPreferences, Notice, ShortcutBindings } from '../../app-model';
 import { Overlay } from '../../components/shared';
 import { AccountSettingsPanel } from '../accounts';
@@ -26,7 +26,7 @@ const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof
   { id: 'appearance', label: '主题', detail: '界面风格与色彩', icon: Palette },
   { id: 'accounts', label: '邮箱管理', detail: '授权、代理与工作空间', icon: Envelope },
   { id: 'apple-hme', label: '隐私邮箱', detail: 'iCloud Hide My Email', icon: Cloud },
-  { id: 'translation', label: '邮件翻译', detail: '翻译服务与语言', icon: Globe },
+  { id: 'translation', label: '翻译服务', detail: '翻译服务与语言', icon: Globe },
   { id: 'shortcuts', label: '快捷键', detail: '键盘操作与绑定', icon: Keyboard },
   { id: 'notifications', label: '通知', detail: '选择需要关注的动态', icon: Bell },
   { id: 'display', label: '邮件展示', detail: '正文默认查看方式', icon: Eye },
@@ -41,7 +41,7 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
   bindings: ShortcutBindings;
   onPreferencesChange: (preferences: AppPreferences) => void;
   onBindingsChange: (bindings: ShortcutBindings) => void;
-  onAddAccount: () => void;
+  onAddAccount: (provider?: ProviderId, returnTo?: SettingsTab) => void;
   onReload: () => Promise<void>;
   setNotice: (notice: Notice) => void;
   onClose: () => void;
@@ -61,8 +61,8 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
         {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'service' && <ServicePanel />}
         {activeTab === 'appearance' && <AppearancePanel preferences={preferences} onChange={onPreferencesChange} />}
-        {activeTab === 'accounts' && <AccountSettingsPanel accounts={accounts} onAddAccount={onAddAccount} onReload={onReload} setNotice={setNotice} />}
-        {activeTab === 'apple-hme' && <AppleHmeSettingsPanel accounts={accounts} onAddAccount={onAddAccount} setNotice={setNotice} />}
+        {activeTab === 'accounts' && <AccountSettingsPanel accounts={accounts} onAddAccount={() => onAddAccount(undefined, 'accounts')} onReload={onReload} setNotice={setNotice} />}
+        {activeTab === 'apple-hme' && <AppleHmeSettingsPanel accounts={accounts} onAddAccount={() => onAddAccount('icloud', 'apple-hme')} setNotice={setNotice} />}
         {activeTab === 'translation' && <TranslationSettingsPanel setNotice={setNotice} />}
         {activeTab === 'shortcuts' && <ShortcutPanel bindings={bindings} onChange={onBindingsChange} />}
         {activeTab === 'notifications' && <NotificationPanel preferences={preferences} onChange={onPreferencesChange} />}

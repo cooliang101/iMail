@@ -71,7 +71,7 @@ export function ServiceAddressEditor({ compact = false, onCancel, onSaved }: { c
       <p className="service-transport-note">请填写 HTTPS 地址；仅本机回环开发地址允许使用 HTTP。</p>
       {error && <div className="auth-error" role="alert">{error}</div>}
       <div className="service-address-actions">
-        {onCancel && <button type="button" onClick={onCancel}>取消</button>}
+        {onCancel && <AppButton appearance="subtle" type="button" onClick={onCancel}>取消</AppButton>}
         <AppButton appearance="primary" type="submit" disabled={Boolean(busy)} icon={<PlugsConnected size={16} />}>{busy === 'remote' ? '正在验证…' : '连接远程服务'}</AppButton>
       </div>
     </form>

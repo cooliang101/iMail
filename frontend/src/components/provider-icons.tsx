@@ -15,7 +15,7 @@ const simpleProviderIcons: Partial<Record<ProviderId, { path: string; hex: strin
 export function ProviderIcon({ provider }: { provider: ProviderId }) {
   const icon = simpleProviderIcons[provider];
   if (icon) return <svg viewBox="0 0 24 24" role="img" aria-label={`${providerLabel[provider]} Logo`}><path fill={`#${icon.hex}`} d={icon.path} /></svg>;
-  if (provider === 'outlook' || provider === 'hotmail') return <MicrosoftOutlookLogo weight="fill" aria-label="Microsoft Outlook Logo" />;
+  if (provider === 'outlook' || provider === 'hotmail') return <MicrosoftOutlookLogo weight="fill" color="#0078d4" aria-label="Microsoft Outlook Logo" />;
   if (provider === 'yahoo') return <span className="provider-yahoo-glyph" aria-label="Yahoo Logo">Y!</span>;
   return <EnvelopeSimple weight="duotone" aria-label="IMAP 邮箱" />;
 }

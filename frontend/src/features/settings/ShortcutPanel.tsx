@@ -1,8 +1,23 @@
 import { useEffect, useState, type KeyboardEvent } from 'preact/compat';
-import { Keyboard } from '../../components/icons';
+import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowClockwise, ArrowLeft, ArrowRight, EnvelopeSimple, Gear, MagnifyingGlass, PencilSimple, Star, Trash, type Icon } from '../../components/icons';
 import type { ShortcutActionId, ShortcutBindings } from '../../app-model';
 import { shortcutConflict, shortcutDefinitions, shortcutFromEvent, shortcutLabel } from '../shortcuts';
 import { SettingsPanelHeading } from '../../components/settings-navigation';
+
+const shortcutIcons: Record<ShortcutActionId, Icon> = {
+  focusSearch: MagnifyingGlass,
+  compose: PencilSimple,
+  sync: ArrowClockwise,
+  nextMessage: ArrowRight,
+  previousMessage: ArrowLeft,
+  reply: ArrowBendUpLeft,
+  forward: ArrowBendUpRight,
+  toggleStar: Star,
+  markUnread: EnvelopeSimple,
+  archive: Archive,
+  delete: Trash,
+  openShortcutSettings: Gear,
+};
 
 export function ShortcutPanel({ bindings, onChange }: { bindings: ShortcutBindings; onChange: (bindings: ShortcutBindings) => void }) {
   const [draft, setDraft] = useState(bindings);
@@ -22,7 +37,7 @@ export function ShortcutPanel({ bindings, onChange }: { bindings: ShortcutBindin
     save({ ...draft, [actionId]: candidate }); setRecording(null); setError('');
   }
   return <section className="settings-feature-panel"><SettingsPanelHeading title="快捷键" />
-    <div className="settings-panel-body"><div className="shortcut-groups">{(['global', 'mail'] as const).map((scope) => <section key={scope}><h3>{scope === 'global' ? '全局操作' : '邮件操作'}</h3><div className="shortcut-list">{shortcutDefinitions.filter((item) => item.scope === scope).map((item) => <div className="shortcut-row" key={item.id}><i><Keyboard size={18} /></i><span><strong>{item.label}</strong><small>{item.description}</small></span><button type="button" className={recording === item.id ? 'is-recording' : ''} onClick={() => { setRecording(item.id); setError(''); }} onKeyDown={(event) => capture(event, item.id)}>{recording === item.id ? '请按键…' : <kbd>{shortcutLabel(draft[item.id])}</kbd>}</button></div>)}</div></section>)}</div>
+    <div className="settings-panel-body"><div className="shortcut-groups">{(['global', 'mail'] as const).map((scope) => <section key={scope}><h3>{scope === 'global' ? '全局操作' : '邮件操作'}</h3><div className="shortcut-list">{shortcutDefinitions.filter((item) => item.scope === scope).map((item) => { const ActionIcon = shortcutIcons[item.id]; return <div className="shortcut-row" key={item.id}><i><ActionIcon size={18} /></i><span><strong>{item.label}</strong><small>{item.description}</small></span><button type="button" className={recording === item.id ? 'is-recording' : ''} onClick={() => { setRecording(item.id); setError(''); }} onKeyDown={(event) => capture(event, item.id)}>{recording === item.id ? '请按键…' : <kbd>{shortcutLabel(draft[item.id])}</kbd>}</button></div>; })}</div></section>)}</div>
     {error && <div className="shortcut-error">{error}</div>}</div>
   </section>;
 }

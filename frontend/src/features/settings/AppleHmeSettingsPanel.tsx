@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/compat';
 import type { Notice } from '../../app-model';
-import { Envelope } from '../../components/icons';
+import { Envelope, Plus } from '../../components/icons';
 import type { Account } from '../../types';
 import { AppleHmePanel, type AppleHmeView } from '../apple-hme';
 import { SettingsPanelHeading } from '../../components/settings-navigation';
@@ -45,6 +45,10 @@ export function AppleHmeSettingsPanel({ accounts, onAddAccount, setNotice }: {
     <SettingsPanelHeading title="隐私邮箱" />
     <div className="settings-panel-body">
       {icloudAccounts.length > 0 ? <div className="apple-hme-account-regions">
+        <div className="apple-hme-overview-toolbar">
+          <span><strong>托管的 iCloud</strong><small>{icloudAccounts.length} 个身份</small></span>
+          <button type="button" className="settings-primary-action" onClick={onAddAccount}><Plus size={15} />新增托管</button>
+        </div>
         {icloudAccounts.map((account) => <AppleHmePanel
           key={account.id}
           account={account}
@@ -59,9 +63,9 @@ export function AppleHmeSettingsPanel({ accounts, onAddAccount, setNotice }: {
         />)}
       </div> : <div className="settings-empty apple-hme-settings-empty">
         <Envelope size={38} weight="duotone" />
-        <h3>需要一个 iCloud 邮箱身份</h3>
-        <p>添加 iCloud 邮箱后，可在这里单独授权并管理 Hide My Email；隐藏地址不会进入邮箱账户列表。</p>
-        <button type="button" className="settings-primary-action" onClick={onAddAccount}>添加 iCloud 邮箱</button>
+        <h3>还没有托管 iCloud</h3>
+        <p>先接入主 iCloud 邮箱，再连接 Apple 服务并管理它的隐私邮箱地址。</p>
+        <button type="button" className="settings-primary-action" onClick={onAddAccount}><Plus size={15} />新增托管 iCloud</button>
       </div>}
     </div>
   </section>;

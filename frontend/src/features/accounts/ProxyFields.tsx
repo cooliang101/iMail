@@ -1,5 +1,5 @@
 import { useState } from 'preact/compat';
-import { AppCheckbox, AppInput, AppSelect } from '../../components/form-controls';
+import { AppInput, AppSelect, AppSwitch } from '../../components/form-controls';
 import type { MailProxySettings } from '../../types';
 
 export type ProxyPreset = { accountId: string; label: string; proxy: MailProxySettings };
@@ -10,7 +10,7 @@ export function ProxyFields({ proxy, presets = [], compact = false }: { proxy?: 
   const [sourceAccountId, setSourceAccountId] = useState('');
   const selectedPreset = presets.find((preset) => preset.accountId === sourceAccountId);
   return <section className={`account-proxy-fields ${compact ? 'is-compact' : ''}`}>
-    <AppCheckbox name="proxyEnabled" checked={enabled} onChange={(_, data) => setEnabled(Boolean(data.checked))} label="通过代理连接邮件服务器" />
+    <AppSwitch name="proxyEnabled" checked={enabled} onChange={(_, data) => setEnabled(Boolean(data.checked))} label="通过代理连接邮件服务器" />
     {enabled && <><label className="account-proxy-preset"><span>代理配置</span><AppSelect name="proxySourceAccountId" value={sourceAccountId} onValueChange={setSourceAccountId} options={[
       { value: '', label: proxy ? '编辑当前代理' : '手动填写新代理' },
       ...presets.map((preset) => ({ value: preset.accountId, label: preset.label })),

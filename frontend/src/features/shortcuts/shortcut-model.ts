@@ -6,7 +6,7 @@ export function shortcutStorageKeyFor(userId: string) { return `${shortcutStorag
 export const shortcutDefinitions: Array<{ id: ShortcutActionId; label: string; description: string; scope: 'global' | 'mail' }> = [
   { id: 'focusSearch', label: '搜索邮件', description: '聚焦并选中搜索框', scope: 'global' },
   { id: 'compose', label: '写新邮件', description: '打开新邮件编辑器', scope: 'global' },
-  { id: 'sync', label: '同步当前范围', description: '同步当前邮箱或文件夹', scope: 'global' },
+  { id: 'sync', label: '立即同步', description: '刷新当前邮件范围', scope: 'global' },
   { id: 'nextMessage', label: '下一封邮件', description: '在列表中向右切换', scope: 'mail' },
   { id: 'previousMessage', label: '上一封邮件', description: '在列表中向左切换', scope: 'mail' },
   { id: 'reply', label: '回复', description: '回复当前邮件', scope: 'mail' },

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { AppSelect } from '../../components/form-controls';
 import { Globe, X } from '../../components/icons';
+import { describeDesktopLogValue, desktopLog } from '../../services';
 import { translationSettingsApi } from './translation-api';
 import { detectEdgeSourceLanguage, translateDocumentWithEdge, type EdgeTranslationProgress } from './edge-local-translator';
 import type { TranslationArtifact, TranslationPreparation, TranslationSettings } from './types';
@@ -79,11 +80,7 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
     setArtifact(undefined);
     try {
       if (pendingEdge) {
-        const onProgress = (progress: EdgeTranslationProgress) => setMessage(progressMessage(progress));
-        const segments = await translateDocumentWithEdge(pendingEdge.preparation.document, pendingEdge.sourceLanguage, targetLanguage, { signal: controller.signal, onProgress });
-        setArtifact(await translationSettingsApi.completeMessage(messageId, { profileId, sourceLanguage: pendingEdge.sourceLanguage, targetLanguage, segments }));
-        setPendingEdge(undefined);
-        setMessage('');
+        await completeEdgeTranslation(pendingEdge.preparation, pendingEdge.sourceLanguage, controller);
       } else if (preparation.cached) {
         setArtifact(preparation.cached);
       } else if (preparation.profile.profile.provider.type === 'edge-local') {
@@ -96,7 +93,16 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
           return;
         }
         setPendingEdge({ preparation: precise, sourceLanguage });
-        setMessage(`已识别为${languageLabel(sourceLanguage)}，点击“开始翻译”使用本地模型。`);
+        setMessage(`已识别为${languageLabel(sourceLanguage)}，正在启动本地翻译…`);
+        try {
+          await completeEdgeTranslation(precise, sourceLanguage, controller);
+        } catch (reason) {
+          if (requiresFreshUserActivation(reason)) {
+            setMessage(`已识别为${languageLabel(sourceLanguage)}。首次加载模型需要再次点击“继续翻译”。`);
+            return;
+          }
+          throw reason;
+        }
       } else if (['deepl', 'google-cloud', 'azure-translator', 'bing-web'].includes(preparation.profile.profile.provider.type)) {
         setMessage(`正在通过${preparation.profile.profile.displayName}翻译…`);
         setArtifact(await translationSettingsApi.executeMessage(messageId, { profileId, targetLanguage }));
@@ -105,7 +111,17 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
         setMessage('正文已准备完成；所选翻译服务的执行器尚未接入。');
       }
     } catch (reason) {
-      if (!controller.signal.aborted) setMessage(reason instanceof Error ? reason.message : '无法准备邮件翻译');
+      if (!controller.signal.aborted) {
+        const edgeProfile = preparation?.profile.profile.provider.type === 'edge-local' || Boolean(pendingEdge);
+        if (edgeProfile) {
+          void desktopLog('error', 'translation.edge_local_failed', [
+            edgeRuntimeSummary(),
+            `target=${targetLanguage}`,
+            describeDesktopLogValue(reason),
+          ].join(' '));
+        }
+        setMessage(edgeProfile ? edgeFailureMessage(reason) : reason instanceof Error ? reason.message : '无法准备邮件翻译');
+      }
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = undefined;
@@ -114,18 +130,26 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
     }
   }
 
+  async function completeEdgeTranslation(edgePreparation: TranslationPreparation, sourceLanguage: string, controller: AbortController) {
+    const onProgress = (progress: EdgeTranslationProgress) => setMessage(progressMessage(progress));
+    const segments = await translateDocumentWithEdge(edgePreparation.document, sourceLanguage, targetLanguage, { signal: controller.signal, onProgress });
+    setArtifact(await translationSettingsApi.completeMessage(messageId, { profileId, sourceLanguage, targetLanguage, segments }));
+    setPendingEdge(undefined);
+    setMessage('');
+  }
+
   function close() {
     abortRef.current?.abort();
     onClose();
   }
 
   return <section className="mail-translation-control" aria-label="邮件翻译">
-    <header><span><Globe size={18} /><strong>邮件翻译</strong></span><button type="button" title="关闭翻译" aria-label="关闭翻译" onClick={close}><X size={17} /></button></header>
-    {readyProfiles.length > 0 ? <div className="mail-translation-fields">
+    <header><span className="mail-translation-heading"><Globe size={18} /><strong>翻译</strong></span>{readyProfiles.length > 0 && <div className="mail-translation-fields">
       <AppSelect aria-label="翻译服务" value={profileId} options={readyProfiles.map(({ profile }) => ({ value: profile.id, label: profile.displayName }))} onValueChange={setProfileId} />
       <AppSelect aria-label="目标语言" value={targetLanguage} options={languages} onValueChange={setTargetLanguage} />
-      <AppButton appearance="primary" disabled={busy || preparing || !profileId || !preparation || Boolean(artifact)} onClick={() => void prepare()}>{preparing ? '准备中…' : busy ? '处理中…' : artifact ? '已翻译' : pendingEdge ? '开始翻译' : '翻译'}</AppButton>
-    </div> : <p>暂无可用翻译服务，请先在“设置 → 邮件翻译”中完成配置。</p>}
+      <AppButton appearance="primary" disabled={busy || preparing || !profileId || !preparation || Boolean(artifact)} onClick={() => void prepare()}>{preparing ? '准备中…' : busy ? '处理中…' : artifact ? '已翻译' : pendingEdge ? '继续翻译' : '翻译'}</AppButton>
+    </div>}<button className="mail-translation-close" type="button" title="关闭翻译" aria-label="关闭翻译" onClick={close}><X size={17} /></button></header>
+    {readyProfiles.length === 0 && <p>暂无可用翻译服务，请先在“设置 → 邮件翻译”中完成配置。</p>}
     {message && <p className="mail-translation-message">{message}</p>}
     {artifact && <div className="mail-translated-body" lang={artifact.key.targetLanguage}>{artifact.segments.map((segment) => <p key={segment.id}>{segment.text}</p>)}</div>}
   </section>;
@@ -151,4 +175,20 @@ function progressMessage(progress: EdgeTranslationProgress) {
     ? '正在下载 Edge 本地翻译模型…'
     : `正在下载 Edge 本地翻译模型… ${Math.round(progress.progress * 100)}%`;
   return `正在本地翻译… ${progress.completed}/${progress.total}`;
+}
+
+function requiresFreshUserActivation(reason: unknown) {
+  if (!(reason instanceof Error)) return false;
+  return reason.name === 'NotAllowedError' || /user activation|user gesture|not allowed/i.test(reason.message);
+}
+
+function edgeFailureMessage(reason: unknown) {
+  if (requiresFreshUserActivation(reason)) return 'Edge 未允许启动本地模型，请重新点击“继续翻译”。';
+  if (reason instanceof Error && /download|network/i.test(`${reason.name} ${reason.message}`)) return 'Edge 本地翻译模型下载失败，请检查网络后重试。';
+  return reason instanceof Error ? `Edge 本地翻译失败：${reason.message}` : 'Edge 本地翻译失败，请重试。';
+}
+
+function edgeRuntimeSummary() {
+  const runtime = globalThis as typeof globalThis & { Translator?: unknown; LanguageDetector?: unknown };
+  return `translator=${Boolean(runtime.Translator)} detector=${Boolean(runtime.LanguageDetector)} secure=${globalThis.isSecureContext} activation=${globalThis.navigator?.userActivation?.isActive ?? false}`;
 }

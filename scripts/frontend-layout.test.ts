@@ -88,6 +88,13 @@ describe('frontend workspace layout', () => {
     expect(tauri.$schema).toBe('../frontend/node_modules/@tauri-apps/cli/config.schema.json');
     expect(tauri.build.frontendDist).toBe('../frontend/dist');
     expect(tauri.build.beforeBuildCommand).toBe('npm run build:web');
+    expect(tauri.app.windows[0].generalAutofillEnabled).toBe(false);
+
+    const appInput = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'components', 'form-controls', 'app-input.tsx'), 'utf8');
+    const appTextarea = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'components', 'form-controls', 'app-textarea.tsx'), 'utf8');
+    expect(appInput).toContain('autoComplete="off"');
+    expect(appInput).toContain('data-form-type="other"');
+    expect(appTextarea).toContain('autoComplete="off"');
 
     const dockerfile = await readFile(path.join(workspaceRoot, 'http-service', 'Dockerfile'), 'utf8');
     expect(dockerfile).toContain('COPY frontend/package.json frontend/package-lock.json ./');
@@ -109,15 +116,84 @@ describe('frontend workspace layout', () => {
     expect(composeStyles).toContain('.token-workspace {');
   });
 
+  it('uses the shared custom select instead of native select controls', async () => {
+    const sourceRoot = path.join(workspaceRoot, 'frontend', 'src');
+    const entries = await readdir(sourceRoot, { recursive: true });
+    const sourceFiles = entries.filter((entry) => typeof entry === 'string' && entry.endsWith('.tsx'));
+    const contents = await Promise.all(sourceFiles.map((entry) => readFile(path.join(sourceRoot, entry), 'utf8')));
+    expect(contents.join('\n')).not.toMatch(/<select\b/i);
+
+    const appSelect = await readFile(path.join(sourceRoot, 'components', 'form-controls', 'app-select.tsx'), 'utf8');
+    expect(appSelect).toContain('role="listbox"');
+    expect(appSelect).toContain('createPortal');
+    expect(appSelect).toContain('type="hidden"');
+  });
+
+  it('uses switches for immediate boolean settings while preserving confirmation checkboxes', async () => {
+    const sourceRoot = path.join(workspaceRoot, 'frontend', 'src');
+    const switchControl = await readFile(path.join(sourceRoot, 'components', 'form-controls', 'app-switch.tsx'), 'utf8');
+    const general = await readFile(path.join(sourceRoot, 'features', 'settings', 'GeneralPanel.tsx'), 'utf8');
+    const notifications = await readFile(path.join(sourceRoot, 'features', 'settings', 'NotificationPanel.tsx'), 'utf8');
+    const authorizationExport = await readFile(path.join(sourceRoot, 'features', 'settings', 'AuthorizationExport.tsx'), 'utf8');
+    expect(switchControl).toContain('role="switch"');
+    expect(switchControl).toContain('return <label');
+    expect(switchControl).not.toContain('return <span');
+    expect(general).toContain('<AppSwitch');
+    expect(notifications).toContain('<AppSwitch');
+    expect(general).not.toContain('<AppCheckbox');
+    expect(notifications).not.toContain('<AppCheckbox');
+    expect(authorizationExport).toContain('<AppCheckbox');
+  });
+
+  it('keeps translation actions in the message header instead of covering the body', async () => {
+    const sourceRoot = path.join(workspaceRoot, 'frontend', 'src');
+    const reader = await readFile(path.join(sourceRoot, 'features', 'mail', 'MessageReader.tsx'), 'utf8');
+    const settingsModal = await readFile(path.join(sourceRoot, 'features', 'settings', 'SettingsModal.tsx'), 'utf8');
+    const translationSettings = await readFile(path.join(sourceRoot, 'features', 'translation', 'TranslationSettingsPanel.tsx'), 'utf8');
+    const mailStyles = await readFile(path.join(sourceRoot, 'styles', 'mail.css'), 'utf8');
+    expect(reader).toContain('className="sender-actions"');
+    expect(reader).not.toContain('mail-body-view-action');
+    expect(mailStyles).not.toContain('.mail-body-view-action');
+    expect(translationSettings).toContain('editor.descriptor.credentialKinds.length === 0');
+    expect(translationSettings).toContain("descriptor.kind !== 'edge-local'");
+    expect(settingsModal).toContain("id: 'translation', label: '翻译服务'");
+  });
+
+  it('keeps privacy settings focused on user actions instead of implementation facts', async () => {
+    const privacy = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'settings', 'PrivacyPanel.tsx'), 'utf8');
+    expect(privacy).not.toContain('settings-facts');
+    expect(privacy).not.toContain('白名单清洗');
+    expect(privacy).not.toContain('仅 MCP Full');
+    expect(privacy).toContain('value={`${accountCount} 个邮箱`}');
+  });
+
+  it('keeps shortcut key controls at a consistent size', async () => {
+    const typography = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'styles', 'typography-responsive.css'), 'utf8');
+    const shortcuts = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'settings', 'ShortcutPanel.tsx'), 'utf8');
+    expect(typography).toContain('.shortcut-row > button { width: 96px; min-width: 96px; height: 36px; min-height: 36px;');
+    expect(shortcuts).toContain('const shortcutIcons: Record<ShortcutActionId, Icon>');
+    expect(shortcuts).not.toContain('<Keyboard size={18} />');
+  });
+
+  it('uses the shared settings surface for the remote service editor', async () => {
+    const styles = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'styles.css'), 'utf8');
+    const editor = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'service', 'ServiceAddressEditor.tsx'), 'utf8');
+    expect(styles).toContain('.service-address-editor:not(.is-compact) .service-remote-form{border:1px solid var(--color-border);border-radius:var(--radius-lg);');
+    expect(editor).toContain('<AppButton appearance="subtle" type="button" onClick={onCancel}>取消</AppButton>');
+  });
+
   it('keeps Hide My Email as an independent settings feature', async () => {
     const settings = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'settings', 'SettingsModal.tsx'), 'utf8');
     const accounts = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'accounts', 'AccountSettingsModal.tsx'), 'utf8');
+    const accountCard = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'accounts', 'AccountSettingsCard.tsx'), 'utf8');
     const hmeSettings = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'settings', 'AppleHmeSettingsPanel.tsx'), 'utf8');
     const hmePanel = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'features', 'apple-hme', 'AppleHmePanel.tsx'), 'utf8');
     const settingsStyles = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'styles', 'settings.css'), 'utf8');
     expect(settings).toContain("id: 'apple-hme'");
     expect(settings).toContain('<AppleHmeSettingsPanel');
     expect(accounts).not.toContain('AppleHmePanel');
+    expect(accountCard).toContain('account-detail-view');
+    expect(accountCard).not.toContain('settings-account-card');
     expect(await exists('frontend/src/features/apple-hme/AppleHmePanel.tsx')).toBe(true);
     expect(hmePanel).toContain("scrollIntoView({ behavior: 'smooth', block: 'nearest' })");
     expect(hmePanel).toContain('appleAccountLastSuccessfulKeepaliveAt');
@@ -125,10 +201,14 @@ describe('frontend workspace layout', () => {
     expect(hmePanel.indexOf('className="apple-hme-error"')).toBeLessThan(hmePanel.indexOf('className="apple-hme-login"'));
     expect(hmePanel).toContain("export type AppleHmeView = 'overview' | 'addresses' | 'create'");
     expect(hmePanel).toContain("if (view === 'addresses')");
+    expect(hmePanel).toContain('className="apple-hme-address-heading-actions"');
+    expect(hmePanel).toContain("onClick={() => onViewChange('create')}");
     expect(hmePanel).toContain('<SettingsLinkRow');
     expect(hmePanel).not.toContain('className="apple-hme-view-switch"');
     expect(hmeSettings).toContain('icloudAccounts.map((account) => <AppleHmePanel');
     expect(hmeSettings).not.toContain('apple-hme-account-picker');
+    expect(hmeSettings).toContain('新增托管');
+    expect(settings).toContain("onAddAccount('icloud', 'apple-hme')");
     expect(hmePanel).toContain('apple-hme-account-settings-list');
     expect(settingsStyles).toContain('.apple-hme-login-actions');
     expect(settingsStyles).toContain('.settings-panel-body { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto');

@@ -49,4 +49,12 @@ describe('Edge local translation adapter', () => {
     expect(supportsEdgeLocalTranslation({})).toBe(false);
     await expect(detectEdgeSourceLanguage(document, { runtime: {} })).rejects.toMatchObject({ code: 'unsupported' });
   });
+
+  it('normalizes simplified Chinese for the Edge language pack', async () => {
+    const availability = vi.fn(async () => 'available' as const);
+    const create = vi.fn(async () => ({ translate: async () => '你好', destroy: vi.fn() }));
+    await translateDocumentWithEdge(document, 'en', 'zh-Hans', { runtime: { translator: { availability, create } } });
+    expect(availability).toHaveBeenCalledWith({ sourceLanguage: 'en', targetLanguage: 'zh' });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ sourceLanguage: 'en', targetLanguage: 'zh' }));
+  });
 });

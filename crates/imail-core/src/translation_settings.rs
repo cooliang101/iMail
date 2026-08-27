@@ -129,6 +129,21 @@ impl<'a, R: TranslationProviderRepository> TranslationSettingsService<'a, R> {
             .repository
             .translation_provider(user_id, profile_id)
             .map_err(ApplicationError::Repository)?;
+        if existing.is_none()
+            && input.provider.kind() == TranslationProviderKind::EdgeLocal
+            && self
+                .repository
+                .list_translation_providers(user_id)
+                .map_err(ApplicationError::Repository)?
+                .iter()
+                .any(|record| record.profile.provider.kind() == TranslationProviderKind::EdgeLocal)
+        {
+            return Err(domain(
+                "TRANSLATION_EDGE_PROFILE_ALREADY_EXISTS",
+                409,
+                "Edge 本地翻译只支持一个配置",
+            ));
+        }
         let provider_changed = existing
             .as_ref()
             .is_some_and(|record| record.profile.provider != input.provider);

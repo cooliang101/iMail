@@ -17,8 +17,7 @@ export function AccountSettingsCard({ account, proxyPresets, workspaceOptions, b
 }) {
   const connectionText = account.status === 'connected' ? '连接正常' : account.status === 'syncing' ? '正在同步' : account.lastError || '连接异常';
   const proxyText = account.proxy ? `${account.proxy.protocol.toUpperCase()} · ${account.proxy.host}:${account.proxy.port}` : '直连（未使用代理）';
-  const actionOpen = editing || proxyEditing || credentialOpen || removeConfirmOpen;
-  return <article className={`settings-account-card${actionOpen ? ' has-expanded-action' : ''}`}>
+  return <article className="account-detail-view">
     <div className="settings-account-main"><header className="settings-account-summary"><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email} · {account.group}</small><span className="account-status-line"><em className={`connection-${account.status}`}>{connectionText}</em></span></span></header></div>
     <div className="account-detail-sections">
       <section className="account-detail-section" aria-labelledby={`account-settings-${account.id}`}>

@@ -108,7 +108,7 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
       </div>
       <input ref={imageInputRef} className="sr-only" type="file" accept="image/*" onChange={(event) => void addInlineImage(event)} />
       <input ref={attachmentInputRef} className="sr-only" type="file" multiple onChange={(event) => { onAddAttachments(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ''; }} />
-      {linkOpen && <div className="composer-link-popover"><input autoFocus value={linkValue} onChange={(event) => setLinkValue(event.currentTarget.value)} onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') { event.preventDefault(); applyLink(); } }} placeholder="https://example.com" aria-label="链接地址" /><button type="button" onClick={applyLink}>应用</button></div>}
+      {linkOpen && <div className="composer-link-popover"><input autoFocus autoComplete="off" data-form-type="other" data-lpignore="true" data-1p-ignore="true" value={linkValue} onChange={(event) => setLinkValue(event.currentTarget.value)} onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') { event.preventDefault(); applyLink(); } }} placeholder="https://example.com" aria-label="链接地址" /><button type="button" onClick={applyLink}>应用</button></div>}
     </div>
     <div ref={editorContainerRef} />
   </section>;
