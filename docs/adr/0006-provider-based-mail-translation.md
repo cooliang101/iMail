@@ -1,0 +1,44 @@
+---
+status: accepted
+---
+
+# 邮件翻译采用环境感知的多提供商架构
+
+iMail 的邮件翻译不绑定单一厂商。Edge WebView2 本地模型、正式云端 API 与非官方实验协议的可用性、隐私边界、凭据形式和运行位置不同，因此翻译能力由稳定的领域协议和可扩展 Provider Profile 驱动。
+
+## 决策
+
+- 每个翻译服务配置为一个 `TranslationProviderProfile`。Profile 同时标识提供商类型与执行位置；桌面 WebView、本机 Rust 服务和远程 iMail 服务中的同类提供商是不同 Profile。
+- 可跨环境同步的翻译偏好只保存默认目标语言、自动翻译开关和缓存开关。默认 Profile 选择属于当前执行环境，不进入通用偏好同步。
+- WebView2 本地 Translator 由前端能力适配器执行。DeepL、Google Cloud、Azure Translator 和 Bing Web 等网络提供商由 Rust 翻译服务执行。
+- 提供商的非敏感配置使用有类型的协议结构。密钥和服务账号不属于共享协议，只允许 Profile 引用使用 `master.key` 加密保存的凭据。
+- Edge 本地翻译不把正文发送出设备。所有网络提供商都必须在首次使用及披露文本变更后获得按 Profile 记录的明确同意。
+- 自动选择不得跨隐私边界静默降级。本地翻译失败时，iMail 只能提示选择已配置的云端 Profile，不能自行发送正文。
+- Bing Web 是默认关闭的实验提供商，不参与自动选择；其非官方协议不得成为邮件翻译的基础依赖。
+- 翻译输入从第一版开始按稳定 ID 分段。第一版可以用纯文本展示结果，但协议必须允许后续恢复安全清洗后的 HTML 结构、排除引用历史并增量复用译文。
+- 译文缓存使用用户、邮件、正文哈希、语言对、Profile、Provider 修订和分段版本共同隔离。删除邮箱数据时必须删除相应译文缓存。
+- HTTP、Tauri 和未来 MCP 适配器复用同一 Rust 领域服务。任何控制面都不得读取凭据原文；MCP 翻译能力在提供商和隐私边界稳定后另行开放。
+
+## 提供商类别
+
+1. 本地：Edge WebView2 Translator，运行时检测，不承诺所有 WebView2 Runtime 可用。
+2. 官方云端：DeepL、Google Cloud Translation、Azure Translator，使用公开且受支持的 API。
+3. 实验协议：Bing Web，隔离实现、单独版本、有限重试并在反爬响应后冷却。
+
+## 推进顺序
+
+1. 共享协议、Profile 模型与架构文档。
+2. Provider Registry、设置页面、加密凭据存储和状态检测。
+3. 正文分段、阅读器交互和译文缓存。
+4. WebView2 本地翻译。
+5. DeepL 官方 API。
+6. Google Cloud 与 Azure Translator。
+7. Bing Web 实验提供商。
+8. HTTP/MCP 能力与最终隐私审查。
+
+## 不采用的方案
+
+- 不把 EdgeTranslate 或 Bing 网页协议直接写入邮件阅读器，因为这会把 UI、非官方协议和隐私决策耦合在一起。
+- 不把 API Key 放入 `AppPreferences`、浏览器存储或前端请求日志。
+- 不把提供商类型当作唯一配置标识，因为同一类型可以在多个执行环境中存在。
+- 不默认自动翻译外语邮件，也不允许失败后无提示切换到另一个云端厂商。
