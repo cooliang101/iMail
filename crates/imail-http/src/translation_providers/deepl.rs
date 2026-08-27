@@ -135,10 +135,7 @@ impl DeepLClient {
                     return Err(ProviderExecutionError::UnsupportedLanguage)
                 }
                 Err(ureq::Error::Status(_, _)) => return Err(ProviderExecutionError::Unavailable),
-                Err(ureq::Error::Transport(error)) => {
-                    let _ = &error;
-                    #[cfg(test)]
-                    eprintln!("DeepL test transport error: {error}");
+                Err(ureq::Error::Transport(_)) => {
                     return Err(ProviderExecutionError::Unavailable);
                 }
             }

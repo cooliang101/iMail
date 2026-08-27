@@ -76,6 +76,8 @@ Authorization: Bearer imail_mcp_xxx
 | 邮件 | `message_update` | 已读、星标、标签和稍后处理 |
 | 邮件 | `message_move` | 归档或移至垃圾箱，并写回 IMAP |
 | 邮件 | `message_send` | 文本/HTML 发信及 Base64 附件 |
+| 翻译 | `translation_profiles_list` | 列出当前用户可用翻译 Profile 与状态，不返回凭据原文 |
+| 翻译 | `message_translate` | 使用已配置的服务端 Profile 翻译可见正文；不支持 WebView 本地 Profile |
 | 附件 | `attachment_download` | 从用户隔离的本地缓存读取；未命中时从 IMAP 下载、写入缓存并返回 Base64 内容 |
 | 草稿 | `drafts_list` / `draft_get` | 查询草稿摘要或完整内容 |
 | 草稿 | `draft_save` / `draft_delete` | 新建、覆盖或删除本地草稿 |
@@ -95,6 +97,7 @@ Authorization: Bearer imail_mcp_xxx
 - `sync_policy_update` 只接受 `enabled`、`folderMode`、`selectedMailboxes` 和 `notifyOnError`。IMAP 推送负责变化唤醒，启动、重连与低频一致性校准由服务自动执行，不提供按账户分钟频率或恢复重试开关。
 - `mailbox_sync` 和 `messages_list` 的 `mailboxRole` 支持 `inbox`、`sent`、`archive`、`drafts`、`trash`、`junk` 与 `custom`；常见的 Drafts、Deleted Items/Message(s)、Junk/Spam 等无 Special-Use 标记文件夹也会归入对应标准角色。
 - 发送邮件前确认 `accountEmail`、收件人、主题和正文；发送不是幂等操作。
+- 调用 `message_translate` 前先用 `translation_profiles_list` 选择状态可用、执行位置为本机或远程服务的 Profile。云端与 Bing Web Profile 只有在应用内完成对应隐私披露同意后才能执行；Edge 本地模型只存在于 WebView，MCP 不会静默换用其他服务。
 - `account_remove`、`message_move` 和 `draft_delete` 带 destructive annotation，执行前应获得用户确认。
 - 使用 Gmail、Outlook、Hotmail、QQ、Yahoo 或 iCloud 的应用专用密码/授权码时，把服务商生成的凭据传给 `account_add_with_code.authorizationCode`；Microsoft 账户还必须允许 IMAP/SMTP 密码验证。不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。
 - `account_add_with_code.proxy` 可在添加时设置代理；已有账户使用 `account_proxy_update`。`protocol` 仅接受 `http`、`https`、`socks5`，关闭时只需传 `enabled: false`。修改代理且省略 `password` 会保留已加密的现有代理密码；传入 `enabled: true` 与 `sourceEmail` 可复制另一邮箱的代理和加密密码，复制后两边可独立修改。
@@ -102,6 +105,8 @@ Authorization: Bearer imail_mcp_xxx
 ## 5. 安全约束
 
 - MCP 响应不返回邮箱授权码、邮箱/代理密码、OAuth Token、主密钥或 `encryptedSecret`。
+- 翻译 API Key 与 Google Service Account 只在 Rust 服务内从 `master.key` 加密存储解密。`message_translate` 只返回译文分段、语言、Profile 与时间，不返回原文、用户 ID、正文哈希、凭据或供应商原始错误正文；调用审计只记录工具名与授权码 ID。
+- 邮件翻译默认排除引用历史；云端 Profile 会把剩余可见正文发送给所选供应商。Bing Web 是非官方实验协议，默认关闭且不会作为其他 Provider 失败后的自动降级。清除当前用户邮箱数据会同时删除翻译 Profile、加密凭据与译文缓存。
 - Apple HME 工具只允许操作属于当前应用用户的 `icloud` 邮箱。Apple 主密码只用于当前 SRP 请求；会话 Cookie、`scnt`、Session Token 和 API Key 使用 `master.key` 加密保存在 `apple_hme_sessions`，任何 HTTP/MCP 响应都只返回连接状态。完整管理通常需要分别调用 `apple_hme_start_login` 完成 `appleAccount` 与 `icloudWeb` 两类授权。`apple_hme_list` 只读本地缓存；显式调用 `apple_hme_sync` 才会访问 Apple 并以事务替换本地地址快照。
 - `apple_hme_delete` 只接受已停用地址；活动地址必须先调用 `apple_hme_deactivate`。`apple_hme_disconnect` 只删除本地会话，不影响 Apple 端已有地址。
 - 本地 Gateway 的 `GET /gateway/v1/mailboxes/{mailbox}/messages` 接受已持久化的 iCloud Hide My Email 地址。服务只在 Token 已授权其所属 iCloud 账户时解析该地址，并按邮件的实际收件人过滤；响应中的 `accountEmail` 使用请求的隐私邮箱，不暴露主 iCloud 地址。停用地址仍可查询历史邮件，HME 地址不作为 SMTP 发件身份。

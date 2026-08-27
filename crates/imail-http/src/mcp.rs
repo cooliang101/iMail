@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 
-const MANAGEMENT_TOOLS: [&str; 17] = [
+const MANAGEMENT_TOOLS: [&str; 18] = [
     "settings_update",
     "theme_custom_update",
     "account_add_with_code",
@@ -45,6 +45,7 @@ const MANAGEMENT_TOOLS: [&str; 17] = [
     "account_proxy_update",
     "account_remove",
     "sync_policy_update",
+    "message_translate",
     "apple_hme_start_login",
     "apple_hme_submit_two_factor",
     "apple_hme_sync",
@@ -485,6 +486,57 @@ async fn call_tool(
     name: &str,
     arguments: Value,
 ) -> Result<Value, McpError> {
+    if name == "translation_profiles_list" {
+        let data_dir = database.parent().ok_or(McpError::Storage)?.to_path_buf();
+        let response = crate::translation_settings::embedded_call(
+            data_dir,
+            owner_id,
+            crate::translation_settings::TranslationSettingsApplicationCall::Read,
+        )
+        .await;
+        if response.status != 200 {
+            return Err(McpError::Application(safe_application_error(
+                &response.body,
+            )));
+        }
+        return Ok(tool_output(json!({
+            "defaultProfileId": response.body.pointer("/environment/defaultProfileId").cloned().unwrap_or(Value::Null),
+            "profiles": response.body.get("profiles").cloned().unwrap_or_else(|| json!([]))
+        })));
+    }
+    if name == "message_translate" {
+        let message_id = required_string(&arguments, "messageId")?.to_string();
+        let profile_id = required_string(&arguments, "profileId")?.to_string();
+        let target_language = required_string(&arguments, "targetLanguage")?.to_string();
+        let source_language = optional_string(&arguments, "sourceLanguage").map(str::to_string);
+        let data_dir = database.parent().ok_or(McpError::Storage)?.to_path_buf();
+        let response = crate::translations::embedded_call(
+            data_dir,
+            owner_id,
+            crate::translations::TranslationApplicationCall::Execute {
+                message_id,
+                input: imail_protocol::TranslationExecutionRequest {
+                    profile_id,
+                    source_language,
+                    target_language,
+                },
+            },
+        )
+        .await;
+        if response.status != 200 {
+            return Err(McpError::Application(safe_application_error(
+                &response.body,
+            )));
+        }
+        return Ok(tool_output(json!({
+            "profileId": response.body.pointer("/key/profileId").cloned().unwrap_or(Value::Null),
+            "sourceLanguage": response.body.pointer("/key/sourceLanguage").cloned().unwrap_or(Value::Null),
+            "targetLanguage": response.body.pointer("/key/targetLanguage").cloned().unwrap_or(Value::Null),
+            "segments": response.body.get("segments").cloned().unwrap_or_else(|| json!([])),
+            "createdAt": response.body.get("createdAt").cloned().unwrap_or(Value::Null),
+            "updatedAt": response.body.get("updatedAt").cloned().unwrap_or(Value::Null)
+        })));
+    }
     if name.starts_with("apple_hme_") {
         let email = required_string(&arguments, "email")?.to_string();
         let lookup_owner = owner_id.clone();
@@ -1325,6 +1377,15 @@ fn tool_schema(name: &str) -> Value {
             json!({"type":"object","properties":{"email":email_schema(),"group":{"type":"string","maxLength":40},"query":{"type":"string","maxLength":200},"mailboxRole":mailbox_role_schema(),"mailboxPath":{"type":"string","maxLength":500},"unread":{"type":"boolean"},"flagged":{"type":"boolean"},"hasAttachments":{"type":"boolean"},"snoozed":{"type":"boolean"},"label":{"type":"string","maxLength":80},"limit":{"type":"integer","minimum":1,"maximum":100,"default":25},"offset":{"type":"integer","minimum":0,"default":0}},"additionalProperties":false})
         }
         "message_get" => message_id_schema(),
+        "translation_profiles_list" => empty(),
+        "message_translate" => {
+            json!({"type":"object","properties":{
+                "messageId":{"type":"string","minLength":1},
+                "profileId":{"type":"string","minLength":1,"maxLength":80},
+                "sourceLanguage":{"type":"string","minLength":2,"maxLength":35,"pattern":"^[A-Za-z0-9-]+$"},
+                "targetLanguage":{"type":"string","minLength":2,"maxLength":35,"pattern":"^[A-Za-z0-9-]+$"}
+            },"required":["messageId","profileId","targetLanguage"],"additionalProperties":false})
+        }
         "message_update" => {
             json!({"type":"object","properties":{"messageId":{"type":"string","minLength":1},"unread":{"type":"boolean"},"flagged":{"type":"boolean"},"labels":{"type":"array","items":{"type":"string","minLength":1,"maxLength":40},"maxItems":12},"snoozedUntil":{"type":["string","null"],"format":"date-time"}},"required":["messageId"],"additionalProperties":false,"minProperties":2})
         }
@@ -1420,6 +1481,14 @@ fn attachments_schema() -> Value {
 
 fn tool_output(value: Value) -> Value {
     json!({"content":[{"type":"text","text":serde_json::to_string_pretty(&value).unwrap_or_else(|_|"{}".into())}],"structuredContent":value})
+}
+
+fn safe_application_error(body: &Value) -> String {
+    body.get("error")
+        .and_then(Value::as_str)
+        .filter(|message| !message.trim().is_empty() && message.chars().count() <= 200)
+        .unwrap_or("翻译服务暂时无法完成请求")
+        .to_string()
 }
 fn message_summary(message: imail_protocol::MessageReadModel, email: &str) -> Value {
     json!({"id":message.id,"accountEmail":email,"folder":message.mailbox,"mailboxRole":message.mailbox_role,"from":message.from,"to":message.to,"subject":message.subject,"preview":message.preview,"date":message.date,"unread":message.unread,"flagged":message.flagged,"hasAttachments":message.has_attachments,"attachments":message.attachments,"labels":message.labels,"snoozedUntil":message.snoozed_until})

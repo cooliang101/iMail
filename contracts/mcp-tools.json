@@ -1501,6 +1501,36 @@
       "annotations": { "destructiveHint": true, "idempotentHint": false }
     },
     {
+      "name": "translation_profiles_list",
+      "title": "列出邮件翻译配置",
+      "description": "列出当前 iMail 用户可见的翻译服务配置与状态，不返回任何 API Key、Service Account 或其他凭据原文。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "idempotentHint": true }
+    },
+    {
+      "name": "message_translate",
+      "title": "翻译一封邮件",
+      "description": "使用已配置且已同意其隐私披露的服务端翻译 Profile 翻译指定邮件的可见正文；引用历史不会发送。Edge WebView 本地 Profile 不适用于 MCP。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "messageId": { "type": "string", "minLength": 1 },
+          "profileId": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "sourceLanguage": { "type": "string", "minLength": 2, "maxLength": 35, "pattern": "^[A-Za-z0-9-]+$" },
+          "targetLanguage": { "type": "string", "minLength": 2, "maxLength": 35, "pattern": "^[A-Za-z0-9-]+$" }
+        },
+        "required": ["messageId", "profileId", "targetLanguage"],
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": false, "idempotentHint": false }
+    },
+    {
       "name": "apple_hme_disconnect",
       "title": "断开 Apple HME 授权",
       "description": "删除 iMail 本地加密保存的 Apple HME 会话，不会删除 Apple 端的 HME 地址。",

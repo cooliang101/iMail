@@ -79,8 +79,10 @@ describe('official TypeScript SDK against the Rust MCP transport', () => {
       expect(client.getServerVersion()).toMatchObject({ name: 'imail', version: '1.0.0' });
       expect(client.getServerCapabilities()).toMatchObject({ tools: { listChanged: true } });
       const listed = await client.listTools();
-      expect(listed.tools).toHaveLength(38);
+      expect(listed.tools).toHaveLength(40);
       expect(listed.tools.map((tool) => tool.name)).toContain('imail_status');
+      expect(listed.tools.map((tool) => tool.name)).toContain('translation_profiles_list');
+      expect(listed.tools.map((tool) => tool.name)).toContain('message_translate');
       const status = await client.callTool({ name: 'imail_status', arguments: {} });
       expect(status.isError).not.toBe(true);
       expect(status.structuredContent).toMatchObject({ accounts: 0, messages: 0, drafts: 0 });

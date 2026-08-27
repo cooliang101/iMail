@@ -2310,6 +2310,30 @@ mod tests {
             modern_list["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
             "imail"
         );
+        let tool_names = modern_list["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect::<Vec<_>>();
+        assert!(tool_names.contains(&"translation_profiles_list"));
+        assert!(tool_names.contains(&"message_translate"));
+        let translation_profiles = json(
+            router
+                .clone()
+                .oneshot(modern_rpc(
+                    r#"{"jsonrpc":"2.0","id":108,"method":"tools/call","params":{"name":"translation_profiles_list","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#,
+                    "tools/call",
+                    Some("translation_profiles_list"),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(
+            translation_profiles["result"]["structuredContent"]["profiles"],
+            json!([])
+        );
         let modern_call = json(
             router
                 .clone()
@@ -2385,7 +2409,7 @@ mod tests {
                 .unwrap(),
         )
         .await;
-        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 38);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 40);
         assert!(listed.to_string().contains("accounts_list"));
         let tools = listed["result"]["tools"].as_array().unwrap();
         let shared_contract: Value =
