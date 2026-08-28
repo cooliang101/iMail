@@ -85,3 +85,12 @@ export type TranslationPreparation = {
   cacheKey: TranslationArtifact['key'];
   cached?: TranslationArtifact | null;
 };
+
+export type TranslationDisplayMode = 'bilingual' | 'translation' | 'original';
+
+export type TranslationPresentation = {
+  document: TranslationDocument;
+  artifact?: TranslationArtifact;
+  targetLanguage: string;
+  busy: boolean;
+};

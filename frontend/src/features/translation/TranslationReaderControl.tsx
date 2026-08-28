@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'preact/compat';
+import { useCallback, useEffect, useRef, useState } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { AppSelect } from '../../components/form-controls';
 import { Globe, X } from '../../components/icons';
 import { describeDesktopLogValue, desktopLog } from '../../services';
 import { translationSettingsApi } from './translation-api';
 import { detectEdgeSourceLanguage, translateDocumentWithEdge, type EdgeTranslationProgress } from './edge-local-translator';
-import type { TranslationArtifact, TranslationPreparation, TranslationSettings } from './types';
+import type { TranslationArtifact, TranslationDisplayMode, TranslationPreparation, TranslationPresentation, TranslationSettings } from './types';
 
 const languages = [
   { value: 'zh-Hans', label: '简体中文' },
@@ -17,7 +17,14 @@ const languages = [
   { value: 'de', label: 'Deutsch' },
 ];
 
-export function TranslationReaderControl({ messageId, onClose }: { messageId: string; onClose: () => void }) {
+export function TranslationReaderControl({ messageId, hasHtml, displayMode, onDisplayModeChange, onPresentationChange, onClose }: {
+  messageId: string;
+  hasHtml: boolean;
+  displayMode: TranslationDisplayMode;
+  onDisplayModeChange: (mode: TranslationDisplayMode) => void;
+  onPresentationChange: (presentation?: TranslationPresentation) => void;
+  onClose: () => void;
+}) {
   const [settings, setSettings] = useState<TranslationSettings>();
   const [profileId, setProfileId] = useState('');
   const [targetLanguage, setTargetLanguage] = useState('zh-Hans');
@@ -28,11 +35,20 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const abortRef = useRef<AbortController>();
+  const requestGenerationRef = useRef(0);
+
+  const publishArtifact = useCallback((nextPreparation: TranslationPreparation, nextArtifact: TranslationArtifact) => {
+    setPreparation(nextPreparation);
+    setArtifact(nextArtifact);
+    onDisplayModeChange('bilingual');
+    onPresentationChange({ document: nextPreparation.document, artifact: nextArtifact, targetLanguage: nextArtifact.key.targetLanguage, busy: false });
+  }, [onDisplayModeChange, onPresentationChange]);
 
   useEffect(() => {
     let cancelled = false;
     setArtifact(undefined);
     setMessage('');
+    onPresentationChange(undefined);
     void translationSettingsApi.read().then((value) => {
       if (cancelled) return;
       setSettings(value);
@@ -44,71 +60,85 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
     }).catch((reason) => {
       if (!cancelled) setMessage(reason instanceof Error ? reason.message : '读取翻译服务失败');
     });
-    return () => { cancelled = true; abortRef.current?.abort(); };
-  }, [messageId]);
+    return () => { cancelled = true; requestGenerationRef.current += 1; abortRef.current?.abort(); };
+  }, [messageId, onPresentationChange]);
 
   const readyProfiles = settings?.profiles.filter(({ status }) => !['disabled', 'needsCredential', 'needsConsent'].includes(status)) ?? [];
 
   useEffect(() => {
     if (!profileId) return;
     let cancelled = false;
+    const controller = new AbortController();
+    requestGenerationRef.current += 1;
     abortRef.current?.abort();
     setPreparing(true);
     setPreparation(undefined);
     setPendingEdge(undefined);
     setArtifact(undefined);
     setMessage('');
-    void translationSettingsApi.prepareMessage(messageId, { profileId, targetLanguage }).then((result) => {
+    onPresentationChange(undefined);
+    void translationSettingsApi.prepareMessage(messageId, { profileId, targetLanguage }, controller.signal).then((result) => {
       if (cancelled) return;
       setPreparation(result);
-      if (result.cached) setArtifact(result.cached);
+      if (result.cached) publishArtifact(result, result.cached);
     }).catch((reason) => {
       if (!cancelled) setMessage(reason instanceof Error ? reason.message : '无法准备邮件翻译');
     }).finally(() => {
       if (!cancelled) setPreparing(false);
     });
-    return () => { cancelled = true; };
-  }, [messageId, profileId, targetLanguage]);
+    return () => { cancelled = true; controller.abort(); };
+  }, [messageId, onPresentationChange, profileId, publishArtifact, targetLanguage]);
 
   async function prepare() {
     if (!profileId || !preparation) return;
     abortRef.current?.abort();
     const controller = new AbortController();
+    const requestGeneration = requestGenerationRef.current + 1;
+    requestGenerationRef.current = requestGeneration;
     abortRef.current = controller;
     setBusy(true);
     setMessage('');
     setArtifact(undefined);
+    onDisplayModeChange('bilingual');
+    onPresentationChange({ document: preparation.document, targetLanguage, busy: true });
     try {
       if (pendingEdge) {
-        await completeEdgeTranslation(pendingEdge.preparation, pendingEdge.sourceLanguage, controller);
+        await completeEdgeTranslation(pendingEdge.preparation, pendingEdge.sourceLanguage, controller, requestGeneration);
       } else if (preparation.cached) {
-        setArtifact(preparation.cached);
+        if (!requestIsCurrent(controller, requestGeneration, requestGenerationRef.current)) return;
+        publishArtifact(preparation, preparation.cached);
       } else if (preparation.profile.profile.provider.type === 'edge-local') {
         const onProgress = (progress: EdgeTranslationProgress) => setMessage(progressMessage(progress));
         const sourceLanguage = await detectEdgeSourceLanguage(preparation.document, { signal: controller.signal, onProgress });
-        const precise = await translationSettingsApi.prepareMessage(messageId, { profileId, sourceLanguage, targetLanguage });
+        if (!requestIsCurrent(controller, requestGeneration, requestGenerationRef.current)) return;
+        const precise = await translationSettingsApi.prepareMessage(messageId, { profileId, sourceLanguage, targetLanguage }, controller.signal);
+        if (!requestIsCurrent(controller, requestGeneration, requestGenerationRef.current)) return;
         if (precise.cached) {
-          setArtifact(precise.cached);
+          publishArtifact(precise, precise.cached);
           setMessage('');
           return;
         }
         setPendingEdge({ preparation: precise, sourceLanguage });
         setMessage(`已识别为${languageLabel(sourceLanguage)}，正在启动本地翻译…`);
         try {
-          await completeEdgeTranslation(precise, sourceLanguage, controller);
+          await completeEdgeTranslation(precise, sourceLanguage, controller, requestGeneration);
         } catch (reason) {
           if (requiresFreshUserActivation(reason)) {
             setMessage(`已识别为${languageLabel(sourceLanguage)}。首次加载模型需要再次点击“继续翻译”。`);
+            onPresentationChange(undefined);
             return;
           }
           throw reason;
         }
       } else if (['deepl', 'google-cloud', 'azure-translator', 'bing-web'].includes(preparation.profile.profile.provider.type)) {
         setMessage(`正在通过${preparation.profile.profile.displayName}翻译…`);
-        setArtifact(await translationSettingsApi.executeMessage(messageId, { profileId, targetLanguage }));
+        const nextArtifact = await translationSettingsApi.executeMessage(messageId, { profileId, targetLanguage }, controller.signal);
+        if (!requestIsCurrent(controller, requestGeneration, requestGenerationRef.current)) return;
+        publishArtifact(preparation, nextArtifact);
         setMessage('');
       } else {
         setMessage('正文已准备完成；所选翻译服务的执行器尚未接入。');
+        onPresentationChange(undefined);
       }
     } catch (reason) {
       if (!controller.signal.aborted) {
@@ -121,6 +151,7 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
           ].join(' '));
         }
         setMessage(edgeProfile ? edgeFailureMessage(reason) : reason instanceof Error ? reason.message : '无法准备邮件翻译');
+        onPresentationChange(undefined);
       }
     } finally {
       if (abortRef.current === controller) {
@@ -130,16 +161,21 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
     }
   }
 
-  async function completeEdgeTranslation(edgePreparation: TranslationPreparation, sourceLanguage: string, controller: AbortController) {
+  async function completeEdgeTranslation(edgePreparation: TranslationPreparation, sourceLanguage: string, controller: AbortController, requestGeneration: number) {
     const onProgress = (progress: EdgeTranslationProgress) => setMessage(progressMessage(progress));
     const segments = await translateDocumentWithEdge(edgePreparation.document, sourceLanguage, targetLanguage, { signal: controller.signal, onProgress });
-    setArtifact(await translationSettingsApi.completeMessage(messageId, { profileId, sourceLanguage, targetLanguage, segments }));
+    if (!requestIsCurrent(controller, requestGeneration, requestGenerationRef.current)) return;
+    const nextArtifact = await translationSettingsApi.completeMessage(messageId, { profileId, sourceLanguage, targetLanguage, segments }, controller.signal);
+    if (!requestIsCurrent(controller, requestGeneration, requestGenerationRef.current)) return;
+    publishArtifact(edgePreparation, nextArtifact);
     setPendingEdge(undefined);
     setMessage('');
   }
 
   function close() {
+    requestGenerationRef.current += 1;
     abortRef.current?.abort();
+    onPresentationChange(undefined);
     onClose();
   }
 
@@ -151,8 +187,16 @@ export function TranslationReaderControl({ messageId, onClose }: { messageId: st
     </div>}<button className="mail-translation-close" type="button" title="关闭翻译" aria-label="关闭翻译" onClick={close}><X size={17} /></button></header>
     {readyProfiles.length === 0 && <p>暂无可用翻译服务，请先在“设置 → 邮件翻译”中完成配置。</p>}
     {message && <p className="mail-translation-message">{message}</p>}
-    {artifact && <div className="mail-translated-body" lang={artifact.key.targetLanguage}>{artifact.segments.map((segment) => <p key={segment.id}>{segment.text}</p>)}</div>}
+    {artifact && <div className="mail-translation-viewbar"><span>阅读方式</span><div role="group" aria-label="译文显示方式">
+      <button type="button" className={displayMode === 'bilingual' ? 'is-active' : ''} aria-pressed={displayMode === 'bilingual'} onClick={() => onDisplayModeChange('bilingual')}>双语</button>
+      <button type="button" className={displayMode === 'translation' ? 'is-active' : ''} aria-pressed={displayMode === 'translation'} onClick={() => onDisplayModeChange('translation')}>仅译文</button>
+      <button type="button" className={displayMode === 'original' ? 'is-active' : ''} aria-pressed={displayMode === 'original'} onClick={() => onDisplayModeChange('original')}>{hasHtml ? '原始排版' : '仅原文'}</button>
+    </div></div>}
   </section>;
+}
+
+function requestIsCurrent(controller: AbortController, requestGeneration: number, currentGeneration: number) {
+  return !controller.signal.aborted && requestGeneration === currentGeneration;
 }
 
 function languageLabel(language: string) {

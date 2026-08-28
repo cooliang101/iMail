@@ -30,8 +30,8 @@ body { line-height: var(--leading-copy); text-rendering: optimizeLegibility; -we
 .settings-account-summary > span strong, .compose-row { font-size: 13px; }.settings-account-summary > span small, .settings-account-summary > span em, .account-auth-kind, .settings-account-actions button { font-size: 11px; }
 .compose-body, .token-workspace header p { font-size: 14px; }
 .endpoint-strip small, .token-title span, .token-item code, .token-item span, .token-time small, .quickstart-title span, .security-note span, .check-row small, .scope-row small { font-size: 11px; }
-.endpoint-strip code, .endpoint-strip button, .token-item strong, .revoke, .quickstart-title strong, .security-note strong, .quickstart > a, .gateway-account-select, .check-row strong, .scope-row strong { font-size: 12px; }
-.quickstart pre, .raw-token code, .raw-token button, .token-created p { font-size: 11px; }
+.endpoint-strip code, .endpoint-strip button, .token-item strong, .revoke, .quickstart-title strong, .security-note strong, .quickstart > a, .gateway-account-select, .quickstart-copy, .check-row strong, .scope-row strong { font-size: 12px; }
+.quickstart pre, .raw-token code, .raw-token button, .copy-agent-payload, .token-created p { font-size: 11px; }
 
 /* Complete typography system: captions never drop below 11px and supporting copy uses 12px. */
 .app-select,

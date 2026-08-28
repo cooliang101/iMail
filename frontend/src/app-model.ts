@@ -1,5 +1,23 @@
+import type { DeveloperToken } from './types';
+
 export type Notice = { kind: 'success' | 'error'; text: string } | null;
 export type AppView = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'trash' | 'junk' | 'folder' | 'drafts' | 'contacts' | 'tokens';
+
+export type ApiGatewayCredential = {
+  rawToken: string;
+  detail: DeveloperToken;
+};
+
+export type AppleHmeAddress = {
+  anonymousId: string;
+  email: string;
+  label: string;
+  note: string;
+  forwardToEmail: string;
+  active: boolean;
+  origin: string;
+  createdAt?: string;
+};
 
 export type MessageStats = {
   total: number;

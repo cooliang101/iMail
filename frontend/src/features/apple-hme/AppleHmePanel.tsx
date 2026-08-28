@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'preact/compat';
-import type { Notice } from '../../app-model';
+import type { AppleHmeAddress, Notice } from '../../app-model';
 import { AppButton } from '../../components/AppButton';
 import { AppInput, AppSelect, AppTextarea } from '../../components/form-controls';
 import { CheckCircle, Copy, Globe, Key, LockKey, Plus, WarningCircle } from '../../components/icons';
@@ -24,17 +24,6 @@ type HmeStatus = {
   updatedAt?: string;
 };
 
-type HmeAddress = {
-  anonymousId: string;
-  email: string;
-  label: string;
-  note: string;
-  forwardToEmail: string;
-  active: boolean;
-  origin: string;
-  createdAt?: string;
-};
-
 type LoginResult = {
   status: HmeStatus;
   needsTwoFactor: boolean;
@@ -51,7 +40,7 @@ function keepaliveLabel(value?: string) {
 
 export function AppleHmePanel({ account, setNotice, view, onViewChange }: { account: Account; setNotice: (notice: Notice) => void; view: AppleHmeView; onViewChange: (view: AppleHmeView) => void }) {
   const [status, setStatus] = useState<HmeStatus | null>(null);
-  const [addresses, setAddresses] = useState<HmeAddress[]>([]);
+  const [addresses, setAddresses] = useState<AppleHmeAddress[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState('');
   const [busy, setBusy] = useState(false);
@@ -62,7 +51,7 @@ export function AppleHmePanel({ account, setNotice, view, onViewChange }: { acco
   const loginKind = view === 'icloudWebLogin' ? 'icloudWeb' : view === 'appleAccountLogin' ? 'appleAccount' : null;
 
   const loadAddresses = useCallback(async () => {
-    const result = await api<{ addresses: HmeAddress[]; lastSyncedAt?: string | null }>(`/api/accounts/${account.id}/apple-hme/addresses`);
+    const result = await api<{ addresses: AppleHmeAddress[]; lastSyncedAt?: string | null }>(`/api/accounts/${account.id}/apple-hme/addresses`);
     setAddresses(result.addresses);
     setLastSyncedAt(result.lastSyncedAt ?? null);
   }, [account.id]);
@@ -98,7 +87,7 @@ export function AppleHmePanel({ account, setNotice, view, onViewChange }: { acco
   async function syncAddresses() {
     setBusy(true); setError('');
     try {
-      const result = await api<{ addresses: HmeAddress[]; lastSyncedAt: string }>(`/api/accounts/${account.id}/apple-hme/addresses/sync`, { method: 'POST' });
+      const result = await api<{ addresses: AppleHmeAddress[]; lastSyncedAt: string }>(`/api/accounts/${account.id}/apple-hme/addresses/sync`, { method: 'POST' });
       setAddresses(result.addresses);
       setLastSyncedAt(result.lastSyncedAt);
       setNotice({ kind: 'success', text: `已从 Apple 同步 ${result.addresses.length} 个隐藏邮件地址` });
@@ -159,7 +148,7 @@ export function AppleHmePanel({ account, setNotice, view, onViewChange }: { acco
     const form = new FormData(formElement);
     setBusy(true); setError('');
     try {
-      const result = await api<{ address: HmeAddress }>(`/api/accounts/${account.id}/apple-hme/addresses`, {
+      const result = await api<{ address: AppleHmeAddress }>(`/api/accounts/${account.id}/apple-hme/addresses`, {
         method: 'POST', body: JSON.stringify({ label: form.get('label'), note: form.get('note'), channel: form.get('channel') }),
       });
       setAddresses((current) => [result.address, ...current.filter((item) => item.anonymousId !== result.address.anonymousId)]);
@@ -172,7 +161,7 @@ export function AppleHmePanel({ account, setNotice, view, onViewChange }: { acco
     } finally { setBusy(false); }
   }
 
-  async function mutateAddress(address: HmeAddress, action: 'deactivate' | 'delete') {
+  async function mutateAddress(address: AppleHmeAddress, action: 'deactivate' | 'delete') {
     setBusy(true); setError('');
     try {
       const suffix = action === 'deactivate' ? '/deactivate' : '';
@@ -185,7 +174,7 @@ export function AppleHmePanel({ account, setNotice, view, onViewChange }: { acco
     } finally { setBusy(false); }
   }
 
-  async function copyAddress(address: HmeAddress) {
+  async function copyAddress(address: AppleHmeAddress) {
     try {
       await navigator.clipboard.writeText(address.email);
       if (copyResetTimerRef.current !== null) window.clearTimeout(copyResetTimerRef.current);

@@ -4,14 +4,18 @@ import { AppButton } from '../../components/AppButton';
 import { Check, WarningCircle, X } from '../../components/icons';
 import { api } from '../../services';
 import type { Account } from '../../types';
+import type { ApiGatewayCredential } from '../../app-model';
 import { Overlay, ProviderIcon, providerLabel } from '../../components/shared';
 import { AppCheckbox, AppInput, AppSelect } from '../../components/form-controls';
 import { TokenCreatedResult } from './TokenCreatedResult';
+import { useExternalAccessBaseUrl } from './external-access-endpoint';
+import { buildAgentGatewayContext } from './gateway-call';
 
-export function CreateApiTokenModal({ accounts, onClose, onCreated }: { accounts: Account[]; onClose: () => void; onCreated: () => Promise<void> }) {
-  const [raw, setRaw] = useState('');
+export function CreateApiTokenModal({ accounts, onClose, onCreated }: { accounts: Account[]; onClose: () => void; onCreated: (credential: ApiGatewayCredential) => Promise<void> }) {
+  const [issued, setIssued] = useState<ApiGatewayCredential>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const { baseUrl } = useExternalAccessBaseUrl();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError('');
@@ -21,13 +25,17 @@ export function CreateApiTokenModal({ accounts, onClose, onCreated }: { accounts
     if (mailboxes.length === 0) { setError('请至少选择一个允许访问的邮箱'); setBusy(false); return; }
     if (scopes.length === 0) { setError('请至少选择一项 API 权限'); setBusy(false); return; }
     try {
-      const result = await api<{ token: string }>('/api/developer-tokens', { method: 'POST', body: JSON.stringify({ name: form.get('name'), mailboxes, scopes, ttlSeconds: Number(form.get('ttlSeconds')) }) });
-      setRaw(result.token); await onCreated();
+      const result = await api<{ token: string; detail: ApiGatewayCredential['detail'] }>('/api/developer-tokens', { method: 'POST', body: JSON.stringify({ name: form.get('name'), mailboxes, scopes, ttlSeconds: Number(form.get('ttlSeconds')) }) });
+      const credential = { rawToken: result.token, detail: result.detail };
+      setIssued(credential); await onCreated(credential);
     } catch (value) { setError(value instanceof Error ? value.message : 'API Token 创建失败'); }
     finally { setBusy(false); }
   }
 
-  return <Overlay onClose={onClose}>{raw ? <TokenCreatedResult raw={raw} kind="API Token" onClose={onClose} /> : <form className="token-modal" onSubmit={submit}>
+  const endpoint = baseUrl ? `${baseUrl}/gateway/v1` : '';
+  const agentPayload = issued && endpoint ? buildAgentGatewayContext({ endpoint, mailbox: issued.detail.mailboxes[0] ?? '', rawToken: issued.rawToken, authorizedMailboxes: issued.detail.mailboxes }) : undefined;
+
+  return <Overlay onClose={onClose}>{issued ? <TokenCreatedResult raw={issued.rawToken} kind="API Token" agentPayload={agentPayload} onClose={onClose} /> : <form className="token-modal" onSubmit={submit}>
     <div className="modal-header"><div><span>邮件 API 网关</span><h2>创建 API Token</h2><p>限制可访问邮箱和具体 API 能力。</p></div><button type="button" aria-label="关闭 API Token 创建窗口" onClick={onClose}><X size={21} /></button></div>
     <label><span>用途名称</span><AppInput name="name" defaultValue="本地 API 调用" required /></label>
     <fieldset><legend>允许访问的邮箱</legend>{accounts.map((account) => <label className="check-row" key={account.id}><AppCheckbox name="mailboxes" value={account.email} defaultChecked /><i className={`provider-${account.provider}`}><ProviderIcon provider={account.provider} /></i><span><strong>{providerLabel[account.provider]} · {account.displayName}</strong><small>{account.email}</small></span><Check size={15} /></label>)}</fieldset>

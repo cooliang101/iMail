@@ -19,17 +19,20 @@ export const translationSettingsApi = {
   acceptConsent: (profileId: string) => api<TranslationSettings>(`/api/translation-profiles/${encodeURIComponent(profileId)}/consent`, { method: 'POST' }),
   revokeConsent: (profileId: string) => api<TranslationSettings>(`/api/translation-profiles/${encodeURIComponent(profileId)}/consent`, { method: 'DELETE' }),
   deleteProfile: (profileId: string) => api<TranslationSettings>(`/api/translation-profiles/${encodeURIComponent(profileId)}`, { method: 'DELETE' }),
-  prepareMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string }) => api<TranslationPreparation>(`/api/messages/${encodeURIComponent(messageId)}/translations/prepare`, {
+  prepareMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string }, signal?: AbortSignal) => api<TranslationPreparation>(`/api/messages/${encodeURIComponent(messageId)}/translations/prepare`, {
     method: 'POST',
     body: JSON.stringify(input),
+    signal,
   }),
-  completeMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string; segments: TranslatedSegment[] }) => api<TranslationArtifact>(`/api/messages/${encodeURIComponent(messageId)}/translations/complete`, {
+  completeMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string; segments: TranslatedSegment[] }, signal?: AbortSignal) => api<TranslationArtifact>(`/api/messages/${encodeURIComponent(messageId)}/translations/complete`, {
     method: 'POST',
     body: JSON.stringify(input),
+    signal,
   }),
-  executeMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string }) => api<TranslationArtifact>(`/api/messages/${encodeURIComponent(messageId)}/translations/run`, {
+  executeMessage: (messageId: string, input: { profileId: string; sourceLanguage?: string; targetLanguage: string }, signal?: AbortSignal) => api<TranslationArtifact>(`/api/messages/${encodeURIComponent(messageId)}/translations/run`, {
     method: 'POST',
     body: JSON.stringify(input),
+    signal,
   }),
   clearCache: () => api<{ cleared: number }>('/api/translation-cache', { method: 'DELETE' }),
 };
