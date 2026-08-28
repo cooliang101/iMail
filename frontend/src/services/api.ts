@@ -83,6 +83,7 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     return await (isTauriRuntime() ? desktopApi<T>(path, options) : defaultTransport.request<T>(path, options));
   } catch (reason) {
     const source = reason instanceof Error ? reason : new Error(typeof reason === 'string' ? reason : '');
+    if (source.name === 'AbortError') throw source;
     const error = new Error(userFacingErrorMessage(source)) as Error & { status?: number };
     if ('status' in source && typeof source.status === 'number') error.status = source.status;
     const status = 'status' in error && typeof error.status === 'number' ? ` status=${error.status}` : '';

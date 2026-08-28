@@ -66,4 +66,30 @@ describe('bilingual email HTML mapping', () => {
     expect(result?.html).toContain('团队好。</div><p>Welcome aboard.</p><div');
     expect(result?.html).toContain('欢迎加入。</div>');
   });
+
+  it('refuses to skip unmatched visible blocks or leave visible blocks unmapped', () => {
+    expect(buildBilingualEmailHtml('<p>Advertisement</p><p>Hello team.</p><ul><li>First</li><li>Second</li></ul>', presentation, Parser)).toBeUndefined();
+    expect(buildBilingualEmailHtml('<p>Hello team.</p><ul><li>First</li><li>Second</li></ul><p>Footer</p>', presentation, Parser)).toBeUndefined();
+  });
+
+  it('ignores visually hidden preheader duplicates when mapping visible content', () => {
+    const result = buildBilingualEmailHtml('<div style="display:none">Hidden preheader</div><p>Hello team.</p><ul><li>First</li><li>Second</li></ul>', presentation, Parser);
+    expect(result?.mappedSegmentCount).toBe(2);
+    expect(result?.html).toContain('Hidden preheader');
+    expect(result?.html.indexOf('Hello team.')).toBeLessThan(result?.html.indexOf('&lt;团队好。&gt;') ?? -1);
+  });
+
+  it('maps long HTML-only messages without an arbitrary block limit', () => {
+    const sourceLines = Array.from({ length: 30 }, (_, index) => `Paragraph ${index + 1}.`);
+    const translatedLines = Array.from({ length: 30 }, (_, index) => `第 ${index + 1} 段。`);
+    const longPresentation = {
+      ...presentation,
+      document: { ...presentation.document, segments: [{ id: 's-long', kind: 'paragraph' as const, text: sourceLines.join('\n') }] },
+      artifact: { ...presentation.artifact!, segments: [{ id: 's-long', text: translatedLines.join('\n') }] },
+    };
+    const html = sourceLines.map((line) => `<p>${line}</p>`).join('');
+    const result = buildBilingualEmailHtml(html, longPresentation, Parser);
+    expect(result?.html.match(/class="mail-inline-translation"/g)).toHaveLength(30);
+    expect(result?.html).toContain('第 30 段。');
+  });
 });

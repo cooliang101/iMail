@@ -10,6 +10,22 @@ describe('desktop HTTP bridge', () => {
     } });
   });
 
+  it('cancels an in-flight Rust bridge request when its signal is aborted', async () => {
+    let finishRequest: ((value: { status: number; body: string }) => void) | undefined;
+    const invokeMock = vi.fn((command: string, _args?: Record<string, unknown>) => command === 'desktop_http_request'
+      ? new Promise((resolve) => { finishRequest = resolve; })
+      : Promise.resolve(false));
+    const controller = new AbortController();
+    const request = desktopHttpRequest('/api/messages', { signal: controller.signal }, 'http://127.0.0.1:8787', invokeMock as DesktopHttpInvoker);
+
+    controller.abort();
+    await vi.waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
+    const requestId = (invokeMock.mock.calls[0][1] as { requestId: string }).requestId;
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'desktop_cancel_http_request', { requestId });
+    finishRequest?.({ status: 200, body: '{}' });
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('uses the Rust bridge for connection tests and downloads', async () => {
     const invokeMock = vi.fn(async (_command: string, _args?: Record<string, unknown>) => ({ status: 200, body: '{}' }));
     const invoke = invokeMock as DesktopHttpInvoker;

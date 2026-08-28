@@ -10,6 +10,7 @@ mod desktop_platform;
 mod embedded_service;
 mod http_bridge;
 mod local_service;
+mod request_cancellation;
 mod tray_menu;
 
 #[derive(Default)]
@@ -120,6 +121,7 @@ pub fn run() {
             tray_menu::desktop_resize_tray_menu,
             tray_menu::desktop_tray_action,
             embedded_service::desktop_mail_service_call,
+            embedded_service::desktop_cancel_mail_service_call,
             embedded_service::desktop_start_embedded_events,
             embedded_service::desktop_stop_embedded_events,
             embedded_service::desktop_read_embedded_binary,
@@ -128,6 +130,7 @@ pub fn run() {
             app_logging::desktop_log,
             app_logging::desktop_open_app_logs,
             http_bridge::desktop_http_request,
+            http_bridge::desktop_cancel_http_request,
             http_bridge::desktop_download,
             http_bridge::desktop_read_binary,
             http_bridge::desktop_start_events,

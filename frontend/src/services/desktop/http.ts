@@ -8,9 +8,39 @@ async function tauriInvoke<T>(command: string, args?: Record<string, unknown>) {
   return invoke<T>(command, args);
 }
 
+function abortedRequestError() {
+  const error = new Error('请求已取消');
+  error.name = 'AbortError';
+  return error;
+}
+
+export async function invokeDesktopWithAbort<T>(
+  invoker: DesktopHttpInvoker,
+  command: string,
+  args: Record<string, unknown>,
+  signal: AbortSignal | null | undefined,
+  cancelCommand: string,
+) {
+  if (!signal) return invoker<T>(command, args);
+  if (signal.aborted) throw abortedRequestError();
+  const requestId = crypto.randomUUID();
+  const abort = () => { void invoker(cancelCommand, { requestId }).catch(() => undefined); };
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    const result = await invoker<T>(command, { ...args, requestId });
+    if (signal.aborted) throw abortedRequestError();
+    return result;
+  } catch (error) {
+    if (signal.aborted) throw abortedRequestError();
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
 export async function desktopHttpRequest(path: string, options: RequestInit = {}, baseUrl = configuredServiceUrl(), invoker: DesktopHttpInvoker = tauriInvoke) {
   if (options.body !== undefined && typeof options.body !== 'string') throw new Error('桌面 API 只接受 JSON 请求体');
-  return invoker<DesktopHttpResponse>('desktop_http_request', {
+  return invokeDesktopWithAbort<DesktopHttpResponse>(invoker, 'desktop_http_request', {
     request: {
       baseUrl,
       path,
@@ -18,7 +48,7 @@ export async function desktopHttpRequest(path: string, options: RequestInit = {}
       body: options.body,
       timeoutMs: 30_000,
     },
-  });
+  }, options.signal, 'desktop_cancel_http_request');
 }
 
 export async function desktopTestService(baseUrl: string, invoker: DesktopHttpInvoker = tauriInvoke) {

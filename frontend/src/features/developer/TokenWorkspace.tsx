@@ -3,19 +3,22 @@ import { AppButton } from '../../components/AppButton';
 import { AddressBook, ArrowRight, Code, Copy, Key, Plus, WarningCircle } from '../../components/icons';
 import { api, desktopLog, describeDesktopLogValue } from '../../services';
 import type { Account, DeveloperToken, ExternalAccessSettings } from '../../types';
-import type { ApiGatewayCredential, AppleHmeAddress, Notice } from '../../app-model';
+import type { ApiGatewayCredential, Notice } from '../../app-model';
 import { providerLabel } from '../../components/shared';
 import { AppSelect, AppSwitch } from '../../components/form-controls';
 import { McpIntegrationGuide } from './McpIntegrationGuide';
 import { useExternalAccessBaseUrl } from './external-access-endpoint';
 import { buildAgentGatewayContext, buildGatewayMessageUrl, resolveActiveApiCredential } from './gateway-call';
+import { loadPrivacyMailboxes, type PrivacyMailbox } from './privacy-mailboxes';
 
 type AccessTab = 'api' | 'mcp';
 
 export function TokenWorkspace({ accounts, tokens, latestApiCredential, onCreateApi, onCreateMcp, onReload, setNotice }: { accounts: Account[]; tokens: DeveloperToken[]; latestApiCredential?: ApiGatewayCredential; onCreateApi: () => void; onCreateMcp: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
   const [activeTab, setActiveTab] = useState<AccessTab>('mcp');
   const [gatewayAccount, setGatewayAccount] = useState(accounts[0]?.email ?? '');
-  const [privacyMailboxes, setPrivacyMailboxes] = useState<Array<{ address: AppleHmeAddress; ownerEmail: string }>>([]);
+  const [privacyMailboxes, setPrivacyMailboxes] = useState<PrivacyMailbox[]>([]);
+  const [privacyMailboxError, setPrivacyMailboxError] = useState('');
+  const [privacyMailboxRevision, setPrivacyMailboxRevision] = useState(0);
   const [agentCallCopied, setAgentCallCopied] = useState(false);
   const [credentialClock, setCredentialClock] = useState(() => Date.now());
   const [accessSettings, setAccessSettings] = useState<ExternalAccessSettings>();
@@ -52,16 +55,13 @@ export function TokenWorkspace({ accounts, tokens, latestApiCredential, onCreate
 
   useEffect(() => {
     let cancelled = false;
-    const icloudAccounts = accounts.filter((account) => account.provider === 'icloud');
-    if (icloudAccounts.length === 0) { setPrivacyMailboxes([]); return; }
-    void Promise.all(icloudAccounts.map(async (account) => {
-      try {
-        const result = await api<{ addresses: AppleHmeAddress[] }>(`/api/accounts/${account.id}/apple-hme/addresses`);
-        return result.addresses.map((address) => ({ address, ownerEmail: account.email }));
-      } catch { return []; }
-    })).then((groups) => { if (!cancelled) setPrivacyMailboxes(groups.flat()); });
+    void loadPrivacyMailboxes(accounts).then(({ mailboxes, failedCount }) => {
+      if (cancelled) return;
+      setPrivacyMailboxes(mailboxes);
+      setPrivacyMailboxError(failedCount > 0 ? `${failedCount} 个 iCloud 账户的隐私邮箱加载失败` : '');
+    });
     return () => { cancelled = true; };
-  }, [accounts]);
+  }, [accounts, privacyMailboxRevision]);
 
   useEffect(() => {
     if (!activeApiCredential) return;
@@ -157,7 +157,7 @@ export function TokenWorkspace({ accounts, tokens, latestApiCredential, onCreate
     <div className={`endpoint-strip${available && activeEnabled ? '' : ' is-disabled'}`}><Code size={21} /><span><small>{activeTab === 'mcp' ? 'Streamable HTTP 地址' : 'REST API 地址'}</small><code>{endpoint || '正在准备本机回环地址…'}</code></span><button disabled={!available || !activeEnabled} onClick={() => void copyEndpoint(endpoint)}><Copy size={17} />复制</button></div>
 
     <div className="token-columns"><div className="token-list"><div className="token-title"><h2>{activeTab === 'mcp' ? 'MCP 授权码' : 'API Token'}</h2><span>{visibleTokens.filter((token) => token.expiresAt > new Date().toISOString()).length} 个正在生效</span></div>{visibleTokens.length === 0 ? <div className="token-empty"><Key size={38} weight="duotone" /><h3>{activeTab === 'mcp' ? '还没有 MCP 授权码' : '还没有 API Token'}</h3><p>{!activeEnabled ? '先开启上方接入开关，再创建授权码。' : activeTab === 'mcp' ? '创建独立授权码后，按下方配置即可让 Agent 连接。' : accounts.length === 0 ? '接入邮箱后即可创建 API Token。' : '选择邮箱与权限，为本地应用创建最小权限 Token。'}</p><button disabled={!activeEnabled || (activeTab === 'api' && accounts.length === 0)} onClick={activeTab === 'mcp' ? onCreateMcp : onCreateApi}>{activeTab === 'mcp' ? '创建 MCP 授权码' : '创建 API Token'}</button></div> : visibleTokens.map((token) => <article className="token-item" key={token.id}><div className={`token-icon ${activeTab === 'mcp' ? 'is-mcp' : ''}`}><Key size={20} /></div><div><strong>{token.name}</strong><code>{token.prefix}••••••••••••</code><span>{activeTab === 'mcp' ? '全部当前与未来邮箱' : `${token.scopes.map((scope) => scope.replace('messages:', '')).join(' · ')} · ${token.mailboxes.length} 个邮箱`}</span></div><div className="token-time"><small>到期时间</small><span>{new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(token.expiresAt))}</span></div><button className="revoke" onClick={() => void revoke(token.id)}>撤销</button></article>)}</div>
-      {activeTab === 'api' ? <aside className="quickstart"><div className="quickstart-title"><AddressBook size={21} /><div><strong>快速调用</strong><span>指定邮箱读取最新 10 封邮件</span></div></div><label className="gateway-account-select"><span>API 使用的邮箱</span><AppSelect value={gatewayAccount} onValueChange={(value) => { setGatewayAccount(value); setAgentCallCopied(false); }} options={gatewayMailboxOptions.map(({ value, label }) => ({ value, label }))} /></label><pre><code><span className="code-muted">curl</span> {buildGatewayMessageUrl(endpoint || 'http://127.0.0.1/gateway/v1', gatewayAccount || 'user@example.com')} \\{`\n`}  -H <span className="code-string">&quot;Authorization: Bearer {activeApiCredential ? `${activeApiCredential.detail.prefix}••••••••` : 'imail_xxx'}&quot;</span></code></pre><button type="button" className="quickstart-copy" disabled={!available || !activeEnabled || !activeApiCredential || !gatewayAccount} onClick={() => void copyAgentCall()}><Copy size={17} />{activeApiCredential ? agentCallCopied ? '已复制，可粘贴给 Agent' : '复制完整调用信息给 Agent' : '创建 Token 后一键复制'}</button><div className="security-note"><WarningCircle size={18} /><p><strong>完整 Token 仅保留在当前会话</strong><span>网关仍只监听本机回环地址，重启应用后不会恢复明文 Token。</span></p></div>{available && activeEnabled && <a href={`${baseUrl}/gateway/docs`} target="_blank" rel="noreferrer">打开轻量 API Console <ArrowRight size={15} /></a>}</aside> : <aside className="quickstart mcp-quickstart"><div className="quickstart-title"><Code size={21} /><div><strong>接入前准备</strong><span>授权码与 API Token 不互通</span></div></div><ol><li>启用本机或远程 Rust HTTP 服务的 MCP 接入。</li><li>创建并立即复制 <code>imail_mcp_</code> 授权码。</li><li>复制配置并让 Agent 连接。</li><li>任务完成后关闭接入或撤销授权码。</li></ol><div className="security-note"><WarningCircle size={18} /><p><strong>完整控制权限</strong><span>可管理账户、邮件和草稿，仅签发给可信 Agent。</span></p></div></aside>}
+      {activeTab === 'api' ? <aside className="quickstart"><div className="quickstart-title"><AddressBook size={21} /><div><strong>快速调用</strong><span>指定邮箱读取最新 10 封邮件</span></div></div><label className="gateway-account-select"><span>API 使用的邮箱</span><AppSelect value={gatewayAccount} onValueChange={(value) => { setGatewayAccount(value); setAgentCallCopied(false); }} options={gatewayMailboxOptions.map(({ value, label }) => ({ value, label }))} /></label>{privacyMailboxError && <div className="gateway-mailbox-warning" role="status"><WarningCircle size={16} /><span>{privacyMailboxError}</span><button type="button" onClick={() => setPrivacyMailboxRevision((revision) => revision + 1)}>重试</button></div>}<pre><code><span className="code-muted">curl</span> {buildGatewayMessageUrl(endpoint || 'http://127.0.0.1/gateway/v1', gatewayAccount || 'user@example.com')} \\{`\n`}  -H <span className="code-string">&quot;Authorization: Bearer {activeApiCredential ? `${activeApiCredential.detail.prefix}••••••••` : 'imail_xxx'}&quot;</span></code></pre><button type="button" className="quickstart-copy" disabled={!available || !activeEnabled || !activeApiCredential || !gatewayAccount} onClick={() => void copyAgentCall()}><Copy size={17} />{activeApiCredential ? agentCallCopied ? '已复制，可粘贴给 Agent' : '复制完整调用信息给 Agent' : '创建 Token 后一键复制'}</button><div className="security-note"><WarningCircle size={18} /><p><strong>完整 Token 仅保留在当前会话</strong><span>网关仍只监听本机回环地址，重启应用后不会恢复明文 Token。</span></p></div>{available && activeEnabled && <a href={`${baseUrl}/gateway/docs`} target="_blank" rel="noreferrer">打开轻量 API Console <ArrowRight size={15} /></a>}</aside> : <aside className="quickstart mcp-quickstart"><div className="quickstart-title"><Code size={21} /><div><strong>接入前准备</strong><span>授权码与 API Token 不互通</span></div></div><ol><li>启用本机或远程 Rust HTTP 服务的 MCP 接入。</li><li>创建并立即复制 <code>imail_mcp_</code> 授权码。</li><li>复制配置并让 Agent 连接。</li><li>任务完成后关闭接入或撤销授权码。</li></ol><div className="security-note"><WarningCircle size={18} /><p><strong>完整控制权限</strong><span>可管理账户、邮件和草稿，仅签发给可信 Agent。</span></p></div></aside>}
     </div>
     {activeTab === 'mcp' && available && activeEnabled && <McpIntegrationGuide endpoint={`${baseUrl}/mcp`} setNotice={setNotice} />}
   </section>;

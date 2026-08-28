@@ -1,4 +1,4 @@
-import type { DesktopHttpInvoker, DesktopHttpResponse } from '../desktop/http';
+import { invokeDesktopWithAbort, type DesktopHttpInvoker, type DesktopHttpResponse } from '../desktop/http';
 import type { MailService } from './contracts';
 
 export type EmbeddedDomainCall =
@@ -205,7 +205,7 @@ export class TauriMailService implements MailService {
       throw new Error('iMail 只能处理 JSON 格式的请求内容');
     }
     const call = embeddedDomainCall(path, options);
-    if (call) return this.invoker<DesktopHttpResponse>('desktop_mail_service_call', { call });
+    if (call) return invokeDesktopWithAbort<DesktopHttpResponse>(this.invoker, 'desktop_mail_service_call', { call }, options.signal, 'desktop_cancel_mail_service_call');
     throw new Error('iMail 暂时无法完成这项操作，请更新应用后重试');
   }
 }

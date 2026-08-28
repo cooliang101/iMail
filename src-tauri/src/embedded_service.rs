@@ -1,3 +1,4 @@
+use crate::request_cancellation::{wait_for_request_cancellation, RequestCancellationRegistry};
 use axum::http::HeaderValue;
 #[cfg(test)]
 use axum::{
@@ -707,6 +708,7 @@ pub struct EmbeddedMailServiceState {
     user_id: Mutex<Option<String>>,
     event_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     external_http: Mutex<Option<EmbeddedHttpAdapter>>,
+    request_cancellations: RequestCancellationRegistry,
 }
 
 struct EmbeddedHttpAdapter {
@@ -726,6 +728,7 @@ impl Default for EmbeddedMailServiceState {
             user_id: Mutex::new(None),
             event_task: Mutex::new(None),
             external_http: Mutex::new(None),
+            request_cancellations: RequestCancellationRegistry::default(),
         }
     }
 }
@@ -2588,13 +2591,30 @@ pub async fn desktop_mail_service_call(
     app: AppHandle,
     state: State<'_, EmbeddedMailServiceState>,
     call: EmbeddedDomainCall,
+    request_id: Option<String>,
 ) -> Result<EmbeddedServiceResponse, String> {
-    let root = ensure_runtime_allowed(&app, &state).await?;
-    state.initialize(root.join("data")).await?;
-    state
-        .direct_call(&call)
-        .await?
-        .ok_or_else(|| "嵌入式领域调用未实现".to_string())
+    let cancellation = state.request_cancellations.begin(request_id.as_deref())?;
+    let result = tokio::select! {
+        result = async {
+            let root = ensure_runtime_allowed(&app, &state).await?;
+            state.initialize(root.join("data")).await?;
+            state
+                .direct_call(&call)
+                .await?
+                .ok_or_else(|| "嵌入式领域调用未实现".to_string())
+        } => result,
+        _ = wait_for_request_cancellation(cancellation) => Err("请求已取消".to_string()),
+    };
+    state.request_cancellations.finish(request_id.as_deref());
+    result
+}
+
+#[tauri::command]
+pub fn desktop_cancel_mail_service_call(
+    state: State<'_, EmbeddedMailServiceState>,
+    request_id: String,
+) -> Result<bool, String> {
+    state.request_cancellations.cancel(&request_id)
 }
 
 #[tauri::command]

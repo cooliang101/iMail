@@ -15,6 +15,22 @@ describe('mail service client adapters', () => {
     expect(JSON.stringify(invokeMock.mock.calls[0])).not.toContain('baseUrl');
   });
 
+  it('forwards cancellation to the embedded Rust service', async () => {
+    let finishRequest: ((value: { status: number; body: string }) => void) | undefined;
+    const invokeMock = vi.fn((command: string, _args?: Record<string, unknown>) => command === 'desktop_mail_service_call'
+      ? new Promise((resolve) => { finishRequest = resolve; })
+      : Promise.resolve(false));
+    const controller = new AbortController();
+    const request = new TauriMailService(invokeMock as DesktopHttpInvoker).request('/api/messages?limit=10', { signal: controller.signal });
+
+    controller.abort();
+    await vi.waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
+    const requestId = (invokeMock.mock.calls[0][1] as { requestId: string }).requestId;
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'desktop_cancel_mail_service_call', { requestId });
+    finishRequest?.({ status: 200, body: '{}' });
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('keeps web and remote desktop selections on the HTTP adapter', () => {
     const requester = vi.fn();
     expect(createMailService({ tauri: false, mode: 'remote', embedded: true, httpRequester: requester })).toBeInstanceOf(HttpMailService);

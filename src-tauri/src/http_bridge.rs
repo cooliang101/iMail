@@ -1,3 +1,4 @@
+use crate::request_cancellation::{wait_for_request_cancellation, RequestCancellationRegistry};
 use futures_util::StreamExt;
 use reqwest::{Client, Method, Url};
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
@@ -25,6 +26,7 @@ pub struct HttpBridgeState {
     clients: Mutex<HashMap<String, ServiceClient>>,
     cookie_root: PathBuf,
     event_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    request_cancellations: RequestCancellationRegistry,
 }
 
 impl HttpBridgeState {
@@ -33,6 +35,7 @@ impl HttpBridgeState {
             clients: Mutex::new(HashMap::new()),
             cookie_root,
             event_task: Mutex::new(None),
+            request_cancellations: RequestCancellationRegistry::default(),
         }
     }
 
@@ -236,6 +239,7 @@ fn request_method(value: Option<&str>) -> Result<Method, String> {
 pub async fn desktop_http_request(
     state: State<'_, HttpBridgeState>,
     request: HttpRequest,
+    request_id: Option<String>,
 ) -> Result<HttpResponse, String> {
     let (base_url, client) = state.client(&request.base_url)?;
     let method = request_method(request.method.as_deref())?;
@@ -251,17 +255,33 @@ pub async fn desktop_http_request(
             .header("Content-Type", "application/json")
             .body(body);
     }
-    let response = builder
-        .send()
-        .await
-        .map_err(|error| format!("无法连接服务：{error}"))?;
-    client.persist_cookies_best_effort();
-    let status = response.status().as_u16();
-    let body = response
-        .text()
-        .await
-        .map_err(|error| format!("读取服务响应失败：{error}"))?;
-    Ok(HttpResponse { status, body })
+    let cancellation = state.request_cancellations.begin(request_id.as_deref())?;
+    let result = tokio::select! {
+        result = async {
+            let response = builder
+                .send()
+                .await
+                .map_err(|error| format!("无法连接服务：{error}"))?;
+            client.persist_cookies_best_effort();
+            let status = response.status().as_u16();
+            let body = response
+                .text()
+                .await
+                .map_err(|error| format!("读取服务响应失败：{error}"))?;
+            Ok(HttpResponse { status, body })
+        } => result,
+        _ = wait_for_request_cancellation(cancellation) => Err("请求已取消".to_string()),
+    };
+    state.request_cancellations.finish(request_id.as_deref());
+    result
+}
+
+#[tauri::command]
+pub fn desktop_cancel_http_request(
+    state: State<'_, HttpBridgeState>,
+    request_id: String,
+) -> Result<bool, String> {
+    state.request_cancellations.cancel(&request_id)
 }
 
 #[tauri::command]

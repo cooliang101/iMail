@@ -47,12 +47,14 @@ export function buildBilingualEmailHtml(
     cursor = match.end;
   }
 
+  if (cursor !== candidates.length) return undefined;
+
   return { html: document.body.innerHTML, mappedSegmentCount: presentation.document.segments.length };
 }
 
 function collectTranslationBlocks(document: Document) {
   return Array.from(document.body.querySelectorAll(translationBlockSelector)).filter((element) => {
-    if (element.closest('blockquote')) return false;
+    if (element.closest('blockquote') || isVisuallyHidden(element)) return false;
     return !element.querySelector(translationBlockSelector);
   }).filter((element) => comparableText(visibleText(element)));
 }
@@ -60,27 +62,39 @@ function collectTranslationBlocks(document: Document) {
 function findListMatch(candidates: Element[], cursor: number, source: string) {
   const lines = meaningfulLines(source).map((line) => comparableText(line.replace(listPrefix, '')));
   if (!lines.length) return undefined;
-  for (let start = cursor; start <= candidates.length - lines.length; start += 1) {
-    const elements = candidates.slice(start, start + lines.length);
-    if (elements.every((element, index) => Boolean(element.closest('li')) && comparableText(visibleText(element)) === lines[index])) {
-      return { elements, end: start + elements.length };
-    }
+  const elements = candidates.slice(cursor, cursor + lines.length);
+  if (elements.length === lines.length && elements.every((element, index) => Boolean(element.closest('li')) && comparableText(visibleText(element)) === lines[index])) {
+    return { elements, end: cursor + elements.length };
   }
   return undefined;
 }
 
 function findBlockMatch(candidates: Element[], cursor: number, source: string) {
   const comparableSource = comparableText(source);
-  for (let start = cursor; start < candidates.length; start += 1) {
-    let combined = '';
-    for (let end = start; end < Math.min(candidates.length, start + 24); end += 1) {
-      combined = `${combined} ${visibleText(candidates[end])}`;
-      const comparableCombined = comparableText(combined);
-      if (comparableCombined === comparableSource) return { elements: candidates.slice(start, end + 1), end: end + 1 };
-      if (comparableCombined.length > comparableSource.length * 1.25 + 16) break;
-    }
+  let combined = '';
+  for (let end = cursor; end < candidates.length; end += 1) {
+    combined = `${combined} ${visibleText(candidates[end])}`;
+    const comparableCombined = comparableText(combined);
+    if (comparableCombined === comparableSource) return { elements: candidates.slice(cursor, end + 1), end: end + 1 };
+    if (comparableCombined.length > comparableSource.length * 1.25 + 16) break;
   }
   return undefined;
+}
+
+function isVisuallyHidden(element: Element) {
+  for (let current: Element | null = element; current && current.tagName.toLocaleLowerCase() !== 'body'; current = current.parentElement) {
+    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
+    const style = (current as HTMLElement).style;
+    if (style.display === 'none' || ['hidden', 'collapse'].includes(style.visibility) || Number.parseFloat(style.opacity) === 0 || style.getPropertyValue('content-visibility') === 'hidden') return true;
+    const clipped = ['hidden', 'clip'].includes(style.overflow) || ['hidden', 'clip'].includes(style.overflowY);
+    if (clipped && (isZeroDimension(style.height) || isZeroDimension(style.maxHeight))) return true;
+    if (isZeroDimension(style.fontSize) && isZeroDimension(style.lineHeight)) return true;
+  }
+  return false;
+}
+
+function isZeroDimension(value: string) {
+  return /^0(?:\.0+)?(?:px|pt|pc|in|cm|mm|em|rem|%)?$/i.test(value.trim());
 }
 
 function appendTranslation(document: Document, source: Element, translated: string | undefined, targetLanguage: string) {
