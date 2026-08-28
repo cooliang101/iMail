@@ -17,13 +17,14 @@ const languages = [
   { value: 'de', label: 'Deutsch' },
 ];
 
-export function TranslationReaderControl({ messageId, hasHtml, displayMode, onDisplayModeChange, onPresentationChange, onClose }: {
+export function TranslationReaderControl({ messageId, hasHtml, open, displayMode, onDisplayModeChange, onPresentationChange, onDismiss }: {
   messageId: string;
   hasHtml: boolean;
+  open: boolean;
   displayMode: TranslationDisplayMode;
   onDisplayModeChange: (mode: TranslationDisplayMode) => void;
   onPresentationChange: (presentation?: TranslationPresentation) => void;
-  onClose: () => void;
+  onDismiss: () => void;
 }) {
   const [settings, setSettings] = useState<TranslationSettings>();
   const [profileId, setProfileId] = useState('');
@@ -35,6 +36,7 @@ export function TranslationReaderControl({ messageId, hasHtml, displayMode, onDi
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const abortRef = useRef<AbortController>();
+  const controlRef = useRef<HTMLElement>(null);
   const requestGenerationRef = useRef(0);
 
   const publishArtifact = useCallback((nextPreparation: TranslationPreparation, nextArtifact: TranslationArtifact) => {
@@ -43,6 +45,12 @@ export function TranslationReaderControl({ messageId, hasHtml, displayMode, onDi
     onDisplayModeChange('bilingual');
     onPresentationChange({ document: nextPreparation.document, artifact: nextArtifact, targetLanguage: nextArtifact.key.targetLanguage, busy: false });
   }, [onDisplayModeChange, onPresentationChange]);
+
+  const dismissAndRestoreFocus = useCallback(() => {
+    const trigger = controlRef.current?.parentElement?.querySelector<HTMLButtonElement>('.mail-translation-trigger');
+    onDismiss();
+    window.requestAnimationFrame(() => trigger?.focus());
+  }, [onDismiss]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +72,28 @@ export function TranslationReaderControl({ messageId, hasHtml, displayMode, onDi
   }, [messageId, onPresentationChange]);
 
   const readyProfiles = settings?.profiles.filter(({ status }) => !['disabled', 'needsCredential', 'needsConsent'].includes(status)) ?? [];
+
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => controlRef.current?.focus());
+    const dismissOutside = (event: PointerEvent) => {
+      const anchor = controlRef.current?.parentElement;
+      if (event.target instanceof Element && event.target.closest('.app-select-listbox')) return;
+      if (event.target instanceof Node && anchor && !anchor.contains(event.target)) onDismiss();
+    };
+    const dismissWithKeyboard = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (event.target instanceof Element && event.target.closest('.app-select-wrap')?.querySelector('[aria-expanded="true"]')) return;
+      dismissAndRestoreFocus();
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    document.addEventListener('keydown', dismissWithKeyboard);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('keydown', dismissWithKeyboard);
+    };
+  }, [dismissAndRestoreFocus, onDismiss, open]);
 
   useEffect(() => {
     if (!profileId) return;
@@ -172,22 +202,16 @@ export function TranslationReaderControl({ messageId, hasHtml, displayMode, onDi
     setMessage('');
   }
 
-  function close() {
-    requestGenerationRef.current += 1;
-    abortRef.current?.abort();
-    onPresentationChange(undefined);
-    onClose();
-  }
-
-  return <section className="mail-translation-control" aria-label="邮件翻译">
-    <header><span className="mail-translation-heading"><Globe size={18} /><strong>翻译</strong></span>{readyProfiles.length > 0 && <div className="mail-translation-fields">
-      <AppSelect aria-label="翻译服务" value={profileId} options={readyProfiles.map(({ profile }) => ({ value: profile.id, label: profile.displayName }))} onValueChange={setProfileId} />
-      <AppSelect aria-label="目标语言" value={targetLanguage} options={languages} onValueChange={setTargetLanguage} />
-      <AppButton appearance="primary" disabled={busy || preparing || !profileId || !preparation || Boolean(artifact)} onClick={() => void prepare()}>{preparing ? '准备中…' : busy ? '处理中…' : artifact ? '已翻译' : pendingEdge ? '继续翻译' : '翻译'}</AppButton>
-    </div>}<button className="mail-translation-close" type="button" title="关闭翻译" aria-label="关闭翻译" onClick={close}><X size={17} /></button></header>
+  return <section ref={controlRef} id="mail-translation-popover" className="mail-translation-control" role="dialog" aria-label="邮件翻译设置" aria-modal="false" tabIndex={-1} hidden={!open}>
+    <header><span className="mail-translation-heading"><Globe size={18} /><span><strong>翻译邮件</strong><small>{artifact ? '译文已生成' : '选择服务与目标语言'}</small></span></span><button className="mail-translation-close" type="button" title="收起翻译设置" aria-label="收起翻译设置" onClick={dismissAndRestoreFocus}><X size={17} /></button></header>
+    {readyProfiles.length > 0 && <div className="mail-translation-fields">
+      <label><span>翻译服务</span><AppSelect aria-label="翻译服务" value={profileId} options={readyProfiles.map(({ profile }) => ({ value: profile.id, label: profile.displayName }))} onValueChange={setProfileId} /></label>
+      <label><span>目标语言</span><AppSelect aria-label="目标语言" value={targetLanguage} options={languages} onValueChange={setTargetLanguage} /></label>
+      <AppButton appearance="primary" disabled={busy || preparing || !profileId || !preparation || Boolean(artifact)} onClick={() => void prepare()}>{preparing ? '准备中…' : busy ? '处理中…' : artifact ? '已翻译' : pendingEdge ? '继续翻译' : '开始翻译'}</AppButton>
+    </div>}
     {readyProfiles.length === 0 && <p>暂无可用翻译服务，请先在“设置 → 邮件翻译”中完成配置。</p>}
     {message && <p className="mail-translation-message">{message}</p>}
-    {artifact && <div className="mail-translation-viewbar"><span>阅读方式</span><div role="group" aria-label="译文显示方式">
+    {artifact && <div className="mail-translation-viewbar"><span>显示</span><div role="group" aria-label="译文显示方式">
       <button type="button" className={displayMode === 'bilingual' ? 'is-active' : ''} aria-pressed={displayMode === 'bilingual'} onClick={() => onDisplayModeChange('bilingual')}>双语</button>
       <button type="button" className={displayMode === 'translation' ? 'is-active' : ''} aria-pressed={displayMode === 'translation'} onClick={() => onDisplayModeChange('translation')}>仅译文</button>
       <button type="button" className={displayMode === 'original' ? 'is-active' : ''} aria-pressed={displayMode === 'original'} onClick={() => onDisplayModeChange('original')}>{hasHtml ? '原始排版' : '仅原文'}</button>

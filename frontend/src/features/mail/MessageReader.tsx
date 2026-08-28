@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from 'preact/compat';
-import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowLeft, ArrowRight, Clock, Code, Envelope, Eye, Globe, Star, Tag, Trash } from '../../components/icons';
+import { Archive, ArrowBendUpLeft, ArrowBendUpRight, ArrowLeft, ArrowRight, Clock, Code, Envelope, Eye, File, Globe, Star, Tag, Trash } from '../../components/icons';
 import type { Account, Contact, Message } from '../../types';
 import type { MailParticipant, MessageBodyView, ParticipantRole } from '../../app-model';
 import { AccountProviderMark, providerLabel } from '../../components/shared';
@@ -10,6 +10,7 @@ import { MessageParticipants } from './MessageParticipants';
 import { BilingualHtmlMessageBody } from './BilingualHtmlMessageBody';
 import { BilingualMessageBody, TranslationReaderControl, type TranslationDisplayMode, type TranslationPresentation } from '../translation';
 import { useI18n } from '../i18n';
+import { RawMessageModal } from './RawMessageModal';
 
 const AttachmentList = lazy(() => import('../attachments/AttachmentList').then((module) => ({ default: module.AttachmentList })));
 
@@ -19,13 +20,15 @@ export function MessageReader({ message, account, contacts, defaultBodyView, onR
   const { t } = useI18n();
   const [bodyView, setBodyView] = useState<MessageBodyView>(defaultBodyView);
   const [translationOpen, setTranslationOpen] = useState(false);
+  const [translationMounted, setTranslationMounted] = useState(false);
   const [translationMode, setTranslationMode] = useState<TranslationDisplayMode>('bilingual');
   const [translationPresentation, setTranslationPresentation] = useState<TranslationPresentation>();
+  const [rawMessageOpen, setRawMessageOpen] = useState(false);
   const changeTranslationMode = useCallback((mode: TranslationDisplayMode) => {
     setTranslationMode(mode);
     if (mode === 'original' && message?.html) setBodyView('rendered');
   }, [message?.html]);
-  useEffect(() => { setBodyView(defaultBodyView); setTranslationOpen(false); setTranslationMode('bilingual'); setTranslationPresentation(undefined); }, [defaultBodyView, message?.id]);
+  useEffect(() => { setBodyView(defaultBodyView); setTranslationOpen(false); setTranslationMounted(false); setTranslationMode('bilingual'); setTranslationPresentation(undefined); setRawMessageOpen(false); }, [defaultBodyView, message?.id]);
 
   if (!message || !account) return <section className="reader empty-reader"><Envelope size={54} weight="duotone" /><h2>{t('选择一封邮件开始阅读')}</h2><p>{t('来自所有账户的邮件都会汇总在这里。')}</p></section>;
   const verificationCode = findVerificationCode([message.subject, message.preview, message.text === undefined ? '' : emailPlainText(message.text, message.html)].join('\n'));
@@ -37,9 +40,8 @@ export function MessageReader({ message, account, contacts, defaultBodyView, onR
         <span className="reader-provider-name">{providerLabel[account.provider]}</span><span>{account.group}</span>
       </div>
       <h1>{message.subject}</h1>{message.labels.length > 0 && <div className="reader-labels">{message.labels.map((label) => <span key={label}><Tag size={12} />{label}</span>)}</div>}
-      <div className="sender-line"><MessageParticipants message={message} contacts={contacts} color={account.color} onCompose={onComposeSender} onFilter={onFilterParticipant} /><div className="sender-side"><time>{new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(message.date))}</time><div className="sender-actions"><button data-icon-tone="warning" title={message.flagged ? '取消星标' : '添加星标'} aria-label={message.flagged ? '取消星标' : '添加星标'} onClick={onToggleFlag}><Star size={18} weight={message.flagged ? 'fill' : 'regular'} /></button><button data-icon-tone="primary" title="回复" aria-label="回复邮件" onClick={onReply}><ArrowBendUpLeft size={18} /></button><button data-icon-tone="info" title="转发" aria-label="转发邮件" onClick={onForward}><ArrowBendUpRight size={18} /></button><button data-icon-tone="neutral" title={message.unread ? '邮件已是未读' : '标记未读'} aria-label={message.unread ? '邮件已是未读' : '标记邮件为未读'} disabled={message.unread || actionBusy} onClick={onMarkUnread}><Envelope size={18} /></button>{message.text !== undefined && <><span className="sender-action-divider" aria-hidden="true" /><button className={translationOpen ? 'is-active' : ''} data-icon-tone="primary" title={translationOpen ? '关闭邮件翻译' : '翻译邮件'} aria-label={translationOpen ? '关闭邮件翻译' : '翻译邮件'} aria-pressed={translationOpen} onClick={() => setTranslationOpen((current) => { if (current) setTranslationPresentation(undefined); return !current; })}><Globe size={18} /></button>{message.html && <button data-icon-tone="neutral" title={bodyView === 'source' ? '切换到渲染效果' : '切换到原始内容'} aria-label={bodyView === 'source' ? '切换到渲染效果' : '切换到原始内容'} onClick={() => setBodyView((current) => current === 'source' ? 'rendered' : 'source')}>{bodyView === 'source' ? <Eye size={18} /> : <Code size={18} />}</button>}</>}</div></div></div>
+      <div className="sender-line"><MessageParticipants message={message} contacts={contacts} color={account.color} onCompose={onComposeSender} onFilter={onFilterParticipant} /><div className="sender-side"><time>{new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(message.date))}</time><div className="sender-actions"><button data-icon-tone="warning" title={message.flagged ? '取消星标' : '添加星标'} aria-label={message.flagged ? '取消星标' : '添加星标'} onClick={onToggleFlag}><Star size={18} weight={message.flagged ? 'fill' : 'regular'} /></button><button data-icon-tone="primary" title="回复" aria-label="回复邮件" onClick={onReply}><ArrowBendUpLeft size={18} /></button><button data-icon-tone="info" title="转发" aria-label="转发邮件" onClick={onForward}><ArrowBendUpRight size={18} /></button><button data-icon-tone="neutral" title={message.unread ? '邮件已是未读' : '标记未读'} aria-label={message.unread ? '邮件已是未读' : '标记邮件为未读'} disabled={message.unread || actionBusy} onClick={onMarkUnread}><Envelope size={18} /></button>{message.text !== undefined && <><span className="sender-action-divider" aria-hidden="true" /><div className="mail-translation-anchor"><button className={translationOpen || translationPresentation ? 'is-active mail-translation-trigger' : 'mail-translation-trigger'} data-icon-tone="primary" title={translationOpen ? '收起翻译设置' : '翻译邮件'} aria-label={translationOpen ? '收起翻译设置' : '翻译邮件'} aria-haspopup="dialog" aria-expanded={translationOpen} aria-controls="mail-translation-popover" onClick={() => { setTranslationMounted(true); setTranslationOpen((current) => !current); }}><Globe size={18} /><span>翻译</span></button>{translationMounted && <TranslationReaderControl messageId={message.id} hasHtml={Boolean(message.html)} open={translationOpen} displayMode={translationMode} onDisplayModeChange={changeTranslationMode} onPresentationChange={setTranslationPresentation} onDismiss={() => setTranslationOpen(false)} />}</div>{message.html && <button data-icon-tone="neutral" title={bodyView === 'source' ? '切换到渲染效果' : '切换到纯文本阅读'} aria-label={bodyView === 'source' ? '切换到渲染效果' : '切换到纯文本阅读'} onClick={() => setBodyView((current) => current === 'source' ? 'rendered' : 'source')}>{bodyView === 'source' ? <Eye size={18} /> : <Code size={18} />}</button>}<button data-icon-tone="neutral" title="查看未清洗的原始邮件正文" aria-label="查看未清洗的原始邮件正文" onClick={() => setRawMessageOpen(true)}><File size={18} /></button></>}</div></div></div>
       {verificationCode && <VerificationCodeBanner code={verificationCode} />}
-      {translationOpen && <TranslationReaderControl messageId={message.id} hasHtml={Boolean(message.html)} displayMode={translationMode} onDisplayModeChange={changeTranslationMode} onPresentationChange={setTranslationPresentation} onClose={() => { setTranslationOpen(false); setTranslationPresentation(undefined); }} />}
       <div className={`mail-body ${message.text === undefined ? 'mail-body-loading' : ''}`}>
         {message.text === undefined
           ? <p>{t('正在从本地缓存加载正文…')}</p>
@@ -51,5 +53,6 @@ export function MessageReader({ message, account, contacts, defaultBodyView, onR
       </div>
       {message.attachments.length > 0 && <Suspense fallback={<p className="attachments-loading">{t('正在加载附件…')}</p>}><AttachmentList messageId={message.id} attachments={message.attachments} /></Suspense>}
     </div></div>
+    {rawMessageOpen && <RawMessageModal message={message} onClose={() => setRawMessageOpen(false)} />}
   </article>;
 }
