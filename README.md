@@ -1,94 +1,96 @@
 # iMail
 
-iMail 是一个本地优先的多邮箱客户端。它把 Gmail、Outlook、QQ、Yahoo、iCloud 和其他 IMAP 邮箱放进同一个界面，统一处理收信、搜索、写信、联系人和日常整理。
+English | [简体中文](README_zh.md)
 
-项目目前处于内部测试阶段，只交付 Windows x64 桌面端和服务端 Docker 镜像。Linux 仅作为服务端容器运行环境，不维护原生 Linux 或 macOS 桌面构建。
+iMail is a local-first, multi-account email client. It brings Gmail, Outlook, QQ Mail, Yahoo Mail, iCloud Mail, and other IMAP accounts into one interface for reading, searching, composing, contact management, and everyday inbox organization.
 
-## 主要能力
+The project is currently in internal testing. Its supported deliverables are the Windows x64 desktop app and the server Docker image. Linux is supported only as a server container environment; native Linux and macOS desktop builds are not maintained.
 
-- 在一个收件箱中查看和管理多个邮箱
-- 支持 Gmail、Outlook、Hotmail、QQ、Yahoo、iCloud 与通用 IMAP/SMTP
-- 支持 OAuth 登录、应用专用密码和邮箱授权码
-- 后台持续接收新邮件，窗口隐藏后仍可同步
-- 支持搜索、星标、已读、归档、垃圾箱和自定义标签
-- 支持写信、回复、转发、草稿和附件下载
-- 支持联系人、发件人 Logo 和写信建议
-- 支持为 iCloud 邮箱管理 Hide My Email 地址
-- 支持稍后处理、通知中心、快捷键和多套主题
-- 每个邮箱可单独使用 HTTP、HTTPS 或 SOCKS5 代理
-- 可为可信工具和 Agent 开启独立的 API 或 MCP 接入
+## Key features
 
-## 两种使用方式
+- View and manage multiple email accounts in one inbox
+- Support for Gmail, Outlook, Hotmail, QQ Mail, Yahoo Mail, iCloud Mail, and generic IMAP/SMTP accounts
+- OAuth sign-in, app-specific passwords, and email authorization codes
+- Continuous background mail delivery and synchronization while the window is hidden
+- Search, stars, read status, archive, trash, and custom labels
+- Compose, reply, forward, drafts, and attachment downloads
+- Contacts, sender logos, and recipient suggestions
+- Hide My Email address management for iCloud accounts
+- Snooze, notification center, keyboard shortcuts, and multiple themes
+- Per-account HTTP, HTTPS, or SOCKS5 proxy settings
+- Optional API and MCP access for trusted tools and agents
 
-### Windows 桌面端
+## Two ways to use iMail
 
-适合个人在自己的电脑上使用。邮件数据和授权信息保存在本机，关闭窗口后应用会留在系统托盘继续收信，选择“退出 iMail”才会停止。
+### Windows desktop app
 
-桌面端也可以连接自己部署的远程 iMail 服务。切换本地和远程模式只会切换数据来源，不会自动复制或合并两边的数据。
+The desktop app is designed for personal use on your own computer. Email data and credentials are stored locally. When the window is closed, iMail stays in the system tray and continues receiving mail; it stops only when you choose **Quit iMail**.
 
-### Docker 服务端
+The desktop app can also connect to a self-hosted remote iMail service. Switching between local and remote mode changes only the data source—it does not automatically copy or merge data between the two instances.
 
-适合在服务器或家用设备上部署，然后通过浏览器访问。镜像同时包含 Web 界面、邮件服务和维护工具，运行时不需要 Node.js。
+### Docker server
 
-当前镜像：
+The server edition is designed for deployment on a server or home device and is accessed through a browser. The image includes the web interface, mail service, and maintenance tools, and does not require Node.js at runtime.
+
+Current image:
 
 ```text
 ghcr.io/cooliang101/imail:edge
 ```
 
-镜像目前可能需要登录 GHCR 后拉取。固定部署建议使用版本标签、完整提交标签或 digest，不要长期依赖 `edge`。
+Authentication with GHCR may currently be required before pulling the image. For stable deployments, use a version tag, full commit tag, or digest instead of depending on `edge` indefinitely.
 
-本机试运行：
+Run it locally:
 
 ```bash
 docker compose -f http-service/compose.example.yml up -d
 ```
 
-该示例只允许本机访问 `http://127.0.0.1:8787`。公网部署必须使用 HTTPS，并持久化 `/data` 和 `/backups`；完整步骤见[运维手册](docs/operator-runbook.md)。
+This example exposes the service only at `http://127.0.0.1:8787`. Public deployments must use HTTPS and persist `/data` and `/backups`. See the [operations runbook](docs/operator-runbook.md) for full instructions.
 
-## 数据与隐私
+## Data and privacy
 
-- 邮箱密码、授权码和 OAuth Token 会加密保存
-- 不会把邮箱凭据返回给普通 API、MCP、前端日志或错误信息
-- 桌面卸载和应用升级默认保留邮件数据
-- 可以备份和恢复完整实例，升级前可先在副本上检查数据
-- “隐私与数据”可以清除当前用户的邮箱数据，不影响其他用户
-- 邮箱授权信息可以导出为单独密码保护的文件，邮件正文不会进入该文件
+- Email passwords, authorization codes, and OAuth tokens are stored encrypted
+- Email credentials are never returned through regular APIs, MCP, frontend logs, or error messages
+- Desktop uninstallations and application upgrades preserve mail data by default
+- A complete instance can be backed up and restored, including validation on a copy before an upgrade
+- **Privacy & Data** can clear the current user's email data without affecting other users
+- Account credentials can be exported to a separately password-protected file; message bodies are not included
 
-iMail 是本地优先产品，不提供自动的多设备数据同步。本地桌面实例与远程服务实例彼此独立。
+iMail is a local-first product and does not provide automatic multi-device data synchronization. Local desktop instances and remote service instances remain independent.
 
-## Agent 与外部接入
+## Agents and external integrations
 
-远程服务可以按需开启 API Gateway 或 MCP，让可信程序读取邮件、发送邮件、管理邮箱和执行同步。每个授权码都有独立用途、有效期和撤销入口。
+The remote service can optionally enable an API Gateway or MCP endpoint, allowing trusted applications to read and send email, manage accounts, and trigger synchronization. Each authorization code has its own purpose, expiration, and revocation control.
 
-这些入口默认关闭。MCP 的账户管理能力只接受专用的 `mcp:full` 授权码，具体接入方式见 [MCP 指南](docs/mcp-integration.md)。
+These interfaces are disabled by default. MCP account-management features accept only a dedicated `mcp:full` authorization code. See the [MCP integration guide](docs/mcp-integration.md) for details.
 
-## 当前交付平台
+## Supported deliverables
 
-| 目标 | 状态 |
+| Target | Status |
 | --- | --- |
-| Windows x64 桌面端 | 已支持，当前用于内部测试 |
-| Docker `linux/amd64` | 已发布到 GHCR，持续补充部署与安全验收 |
+| Windows x64 desktop app | Supported and currently used for internal testing |
+| Docker `linux/amd64` | Published to GHCR; deployment and security validation are ongoing |
 
-## 本地开发
+## Local development
 
-需要 Node.js 22.5+、npm 和 Rust。前端工程统一位于 `frontend/`。
+Node.js 22.5+, npm, and Rust are required. The frontend workspace is located exclusively in `frontend/`.
 
 ```bash
 npm ci --prefix frontend
 npm --prefix frontend run dev
 ```
 
-浏览器打开 `http://localhost:5173`。开发服务默认只监听本机，不会直接暴露给局域网。
+Open `http://localhost:5173` in a browser. The development server listens only on localhost by default and is not directly exposed to the local network.
 
-Windows 桌面开发：
+Windows desktop development:
 
 ```bash
 npm --prefix frontend run dev:desktop
 npm --prefix frontend run build:desktop:internal
 ```
 
-提交前检查：
+Checks to run before committing:
 
 ```bash
 npm --prefix frontend run typecheck
@@ -96,27 +98,27 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
-Docker 完整验收：
+Full Docker release validation:
 
 ```bash
 npm --prefix frontend run test:container-release
 ```
 
-## 项目结构
+## Project structure
 
 ```text
-frontend/       共用界面
-crates/         邮件、存储、同步、安全和外部接入能力
-src-tauri/      Windows 桌面应用
-http-service/   Docker 与远程服务入口
-docs/           架构、部署、运维和开发计划
+frontend/       Shared user interface
+crates/         Mail, storage, sync, security, and integration capabilities
+src-tauri/      Windows desktop application
+http-service/   Docker and remote service entry point
+docs/           Architecture, deployment, operations, and development plans
 ```
 
-## 文档
+## Documentation
 
-- [文档索引](docs/README.md)
-- [部署模式](docs/deployment-modes.md)
-- [运维手册](docs/operator-runbook.md)
-- [MCP 接入指南](docs/mcp-integration.md)
-- [架构说明](docs/architecture.md)
-- [内部测试说明](docs/internal-testing.md)
+- [Documentation index](docs/README.md)
+- [Deployment modes](docs/deployment-modes.md)
+- [Operations runbook](docs/operator-runbook.md)
+- [MCP integration guide](docs/mcp-integration.md)
+- [Architecture](docs/architecture.md)
+- [Internal testing](docs/internal-testing.md)
