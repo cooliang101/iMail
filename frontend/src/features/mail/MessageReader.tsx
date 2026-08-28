@@ -7,6 +7,7 @@ import { emailPlainText, MessageBody } from './MessageBody';
 import { findVerificationCode } from './verification-code';
 import { VerificationCodeBanner } from './VerificationCodeBanner';
 import { MessageParticipants } from './MessageParticipants';
+import { BilingualHtmlMessageBody } from './BilingualHtmlMessageBody';
 import { BilingualMessageBody, TranslationReaderControl, type TranslationDisplayMode, type TranslationPresentation } from '../translation';
 import { useI18n } from '../i18n';
 
@@ -43,7 +44,9 @@ export function MessageReader({ message, account, contacts, defaultBodyView, onR
         {message.text === undefined
           ? <p>{t('正在从本地缓存加载正文…')}</p>
           : translationPresentation && translationMode !== 'original'
-            ? <BilingualMessageBody presentation={translationPresentation} mode={translationMode} hasHtml={Boolean(message.html)} onShowOriginal={() => changeTranslationMode('original')} />
+            ? message.html && translationMode === 'bilingual'
+              ? <BilingualHtmlMessageBody html={message.html} subject={message.subject} presentation={translationPresentation} onShowOriginal={() => changeTranslationMode('original')} />
+              : <BilingualMessageBody presentation={translationPresentation} mode={translationMode} hasHtml={Boolean(message.html)} onShowOriginal={() => changeTranslationMode('original')} />
             : <MessageBody text={message.text} html={message.html} subject={message.subject} view={bodyView} />}
       </div>
       {message.attachments.length > 0 && <Suspense fallback={<p className="attachments-loading">{t('正在加载附件…')}</p>}><AttachmentList messageId={message.id} attachments={message.attachments} /></Suspense>}
