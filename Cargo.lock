@@ -2346,6 +2346,7 @@ dependencies = [
  "tower 0.4.13",
  "url",
  "uuid",
+ "windows 0.61.3",
 ]
 
 [[package]]

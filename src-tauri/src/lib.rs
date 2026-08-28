@@ -56,6 +56,9 @@ fn desktop_frontend_ready(app: AppHandle, state: State<'_, DesktopWindowState>) 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     app_logging::prepare_desktop_process();
+    if !desktop_platform::ensure_webview2_runtime() {
+        std::process::exit(1);
+    }
     let app = tauri::Builder::default()
         .manage(DesktopWindowState::default())
         .manage(tray_menu::TrayMenuState::default())

@@ -43,6 +43,8 @@ npm --prefix frontend run test:container-release
 
 Windows 可能显示 SmartScreen 提示；只在确认文件来自本项目的受控测试人员中继续安装。正式公开发行前仍需配置 Windows 代码签名、发布渠道和升级签名。
 
+NSIS 安装包会在缺少 Microsoft Edge WebView2 Runtime 时联网安装该组件。若测试人员直接运行应用程序、安装阶段下载失败，或运行库之后被移除，iMail 会在创建窗口前显示系统提示；选择“是”将打开微软官方下载页。下载并运行页面中的 **Evergreen Bootstrapper**，安装完成后重新启动 iMail。离线环境可在联网设备打开提示中的地址，使用页面提供的 **Evergreen Standalone Installer** 并按目标机器的 x64 架构下载安装。
+
 ## 服务模式测试边界
 
 - 本地模式通过 Tauri 进程内 Rust 服务运行，不使用 sidecar 或独立 Worker。只有进入“外部接入”时才按需启动随机端口的回环 HTTP Adapter，供本机 MCP/Gateway 客户端使用；关闭窗口隐藏到托盘并继续同步，显式退出才停止。
@@ -62,3 +64,4 @@ Windows 可能显示 SmartScreen 提示；只在确认文件来自本项目的�
 8. 测试结束记录操作系统、CPU 架构、安装包来源、应用版本、复现步骤和日志摘要；日志不得包含邮箱凭据或 Token。
 9. 从“服务连接”打开应用日志：验证 `app.log` 包含本次启动、前端就绪、嵌入式服务和退出阶段；制造一个不含真实凭据的错误，确认邮箱、Bearer Token、OAuth code/state、Cookie 和密码均被脱敏。
 10. 检查设置中心的分层导航：一级页只保留简单控件和复杂项入口；邮箱、隐私邮箱、远程服务、自定义主题、授权导出和数据清除应切换到独立右侧子页。标题显示父级/当前项，返回按钮逐层返回且不关闭设置弹窗；在 820px、650px 和窄于 390px 时不得出现横向溢出或被关闭按钮遮挡。
+11. 在隔离测试机移除 WebView2 Runtime 后直接启动 iMail：应用不得静默退出或停留在不可见窗口，应显示包含官方下载地址、Evergreen Bootstrapper 安装步骤和“是/否”选择的原生提示；选择“是”应打开微软下载页。完成验证后恢复 WebView2，避免影响其他桌面应用。
