@@ -18,7 +18,7 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
   const activeAccount = accountFilter === 'all' ? undefined : accounts.find((account) => account.id === accountFilter);
   return <aside className={`primary-sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
     <div className="sidebar-heading"><div><strong>iMail</strong><span>{t('统一通信工作台')}</span></div><button className="mobile-close" aria-label={t('关闭侧栏')} onClick={onClose}><X size={20} /></button></div>
-    <AppButton appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" onClick={() => onCompose(activeAccount?.id)}>{t('写邮件')}</AppButton>
+    <AppButton appearance="primary" icon={<PencilSimple size={18} />} className="compose-button" title={t('写邮件')} aria-label={t('写邮件')} onClick={() => onCompose(activeAccount?.id)}><span className="compose-button-label">{t('写邮件')}</span></AppButton>
     <div className="mobile-account-controls" aria-label={t('移动端邮箱账户')}>
       <button className={accountFilter === 'all' ? 'active' : ''} onClick={() => onSelectScope('inbox')}><Tray size={18} /><span><strong>{t('全部邮箱')}</strong><small>{t('{count} 个账户', { count: accounts.length })}</small></span></button>
       {accounts.map((account) => <button key={account.id} className={accountFilter === account.id ? 'active' : ''} onClick={() => onSelectScope('inbox', account.id)}><AccountProviderMark provider={account.provider} /><span><strong>{account.displayName}</strong><small>{account.email}</small></span></button>)}
@@ -26,15 +26,15 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
       <button className="mobile-user-switch" type="button" onClick={onLogout}><ArrowsLeftRight size={17} /><span><strong>{user.displayName}</strong><small>{user.login} · {t('切换账号')}</small></span></button>
     </div>
     <nav className="nav-block">
-      <button data-icon-tone="primary" className={view === 'inbox' && !groupFilter ? 'active' : ''} onClick={() => onSelectScope('inbox')}><Tray size={19} /><span>{t('统一收件箱')}</span><b>{messageStats.unread || ''}</b></button>
-      <button data-icon-tone="warning" className={view === 'starred' ? 'active' : ''} onClick={() => onSelectScope('starred')}><Star size={19} /><span>{t('已加星标')}</span></button>
-      <button data-icon-tone="info" className={view === 'sent' ? 'active' : ''} onClick={() => onSelectScope('sent')}><PaperPlaneTilt size={19} /><span>{t('已发送')}</span></button>
-      <button data-icon-tone="accent" className={view === 'drafts' ? 'active' : ''} onClick={() => onSelectScope('drafts')}><PencilSimple size={19} /><span>{t('草稿')}</span><b>{draftsCount || ''}</b></button>
-      <button data-icon-tone="info" className={view === 'contacts' ? 'active' : ''} onClick={() => onSelectScope('contacts')}><AddressBook size={19} /><span>{t('联系人')}</span><b>{contactsCount || ''}</b></button>
-      <button data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => onSelectScope('snoozed')}><Clock size={19} /><span>{t('稍后处理')}</span></button>
-      <button data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => onSelectScope('archive')}><Archive size={19} /><span>{t('归档')}</span></button>
-      <button data-icon-tone="danger" className={view === 'trash' ? 'active' : ''} onClick={() => onSelectScope('trash')}><Trash size={19} /><span>{t('已删除邮件')}</span></button>
-      <button data-icon-tone="warning" className={view === 'junk' ? 'active' : ''} onClick={() => onSelectScope('junk')}><WarningCircle size={19} /><span>{t('垃圾邮件')}</span></button>
+      <button title={t('统一收件箱')} aria-label={t('统一收件箱')} data-icon-tone="primary" className={view === 'inbox' && !groupFilter ? 'active' : ''} onClick={() => onSelectScope('inbox')}><Tray size={19} /><span>{t('统一收件箱')}</span><b>{messageStats.unread || ''}</b></button>
+      <button title={t('已加星标')} aria-label={t('已加星标')} data-icon-tone="warning" className={view === 'starred' ? 'active' : ''} onClick={() => onSelectScope('starred')}><Star size={19} /><span>{t('已加星标')}</span></button>
+      <button title={t('已发送')} aria-label={t('已发送')} data-icon-tone="info" className={view === 'sent' ? 'active' : ''} onClick={() => onSelectScope('sent')}><PaperPlaneTilt size={19} /><span>{t('已发送')}</span></button>
+      <button title={t('草稿')} aria-label={t('草稿')} data-icon-tone="accent" className={view === 'drafts' ? 'active' : ''} onClick={() => onSelectScope('drafts')}><PencilSimple size={19} /><span>{t('草稿')}</span><b>{draftsCount || ''}</b></button>
+      <button title={t('联系人')} aria-label={t('联系人')} data-icon-tone="info" className={view === 'contacts' ? 'active' : ''} onClick={() => onSelectScope('contacts')}><AddressBook size={19} /><span>{t('联系人')}</span><b>{contactsCount || ''}</b></button>
+      <button title={t('稍后处理')} aria-label={t('稍后处理')} data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => onSelectScope('snoozed')}><Clock size={19} /><span>{t('稍后处理')}</span></button>
+      <button title={t('归档')} aria-label={t('归档')} data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => onSelectScope('archive')}><Archive size={19} /><span>{t('归档')}</span></button>
+      <button title={t('已删除邮件')} aria-label={t('已删除邮件')} data-icon-tone="danger" className={view === 'trash' ? 'active' : ''} onClick={() => onSelectScope('trash')}><Trash size={19} /><span>{t('已删除邮件')}</span></button>
+      <button title={t('垃圾邮件')} aria-label={t('垃圾邮件')} data-icon-tone="warning" className={view === 'junk' ? 'active' : ''} onClick={() => onSelectScope('junk')}><WarningCircle size={19} /><span>{t('垃圾邮件')}</span></button>
     </nav>
     <section className="workspace-section"><div className="section-label"><span>{t('工作空间')}</span><button className="workspace-add" title={t('新增或整理工作空间')} aria-label={t('新增工作空间')} onClick={() => onEditWorkspace(null)}><FolderSimplePlus size={16} /></button></div>
       <nav className="nav-block groups workspace-list">{groups.map((group) => {
@@ -48,6 +48,6 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
     </section>
     {labels.length > 0 && <><div className="section-label"><span>{t('邮件标签')}</span></div><nav className="nav-block groups label-nav">{labels.map((label) => <button key={label} data-icon-tone="info" className={activeLabel === label ? 'active' : ''} onClick={() => onSelectLabel(label)}><Tag size={16} /><span>{label}</span></button>)}</nav></>}
     <div className="sidebar-spacer" />
-    <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} onClick={() => onSelectScope('tokens')}><Code size={19} /><span><strong>{t('外部接入')}</strong><small>{t('MCP 与邮件 API')}</small></span><ArrowRight size={16} /></button>
+    <button className={`developer-entry ${view === 'tokens' ? 'active' : ''}`} title={t('外部接入')} aria-label={t('外部接入')} onClick={() => onSelectScope('tokens')}><Code size={19} /><span><strong>{t('外部接入')}</strong><small>{t('MCP 与邮件 API')}</small></span><ArrowRight size={16} /></button>
   </aside>;
 }

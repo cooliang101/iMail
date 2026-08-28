@@ -118,3 +118,9 @@
   .desktop-frame:has(.app-shell.sidebar-collapsed) .desktop-titlebar { grid-template-columns: 64px 0 minmax(0, 1fr) auto; }
   .desktop-frame:has(.app-shell) .desktop-titlebar-name { padding-inline: 20px; }
 }
+@media (min-width: 821px) and (max-width: 1180px) {
+  .desktop-frame:has(.app-shell) .desktop-titlebar { grid-template-columns: 64px 64px minmax(0, 1fr) auto; }
+  .desktop-frame:has(.app-shell) .desktop-titlebar-name { justify-content: center; padding-inline: 0; }
+  .desktop-frame:has(.app-shell) .desktop-titlebar-name > span { display: none; }
+  .desktop-frame:has(.app-shell.sidebar-collapsed) .desktop-titlebar { grid-template-columns: 64px 0 minmax(0, 1fr) auto; }
+}

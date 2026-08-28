@@ -1,7 +1,7 @@
 {
   "$schema": "../frontend/node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "iMail",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "identifier": "com.cooliang.imail",
   "build": {
     "frontendDist": "../frontend/dist",
@@ -16,8 +16,8 @@
         "title": "iMail",
         "width": 1280,
         "height": 800,
-        "minWidth": 880,
-        "minHeight": 600,
+        "minWidth": 1024,
+        "minHeight": 680,
         "visible": false,
         "decorations": false,
         "shadow": true,

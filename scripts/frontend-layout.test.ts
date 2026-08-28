@@ -89,6 +89,8 @@ describe('frontend workspace layout', () => {
     expect(tauri.build.frontendDist).toBe('../frontend/dist');
     expect(tauri.build.beforeBuildCommand).toBe('npm run build:web');
     expect(tauri.app.windows[0].generalAutofillEnabled).toBe(false);
+    expect(tauri.app.windows[0].minWidth).toBeGreaterThanOrEqual(1024);
+    expect(tauri.app.windows[0].minHeight).toBeGreaterThanOrEqual(680);
 
     const appInput = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'components', 'form-controls', 'app-input.tsx'), 'utf8');
     const appTextarea = await readFile(path.join(workspaceRoot, 'frontend', 'src', 'components', 'form-controls', 'app-textarea.tsx'), 'utf8');
@@ -157,6 +159,21 @@ describe('frontend workspace layout', () => {
     expect(translationSettings).toContain('editor.descriptor.credentialKinds.length === 0');
     expect(translationSettings).toContain("descriptor.kind !== 'edge-local'");
     expect(settingsModal).toContain("id: 'translation', label: '翻译服务'");
+  });
+
+  it('protects the mail reader while compacting navigation at desktop widths', async () => {
+    const sourceRoot = path.join(workspaceRoot, 'frontend', 'src');
+    const responsiveStyles = await readFile(path.join(sourceRoot, 'styles', 'typography-responsive.css'), 'utf8');
+    const mailStyles = await readFile(path.join(sourceRoot, 'styles', 'mail.css'), 'utf8');
+    const sidebar = await readFile(path.join(sourceRoot, 'features', 'navigation', 'AppSidebar.tsx'), 'utf8');
+    expect(responsiveStyles).toContain('@media (min-width: 821px) and (max-width: 1180px)');
+    expect(responsiveStyles).toContain('grid-template-columns: 64px 64px minmax(0, 1fr)');
+    expect(responsiveStyles).toContain('.primary-sidebar .compose-button-label { display: none; }');
+    expect(mailStyles).toContain('minmax(460px, 1fr)');
+    expect(mailStyles).toContain('container: mail-reader / inline-size');
+    expect(mailStyles).toContain('@container mail-reader (max-width: 620px)');
+    expect(sidebar).toContain('className="compose-button-label"');
+    expect(sidebar).toContain("title={t('统一收件箱')}");
   });
 
   it('keeps privacy settings focused on user actions instead of implementation facts', async () => {
