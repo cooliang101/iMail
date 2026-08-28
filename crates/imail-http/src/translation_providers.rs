@@ -75,7 +75,7 @@ fn send_json_with_retry(
     url: &str,
     headers: &[(&str, &str)],
     body: &impl Serialize,
-) -> Result<ureq::Response, ureq::Error> {
+) -> Result<ureq::Response, Box<ureq::Error>> {
     let body = serde_json::to_string(body).expect("provider request body serializes");
     let delays = [Duration::from_millis(250), Duration::from_millis(750)];
     for attempt in 0..=delays.len() {
@@ -91,9 +91,9 @@ fn send_json_with_retry(
                     thread::sleep(*delay);
                     continue;
                 }
-                return Err(error);
+                return Err(Box::new(error));
             }
-            result => return result,
+            result => return result.map_err(Box::new),
         }
     }
     unreachable!("retry loop always returns")

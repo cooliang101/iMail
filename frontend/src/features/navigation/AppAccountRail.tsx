@@ -9,7 +9,8 @@ export function AppAccountRail({ user, accounts, accountFilter, onSelect, onAdd,
   user: { login: string; displayName: string }; accounts: Account[]; accountFilter: string; onSelect: (accountId?: string) => void; onAdd: () => void; onSettings: () => void; onSwitchAccount: () => void;
   onContextMenu: (event: MouseEvent<HTMLButtonElement>, accountId?: string) => void;
 }) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const accountMenuLabel = `${user.displayName}${language === 'zh-CN' ? '，' : ', '}${t('打开账号菜单')}`;
   return <aside className="account-rail" aria-label={t('邮箱账户')}>
     <button className="brand-mark" aria-label="iMail"><BrandLogo /></button>
     <div className="rail-accounts">
@@ -18,7 +19,7 @@ export function AppAccountRail({ user, accounts, accountFilter, onSelect, onAdd,
       <button title={t('添加邮箱')} aria-label={t('添加邮箱')} className="rail-avatar rail-add" onClick={onAdd}><Plus size={19} /></button>
     </div>
     <div className="rail-user-menu">
-      <button type="button" className="rail-avatar rail-user" aria-label={`${user.displayName}, ${t('打开账号菜单')}`} aria-haspopup="menu"><UserCircle size={23} weight="duotone" /></button>
+      <button type="button" className="rail-avatar rail-user" aria-label={accountMenuLabel} aria-haspopup="menu"><UserCircle size={23} weight="duotone" /></button>
       <section className="rail-user-popover" role="menu" aria-label={t('应用账号菜单')}>
         <header><UserCircle size={25} weight="duotone" /><span><strong>{user.displayName}</strong><small>{user.login}</small></span></header>
         <button type="button" role="menuitem" onClick={onSwitchAccount}><ArrowsLeftRight size={16} /><span>{t('切换账号')}</span></button>

@@ -1642,30 +1642,6 @@ fn unused_protocol() -> ProtocolFailure {
     )
 }
 
-#[cfg(test)]
-mod participant_query_tests {
-    use super::*;
-
-    #[test]
-    fn embedded_queries_normalize_participant_addresses() {
-        let fields = BTreeMap::from([
-            ("sender".into(), " Sender+Alerts@Example.com ".into()),
-            ("recipient".into(), "alias@icloud.com".into()),
-        ]);
-        let query = embedded_message_query(&fields).unwrap();
-        assert_eq!(query.sender.as_deref(), Some("Sender+Alerts@Example.com"));
-        assert_eq!(query.recipient.as_deref(), Some("alias@icloud.com"));
-    }
-
-    #[test]
-    fn embedded_queries_reject_invalid_participant_addresses() {
-        for address in ["", "missing-at.example.com", "bad\n@example.com"] {
-            let fields = BTreeMap::from([("sender".into(), address.into())]);
-            assert!(embedded_message_query(&fields).is_err());
-        }
-    }
-}
-
 fn refresh_account(
     store: &mut SqliteAuthStore,
     codec: &impl AccountSecretCodec,
@@ -1787,4 +1763,28 @@ fn error(status: StatusCode, message: impl Into<String>) -> Response {
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod participant_query_tests {
+    use super::*;
+
+    #[test]
+    fn embedded_queries_normalize_participant_addresses() {
+        let fields = BTreeMap::from([
+            ("sender".into(), " Sender+Alerts@Example.com ".into()),
+            ("recipient".into(), "alias@icloud.com".into()),
+        ]);
+        let query = embedded_message_query(&fields).unwrap();
+        assert_eq!(query.sender.as_deref(), Some("Sender+Alerts@Example.com"));
+        assert_eq!(query.recipient.as_deref(), Some("alias@icloud.com"));
+    }
+
+    #[test]
+    fn embedded_queries_reject_invalid_participant_addresses() {
+        for address in ["", "missing-at.example.com", "bad\n@example.com"] {
+            let fields = BTreeMap::from([("sender".into(), address.into())]);
+            assert!(embedded_message_query(&fields).is_err());
+        }
+    }
 }

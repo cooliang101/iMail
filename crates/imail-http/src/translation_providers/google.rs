@@ -97,7 +97,7 @@ impl GoogleClient {
                 &[("x-goog-api-key", api_key)],
                 &body,
             )
-            .map_err(map_http_error)?
+            .map_err(|error| map_http_error(*error))?
             .into_json::<GoogleV2Response>()
             .map_err(|_| ProviderExecutionError::InvalidResponse)?;
             if response.data.translations.len() != segments.len() {
@@ -146,7 +146,7 @@ impl GoogleClient {
                 &[("Authorization", &authorization)],
                 &body,
             )
-            .map_err(map_http_error)?
+            .map_err(|error| map_http_error(*error))?
             .into_json::<GoogleV3Response>()
             .map_err(|_| ProviderExecutionError::InvalidResponse)?;
             if response.translations.len() != segments.len() {

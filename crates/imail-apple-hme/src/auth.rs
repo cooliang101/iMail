@@ -1037,9 +1037,7 @@ impl AuthState {
         if self.flow != LoginStateKind::ICloudWeb {
             return None;
         }
-        let Some(country) = self.account_country.as_deref() else {
-            return None;
-        };
+        let country = self.account_country.as_deref()?;
         let host = if matches!(country.trim().to_ascii_uppercase().as_str(), "CN" | "CHN") {
             "www.icloud.com.cn"
         } else {

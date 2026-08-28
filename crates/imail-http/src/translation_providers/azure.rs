@@ -58,7 +58,7 @@ impl AzureClient {
                 headers.push(("Ocp-Apim-Subscription-Region", region));
             }
             let response = send_json_with_retry(&self.agent, endpoint.as_str(), &headers, &body)
-                .map_err(map_http_error)?
+                .map_err(|error| map_http_error(*error))?
                 .into_json::<Vec<AzureResult>>()
                 .map_err(|_| ProviderExecutionError::InvalidResponse)?;
             if response.len() != segments.len() {
