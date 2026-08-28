@@ -25,6 +25,13 @@ describe('rendered email sanitization', () => {
     expect(result).not.toMatch(/class=|onerror=|svg\+xml|file:/i);
   });
 
+  it('keeps image-only action links usable when the remote image cannot be displayed', () => {
+    const result = sanitize('<a href="https://signup.example.test/verify/token"><img src="https://signup.example.test/images/verify-email-button.png"></a>');
+    expect(result).toContain('href="https://signup.example.test/verify/token"');
+    expect(result).toContain('target="_blank"');
+    expect(result).toContain('alt="Verify email"');
+  });
+
   it('unwraps unknown formatting elements without preserving their attributes', () => {
     expect(sanitize('<custom-box class="x"><strong style="font-weight:700">kept</strong></custom-box>'))
       .toBe('<strong style="font-weight:700">kept</strong>');

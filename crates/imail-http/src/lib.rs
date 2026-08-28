@@ -5017,11 +5017,11 @@ mod tests {
         let probe_failure = Arc::clone(&force_failure);
         let probe = move |config: &MailConnectionConfig| {
             if probe_failure.load(Ordering::SeqCst) {
-                return Err("password=connection-secret authorization=token-secret".into());
+                return Err("IMAP authentication failed password=connection-secret authorization=token-secret".into());
             }
             if matches!(&config.authentication, MailAuthentication::Password(password) if password == "reject-password")
             {
-                return Err("password=reject-password".into());
+                return Err("IMAP authentication failed password=reject-password".into());
             }
             if config
                 .proxy
@@ -5041,6 +5041,12 @@ mod tests {
 
         let rejected_create = router.clone().oneshot(Request::builder().method(Method::POST).uri("/api/accounts").header(HOST, "127.0.0.1:8787").header(CONTENT_TYPE, "application/json").header("cookie", format!("imail_session={owner_session}")).body(Body::from(r#"{"provider":"gmail","email":"rejected@example.com","displayName":"Rejected","password":"reject-password"}"#)).unwrap()).await.unwrap();
         assert_eq!(rejected_create.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let rejected_create = json(rejected_create).await;
+        assert!(rejected_create["error"]
+            .as_str()
+            .unwrap()
+            .contains("IMAP 认证失败"));
+        assert!(!rejected_create.to_string().contains("reject-password"));
         assert!(SqliteAuthStore::open_database(&database)
             .unwrap()
             .list_accounts(&owner.id)

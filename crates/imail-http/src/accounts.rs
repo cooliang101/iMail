@@ -322,8 +322,8 @@ pub(crate) async fn create_account_application(
         let account = build_account(&user_id, input, master_key)?;
         let validator = |candidate: &imail_core::AccountRecord| {
             let config = connection_config::<AuthStoreError, _>(candidate, &codec)
-                .map_err(|_| CredentialValidationError)?;
-            probe.verify(&config).map_err(|_| CredentialValidationError)
+                .map_err(|_| CredentialValidationError::default())?;
+            probe.verify(&config).map_err(connection_validation_error)
         };
         let account = AccountService::new(store).create(account, &validator)?;
         SyncRuntimeStore::open_database(&database)
@@ -347,6 +347,72 @@ pub(crate) async fn create_account_application(
         Ok(account)
     })
     .await
+}
+
+fn connection_validation_error(cause: String) -> CredentialValidationError {
+    let detail = redact_protocol_detail(&cause).to_lowercase();
+    let stage = if detail.contains("imap") {
+        "imap"
+    } else if detail.contains("smtp") {
+        "smtp"
+    } else {
+        "mail"
+    };
+    let category = if ["tls", "ssl", "certificate", "handshake", "证书"]
+        .iter()
+        .any(|keyword| detail.contains(keyword))
+    {
+        "tls"
+    } else if [
+        "auth",
+        "login",
+        "credential",
+        "password",
+        "535",
+        "认证",
+        "凭据",
+        "密码",
+    ]
+    .iter()
+    .any(|keyword| detail.contains(keyword))
+    {
+        "auth"
+    } else if [
+        "timeout",
+        "timed out",
+        "connect",
+        "network",
+        "socket",
+        "resolve",
+        "dns",
+        "refused",
+        "unreachable",
+        "超时",
+        "连接",
+        "网络",
+    ]
+    .iter()
+    .any(|keyword| detail.contains(keyword))
+    {
+        "network"
+    } else {
+        "provider"
+    };
+    let message = match (stage, category) {
+        ("imap", "tls") => "IMAP TLS 验证失败，请检查端口和加密方式",
+        ("imap", "auth") => "IMAP 认证失败，请检查邮箱地址、授权码以及 IMAP 服务是否已开启",
+        ("imap", "network") => "无法连接 IMAP 服务器，请检查主机、端口、网络或代理设置",
+        ("imap", _) => "IMAP 服务器拒绝了连接，请检查连接设置",
+        ("smtp", "tls") => "SMTP TLS 验证失败，请检查端口和加密方式",
+        ("smtp", "auth") => "SMTP 认证失败，请检查授权码以及 SMTP AUTH 是否已开启",
+        ("smtp", "network") => "无法连接 SMTP 服务器，请检查主机、端口、网络或代理设置",
+        ("smtp", _) => "SMTP 服务器拒绝了连接，请检查连接设置",
+        (_, "tls") => "邮箱 TLS 验证失败，请检查端口和加密方式",
+        (_, "auth") => "邮箱认证失败，请检查邮箱地址、授权码和服务商设置",
+        (_, "network") => "无法连接邮箱服务器，请检查主机、端口、网络或代理设置",
+        _ => "邮箱服务器拒绝了连接，请检查 IMAP/SMTP 设置",
+    };
+    CredentialValidationError::with_public_message(message)
 }
 
 async fn list(
@@ -470,8 +536,8 @@ pub(crate) async fn update_credential_application(
         let codec = MasterKeyCredentialCodec::new(master_key);
         let validator = |candidate: &imail_core::AccountRecord| {
             let config = connection_config::<AuthStoreError, _>(candidate, &codec)
-                .map_err(|_| CredentialValidationError)?;
-            probe.verify(&config).map_err(|_| CredentialValidationError)
+                .map_err(|_| CredentialValidationError::default())?;
+            probe.verify(&config).map_err(connection_validation_error)
         };
         let account = AccountService::new(store).replace_password(
             &user_id,
@@ -536,8 +602,8 @@ pub(crate) async fn update_proxy_application(
         }
         let validator = |candidate: &imail_core::AccountRecord| {
             let config = connection_config::<AuthStoreError, _>(candidate, &codec)
-                .map_err(|_| CredentialValidationError)?;
-            probe.verify(&config).map_err(|_| CredentialValidationError)
+                .map_err(|_| CredentialValidationError::default())?;
+            probe.verify(&config).map_err(connection_validation_error)
         };
         let account = AccountService::new(store).update_proxy(
             &user_id,
@@ -1032,8 +1098,8 @@ pub(crate) async fn mcp_add_with_code(
         let account = build_account(&owner_id, input, master_key)?;
         let validator = |candidate: &imail_core::AccountRecord| {
             let config = connection_config::<AuthStoreError, _>(candidate, &codec)
-                .map_err(|_| CredentialValidationError)?;
-            probe.verify(&config).map_err(|_| CredentialValidationError)
+                .map_err(|_| CredentialValidationError::default())?;
+            probe.verify(&config).map_err(connection_validation_error)
         };
         let account = AccountService::new(store).create(account, &validator)?;
         SyncRuntimeStore::open_database(&database)
@@ -1060,8 +1126,8 @@ pub(crate) async fn mcp_replace_password(
         let codec = MasterKeyCredentialCodec::new(master_key);
         let validator = |candidate: &imail_core::AccountRecord| {
             let config = connection_config::<AuthStoreError, _>(candidate, &codec)
-                .map_err(|_| CredentialValidationError)?;
-            probe.verify(&config).map_err(|_| CredentialValidationError)
+                .map_err(|_| CredentialValidationError::default())?;
+            probe.verify(&config).map_err(connection_validation_error)
         };
         AccountService::new(store).replace_password(
             &owner_id,
@@ -1086,8 +1152,8 @@ pub(crate) async fn mcp_update_proxy(
         let codec = MasterKeyCredentialCodec::new(master_key);
         let validator = |candidate: &imail_core::AccountRecord| {
             let config = connection_config::<AuthStoreError, _>(candidate, &codec)
-                .map_err(|_| CredentialValidationError)?;
-            probe.verify(&config).map_err(|_| CredentialValidationError)
+                .map_err(|_| CredentialValidationError::default())?;
+            probe.verify(&config).map_err(connection_validation_error)
         };
         AccountService::new(store).update_proxy(&owner_id, &account_id, input, &codec, &validator)
     })

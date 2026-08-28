@@ -101,6 +101,24 @@ function sanitizeImage(element: Element) {
   const src = element.getAttribute('src');
   if (!src || (!isSafeUrl(src, ['http:', 'https:']) && !isSafeRasterDataUrl(src))) { element.removeAttribute('src'); return; }
   element.setAttribute('loading', 'lazy'); element.setAttribute('referrerpolicy', 'no-referrer');
+  ensureLinkedImageFallback(element, src);
+}
+
+function ensureLinkedImageFallback(image: Element, src: string) {
+  const link = image.closest('a[href]');
+  if (!link || link.textContent?.trim() || link.querySelector('img[alt]:not([alt=""])')) return;
+  const label = link.getAttribute('title')?.trim() || image.getAttribute('title')?.trim() || imageFilenameLabel(src) || '打开链接';
+  image.setAttribute('alt', label);
+}
+
+function imageFilenameLabel(src: string) {
+  if (!isSafeUrl(src, ['http:', 'https:'])) return '';
+  const filename = new URL(src).pathname.split('/').pop() ?? '';
+  const stem = filename.replace(/\.(?:avif|bmp|gif|jpe?g|png|webp)$/i, '');
+  if (!/^[a-z\d]+(?:[-_][a-z\d]+)*$/i.test(stem)) return '';
+  const words = stem.split(/[-_]+/).filter((word) => !['button', 'cta', 'icon', 'image', 'img'].includes(word.toLocaleLowerCase()));
+  if (!words.length) return '';
+  return words.map((word, index) => index === 0 ? `${word[0].toLocaleUpperCase()}${word.slice(1).toLocaleLowerCase()}` : word.toLocaleLowerCase()).join(' ');
 }
 
 function sanitizeCitation(element: Element) { const cite = element.getAttribute('cite'); if (cite && !isSafeUrl(cite, ['http:', 'https:'])) element.removeAttribute('cite'); }

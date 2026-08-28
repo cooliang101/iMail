@@ -9,9 +9,23 @@ use crate::{AccountRecord, AccountRepository, ApplicationError, AuthRepository};
 #[error("账户凭据编解码失败")]
 pub struct CredentialCodecError;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Default, thiserror::Error)]
 #[error("邮箱连接验证失败")]
-pub struct CredentialValidationError;
+pub struct CredentialValidationError {
+    public_message: Option<&'static str>,
+}
+
+impl CredentialValidationError {
+    pub fn with_public_message(message: &'static str) -> Self {
+        Self {
+            public_message: Some(message),
+        }
+    }
+
+    fn public_message_or(&self, fallback: &'static str) -> &'static str {
+        self.public_message.unwrap_or(fallback)
+    }
+}
 
 pub trait AccountSecretCodec {
     fn decrypt(&self, payload: &str) -> Result<Value, CredentialCodecError>;
@@ -54,11 +68,11 @@ impl<'a, R: AccountRepository> AccountService<'a, R> {
     ) -> Result<AccountReadModel, ApplicationError<R::Error>> {
         account.status = "syncing".into();
         account.last_error = None;
-        validator.validate(&account).map_err(|_| {
+        validator.validate(&account).map_err(|cause| {
             domain(
                 "ACCOUNT_CONNECTION_FAILED",
                 422,
-                "邮箱连接验证失败，未保存账户",
+                cause.public_message_or("邮箱连接验证失败，未保存账户"),
             )
         })?;
         account.status = "connected".into();
@@ -277,11 +291,11 @@ fn validate_and_persist<R: AccountRepository, V: AccountConnectionValidator>(
 ) -> Result<AccountReadModel, ApplicationError<R::Error>> {
     account.status = "syncing".into();
     account.last_error = None;
-    validator.validate(&account).map_err(|_| {
+    validator.validate(&account).map_err(|cause| {
         domain(
             "ACCOUNT_CONNECTION_FAILED",
             422,
-            "邮箱连接验证失败，未保存更改",
+            cause.public_message_or("邮箱连接验证失败，未保存更改"),
         )
     })?;
     account.status = "connected".into();

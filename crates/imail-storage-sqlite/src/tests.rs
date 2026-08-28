@@ -1589,7 +1589,7 @@ fn rust_account_proxy_and_password_updates_validate_before_persisting_secrets() 
     assert_eq!(copied_secret["proxyPassword"], "source-proxy-password");
 
     let before_failure = copied_record.encrypted_secret.clone();
-    let rejected = |_candidate: &AccountRecord| Err(CredentialValidationError);
+    let rejected = |_candidate: &AccountRecord| Err(CredentialValidationError::default());
     assert_eq!(
         AccountService::new(&mut store)
             .update_proxy(

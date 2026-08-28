@@ -12,6 +12,7 @@ import { AccountConnectionFields } from './AccountConnectionFields';
 import { ProviderPicker } from './ProviderPicker';
 import { usePlatform } from '../../platform/runtime';
 import { proxyInputFromForm } from './ProxyFields';
+import { customMailSettingsFromForm } from './custom-mail-settings';
 
 const defaultWorkspaceNames = ['工作', '个人', '对外支持', '开发测试', '同学联系'];
 
@@ -153,7 +154,7 @@ export function AddAccountModal({ accounts, initialProvider = 'outlook', managed
       return;
     }
     const body: Record<string, unknown> = { provider, email: form.get('email'), displayName: form.get('displayName'), group: form.get('group'), password: form.get('password'), color: '#168f78', proxy };
-    if (provider === 'custom') body.settings = { imapHost: form.get('imapHost'), imapPort: Number(form.get('imapPort')), imapSecure: true, smtpHost: form.get('smtpHost'), smtpPort: Number(form.get('smtpPort')), smtpSecure: Number(form.get('smtpPort')) === 465 };
+    if (provider === 'custom') body.settings = customMailSettingsFromForm(form);
     try { await api('/api/accounts', { method: 'POST', body: JSON.stringify(body) }); await onAdded(); }
     catch (value) { setError(value instanceof Error ? value.message : '连接失败'); }
     finally { setBusy(false); }
