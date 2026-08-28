@@ -122,3 +122,7 @@ docs/           Architecture, deployment, operations, and development plans
 - [MCP integration guide](docs/mcp-integration.md)
 - [Architecture](docs/architecture.md)
 - [Internal testing](docs/internal-testing.md)
+
+## License
+
+iMail is released under the [MIT License](LICENSE).

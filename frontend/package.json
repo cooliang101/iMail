@@ -1,6 +1,7 @@
 {
   "name": "imail",
   "version": "0.1.11",
+  "license": "MIT",
   "imail": {
     "schemaVersion": 11
   },

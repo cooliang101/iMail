@@ -122,3 +122,7 @@ docs/           架构、部署、运维和开发计划
 - [MCP 接入指南](docs/mcp-integration.md)
 - [架构说明](docs/architecture.md)
 - [内部测试说明](docs/internal-testing.md)
+
+## 许可证
+
+iMail 使用 [MIT 许可证](LICENSE)发布。
