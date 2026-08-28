@@ -169,6 +169,7 @@ pub struct MailboxSyncPlan {
     pub highest_modseq: Option<String>,
     pub last_seen_uid: i64,
     pub incoming: Vec<MessageReadModel>,
+    pub raw_sources: BTreeMap<String, Vec<u8>>,
     pub removed_uids: Vec<u32>,
     pub uid_validity_changed: bool,
     pub flag_updates: Vec<RemoteFlagUpdate>,
@@ -268,19 +269,19 @@ impl<'a, P: ImapSyncPort> MailboxSyncService<'a, P> {
                     })
             })
             .count() as i64;
-        let incoming = remote
-            .incoming
-            .iter()
-            .map(|message| {
-                cache_message(
-                    account_id,
-                    &remote.mailbox,
-                    &remote.mailbox_role,
-                    message,
-                    fallback_date,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut incoming = Vec::with_capacity(remote.incoming.len());
+        let mut raw_sources = BTreeMap::new();
+        for remote_message in &remote.incoming {
+            let message = cache_message(
+                account_id,
+                &remote.mailbox,
+                &remote.mailbox_role,
+                remote_message,
+                fallback_date,
+            )?;
+            raw_sources.insert(message.id.clone(), remote_message.source.clone());
+            incoming.push(message);
+        }
         let deleted = if remote.uid_validity_changed {
             cached_for_target.len() as i64
         } else {
@@ -295,6 +296,7 @@ impl<'a, P: ImapSyncPort> MailboxSyncService<'a, P> {
             last_seen_uid: remote.last_seen_uid,
             synced: incoming.len() as i64,
             incoming,
+            raw_sources,
             removed_uids: remote.removed_uids,
             uid_validity_changed: remote.uid_validity_changed,
             flag_updates: remote.flag_updates,

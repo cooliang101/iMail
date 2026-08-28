@@ -43,9 +43,9 @@ describe('BilingualMessageBody', () => {
     expect(html.match(/正在翻译此段/g)).toHaveLength(2);
   });
 
-  it('explains the safe reading layout for HTML messages and offers the original layout', () => {
-    const html = renderToStaticMarkup(<BilingualMessageBody presentation={presentation} mode="bilingual" hasHtml onShowOriginal={() => undefined} />);
+  it('explains the safe reading layout without duplicating the original-view control', () => {
+    const html = renderToStaticMarkup(<BilingualMessageBody presentation={presentation} mode="bilingual" hasHtml />);
     expect(html).toContain('图片与复杂格式保留在原始邮件中');
-    expect(html).toContain('查看原始排版');
+    expect(html).not.toContain('查看原始排版');
   });
 });

@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS message_sources (
+  message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+  source BLOB NOT NULL
+) STRICT;

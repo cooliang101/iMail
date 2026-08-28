@@ -57,6 +57,7 @@ describe('mail service client adapters', () => {
       operation: 'messagesList', query: { sender: 'Sender+Alerts@Example.com', recipient: 'alias@icloud.com' },
     });
     expect(embeddedDomainCall('/api/messages/id%20with%20space')).toEqual({ operation: 'messageDetail', messageId: 'id with space' });
+    expect(embeddedDomainCall('/api/messages/id%20with%20space/source')).toEqual({ operation: 'messageSource', messageId: 'id with space' });
     expect(embeddedDomainCall('/api/messages', { method: 'POST', body: '{}' })).toBeNull();
 
     const invokeMock = vi.fn(async () => ({ status: 200, body: '{}' }));

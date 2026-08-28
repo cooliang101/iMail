@@ -12,7 +12,10 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine,
+};
 use chrono::{SecondsFormat, Utc};
 use imail_core::contacts::{contact_logo_keys, PublicSuffixDomainResolver};
 use imail_core::{
@@ -53,6 +56,7 @@ pub(crate) fn routes() -> Router<Arc<AppState>> {
         .route("/api/contacts", get(contacts))
         .route("/api/contacts/logo", get(contact_logo))
         .route("/api/messages/:id", get(detail).patch(update_message))
+        .route("/api/messages/:id/source", get(message_source))
         .route("/api/messages/:id/sender-logo", get(sender_logo))
         .route("/api/messages/:id/move", post(move_message))
         .route(
@@ -147,6 +151,21 @@ pub fn embedded_message_page(
 
 pub fn embedded_message_detail(message: MessageReadModel, contacts: &[ContactReadModel]) -> Value {
     json!({"message": message_view(message, &contact_map(contacts), false)})
+}
+
+pub fn embedded_message_source(source: Option<Vec<u8>>) -> Value {
+    match source {
+        Some(source) => json!({
+            "available": true,
+            "size": source.len(),
+            "sourceBase64": STANDARD.encode(source),
+        }),
+        None => json!({
+            "available": false,
+            "size": 0,
+            "sourceBase64": Value::Null,
+        }),
+    }
 }
 
 pub fn embedded_contacts(contacts: Vec<ContactReadModel>) -> Value {
@@ -287,6 +306,23 @@ async fn detail(
     .await
     {
         Ok(message) => Json(MessageBody { message }).into_response(),
+        Err(cause) => application_error(cause),
+    }
+}
+
+async fn message_source(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(message_id): Path<String>,
+) -> Response {
+    let database = state.config.data_dir.join("imail.sqlite");
+    let owner = user.user_id;
+    match run(database, move |store| {
+        MessageQueryService::new(&*store).source(&owner, &message_id)
+    })
+    .await
+    {
+        Ok(source) => Json(embedded_message_source(source)).into_response(),
         Err(cause) => application_error(cause),
     }
 }

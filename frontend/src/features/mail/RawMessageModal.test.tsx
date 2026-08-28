@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'preact-render-to-string';
 import { describe, expect, it, vi } from 'vitest';
 import type { Message } from '../../types';
-import { RawMessageModal, rawMessageSource } from './RawMessageModal';
+import { decodeRawMessageSource, RawMessageModal, rawMessageSource } from './RawMessageModal';
 
 const message: Message = {
   id: 'message-1', accountId: 'account-1', mailbox: 'INBOX', mailboxRole: 'inbox',
@@ -18,12 +18,16 @@ describe('RawMessageModal', () => {
     expect(rawMessageSource({ text: '  exact\r\ntext  ' })).toBe('  exact\r\ntext  ');
   });
 
+  it('decodes RFC 822 response bytes for plain-text display', () => {
+    const source = 'From: sender@example.com\r\nSubject: Hello\r\n\r\nBody';
+    expect(decodeRawMessageSource(btoa(source))).toBe(source);
+  });
+
   it('escapes active email markup and renders it only as preformatted text', () => {
     const html = renderToStaticMarkup(<RawMessageModal message={message} onClose={vi.fn()} />);
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('<img src=');
-    expect(html).toContain('&lt;script>alert(1)&lt;/script>');
-    expect(html).toContain('&lt;img src=&quot;https://tracker.example/pixel&quot;>&amp;amp;');
-    expect(html).toContain('不会渲染标签、执行脚本或加载邮件中的任何资源');
+    expect(html).toContain('正在读取原始邮件');
+    expect(html).toContain('不会渲染 HTML、执行脚本、加载图片或访问邮件中的任何资源');
   });
 });

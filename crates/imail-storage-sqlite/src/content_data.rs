@@ -504,6 +504,24 @@ impl MessageRepository for SqliteAuthStore {
             .transpose()
     }
 
+    fn message_source(
+        &self,
+        user_id: &str,
+        message_id: &str,
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.connection
+            .query_row(
+                "SELECT s.source FROM message_sources s
+                 JOIN messages m ON m.id=s.message_id
+                 JOIN accounts a ON a.id=m.account_id
+                 WHERE s.message_id=?1 AND a.user_id=?2",
+                (message_id, user_id),
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
     fn message_stats(&self, user_id: &str, now: &str) -> Result<MessageStats, Self::Error> {
         let active = "m.mailbox_role='inbox' AND (m.snoozed_until IS NULL OR m.snoozed_until<=?2)";
         let (total, unread): (i64, i64) = self.connection.query_row(

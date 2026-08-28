@@ -172,6 +172,10 @@ pub enum EmbeddedDomainCall {
         #[serde(rename = "messageId")]
         message_id: String,
     },
+    MessageSource {
+        #[serde(rename = "messageId")]
+        message_id: String,
+    },
     SyncAll,
     SyncAccount {
         #[serde(rename = "accountId")]
@@ -444,6 +448,11 @@ impl EmbeddedDomainCall {
             }
             Self::MessageDetail { message_id } => (
                 format!("/api/messages/{}", path_segment(&message_id)),
+                "GET",
+                None,
+            ),
+            Self::MessageSource { message_id } => (
+                format!("/api/messages/{}/source", path_segment(&message_id)),
                 "GET",
                 None,
             ),
@@ -1499,6 +1508,31 @@ impl EmbeddedMailServiceState {
                 })
                 .await
                 .map_err(|_| "邮件读取任务失败".to_string())??;
+                Ok(Some(match result {
+                    Ok(body) => json_response(200, body),
+                    Err((status, message)) => {
+                        json_response(status, serde_json::json!({"error":message}))
+                    }
+                }))
+            }
+            EmbeddedDomainCall::MessageSource { message_id } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let message_id = message_id.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    let store = SqliteAuthStore::open_database(database)
+                        .map_err(|error| format!("读取邮件原始内容失败：{error}"))?;
+                    match MessageQueryService::new(&store).source(&user_id, &message_id) {
+                        Ok(source) => Ok(Ok(imail_http::messages::embedded_message_source(source))),
+                        Err(ApplicationError::Domain {
+                            status, message, ..
+                        }) => Ok(Err((status, message))),
+                        Err(error) => Err(format!("读取邮件原始内容失败：{error}")),
+                    }
+                })
+                .await
+                .map_err(|_| "邮件原始内容读取任务失败".to_string())??;
                 Ok(Some(match result {
                     Ok(body) => json_response(200, body),
                     Err((status, message)) => {

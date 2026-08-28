@@ -30,6 +30,7 @@
   "GET /api/messages/:id",
   "GET /api/messages/:id/attachments/:index",
   "GET /api/messages/:id/sender-logo",
+  "GET /api/messages/:id/source",
   "GET /api/notifications",
   "GET /api/oauth/:provider/callback",
   "GET /api/preferences",

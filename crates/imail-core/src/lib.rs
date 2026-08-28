@@ -303,6 +303,11 @@ pub trait MessageRepository {
         user_id: &str,
         message_id: &str,
     ) -> Result<Option<MessageReadModel>, Self::Error>;
+    fn message_source(
+        &self,
+        user_id: &str,
+        message_id: &str,
+    ) -> Result<Option<Vec<u8>>, Self::Error>;
     fn message_stats(
         &self,
         user_id: &str,

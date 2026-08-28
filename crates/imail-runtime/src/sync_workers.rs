@@ -529,6 +529,11 @@ mod tests {
                 ))
                 .unwrap();
             connection
+                .execute_batch(include_str!(
+                    "../../imail-storage-sqlite/sql/migration-v11-message-sources.sql"
+                ))
+                .unwrap();
+            connection
                 .execute(
                     "INSERT INTO metadata(key,value) VALUES ('schema_version',?1)",
                     [CURRENT_SCHEMA_VERSION.to_string()],

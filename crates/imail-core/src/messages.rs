@@ -110,6 +110,17 @@ impl<'a, R: MessageRepository> MessageQueryService<'a, R> {
             })
     }
 
+    pub fn source(
+        &self,
+        user_id: &str,
+        message_id: &str,
+    ) -> Result<Option<Vec<u8>>, ApplicationError<R::Error>> {
+        self.get(user_id, message_id)?;
+        self.repository
+            .message_source(user_id, message_id)
+            .map_err(ApplicationError::Repository)
+    }
+
     pub fn stats(
         &self,
         user_id: &str,

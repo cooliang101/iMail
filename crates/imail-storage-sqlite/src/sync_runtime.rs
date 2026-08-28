@@ -355,6 +355,13 @@ impl SyncRuntimeStore {
                 )?;
             }
             upsert_sync_message(&transaction, message)?;
+            if let Some(source) = plan.raw_sources.get(&message.id) {
+                transaction.execute(
+                    "INSERT INTO message_sources(message_id,source) VALUES (?1,?2)
+                     ON CONFLICT(message_id) DO UPDATE SET source=excluded.source",
+                    params![message.id, source],
+                )?;
+            }
         }
         for flags in &plan.flag_updates {
             transaction.execute(
@@ -1199,7 +1206,7 @@ fn reconcile_sync_contacts(
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::{collections::BTreeMap, fs, path::PathBuf};
 
     use chrono::TimeZone;
     use imail_core::sync_execution::MailboxSyncApplicationService;
@@ -1229,6 +1236,9 @@ mod tests {
             let connection = Connection::open(&path).unwrap();
             connection
                 .execute_batch(include_str!("../sql/schema-v10.sql"))
+                .unwrap();
+            connection
+                .execute_batch(include_str!("../sql/migration-v11-message-sources.sql"))
                 .unwrap();
             connection
                 .execute(
@@ -1317,6 +1327,10 @@ mod tests {
                     highest_modseq: Some("90".into()),
                     last_seen_uid: 9,
                     incoming: vec![refreshed, new_message.clone()],
+                    raw_sources: BTreeMap::from([
+                        ("keep".into(), b"Subject: refreshed\r\n\r\nbody".to_vec()),
+                        ("new".into(), b"Subject: new\r\n\r\nbody".to_vec()),
+                    ]),
                     removed_uids: vec![7],
                     uid_validity_changed: false,
                     flag_updates: vec![],
@@ -1355,6 +1369,15 @@ mod tests {
             Some("2026-08-11T00:00:00.000Z")
         );
         assert_eq!(kept.subject, "refreshed");
+        let source: Vec<u8> = store
+            .connection
+            .query_row(
+                "SELECT source FROM message_sources WHERE message_id='new'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source, b"Subject: new\r\n\r\nbody");
         let contact: (i64, Option<String>) = store
             .connection
             .query_row(
@@ -1385,6 +1408,10 @@ mod tests {
                 highest_modseq: None,
                 last_seen_uid: 8,
                 incoming: vec![updated],
+                raw_sources: BTreeMap::from([(
+                    "keep".into(),
+                    b"Subject: after\r\n\r\nbody".to_vec(),
+                )]),
                 removed_uids: vec![],
                 uid_validity_changed: false,
                 flag_updates: vec![],

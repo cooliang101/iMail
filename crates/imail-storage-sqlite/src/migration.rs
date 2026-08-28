@@ -10,6 +10,8 @@ const CURRENT_SCHEMA_SQL: &str = include_str!("../sql/schema-v10.sql");
 const MIGRATION_V2_ACCOUNTS: &str = include_str!("../sql/migration-v2-accounts.sql");
 const MIGRATION_V3_SYNC_FKS: &str = include_str!("../sql/migration-v3-sync-fks.sql");
 const MIGRATION_V6_PUSH_FIRST: &str = include_str!("../sql/migration-v6-push-first.sql");
+const MIGRATION_V11_MESSAGE_SOURCES: &str =
+    include_str!("../sql/migration-v11-message-sources.sql");
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,6 +116,10 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
     }
     if from_version < 10 {
         applied_versions.push(10);
+    }
+    if from_version < 11 {
+        transaction.execute_batch(MIGRATION_V11_MESSAGE_SOURCES)?;
+        applied_versions.push(11);
     }
     ensure_message_query_indexes(&transaction)?;
     if from_version < CURRENT_SCHEMA_VERSION {

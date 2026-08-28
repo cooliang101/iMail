@@ -17,9 +17,14 @@ const languages = [
   { value: 'de', label: 'Deutsch' },
 ];
 
-export function TranslationReaderControl({ messageId, hasHtml, open, displayMode, onDisplayModeChange, onPresentationChange, onDismiss }: {
+export const translationDisplayOptions = [
+  { mode: 'bilingual', label: '双语' },
+  { mode: 'translation', label: '仅译文' },
+  { mode: 'original', label: '关闭翻译' },
+] satisfies Array<{ mode: TranslationDisplayMode; label: string }>;
+
+export function TranslationReaderControl({ messageId, open, displayMode, onDisplayModeChange, onPresentationChange, onDismiss }: {
   messageId: string;
-  hasHtml: boolean;
   open: boolean;
   displayMode: TranslationDisplayMode;
   onDisplayModeChange: (mode: TranslationDisplayMode) => void;
@@ -212,9 +217,7 @@ export function TranslationReaderControl({ messageId, hasHtml, open, displayMode
     {readyProfiles.length === 0 && <p>暂无可用翻译服务，请先在“设置 → 邮件翻译”中完成配置。</p>}
     {message && <p className="mail-translation-message">{message}</p>}
     {artifact && <div className="mail-translation-viewbar"><span>显示</span><div role="group" aria-label="译文显示方式">
-      <button type="button" className={displayMode === 'bilingual' ? 'is-active' : ''} aria-pressed={displayMode === 'bilingual'} onClick={() => onDisplayModeChange('bilingual')}>双语</button>
-      <button type="button" className={displayMode === 'translation' ? 'is-active' : ''} aria-pressed={displayMode === 'translation'} onClick={() => onDisplayModeChange('translation')}>仅译文</button>
-      <button type="button" className={displayMode === 'original' ? 'is-active' : ''} aria-pressed={displayMode === 'original'} onClick={() => onDisplayModeChange('original')}>{hasHtml ? '原始排版' : '仅原文'}</button>
+      {translationDisplayOptions.map(({ mode, label }) => <button key={mode} type="button" className={displayMode === mode ? 'is-active' : ''} aria-pressed={displayMode === mode} onClick={() => onDisplayModeChange(mode)}>{label}</button>)}
     </div></div>}
   </section>;
 }
