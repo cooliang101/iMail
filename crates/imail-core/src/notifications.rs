@@ -39,7 +39,7 @@ impl<'a, R: LocalRepository> MailOverviewService<'a, R> {
             .map_err(ApplicationError::Repository)?;
         let messages = self
             .repository
-            .list_messages(user_id)
+            .notification_messages(user_id)
             .map_err(ApplicationError::Repository)?;
         Ok(build_notifications(&accounts, &messages, limit, now))
     }

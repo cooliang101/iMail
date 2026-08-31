@@ -21,6 +21,7 @@ pub mod oauth_accounts;
 pub mod oauth_refresh;
 pub mod preferences;
 pub mod privacy;
+pub mod rules;
 pub mod search;
 pub mod sync_execution;
 pub mod sync_runtime;
@@ -256,6 +257,10 @@ pub trait AccountRepository {
 
 pub trait ContentRepository {
     type Error: Error + Send + Sync + 'static;
+
+    fn notification_messages(&self, user_id: &str) -> Result<Vec<MessageReadModel>, Self::Error> {
+        self.list_messages(user_id)
+    }
 
     fn list_messages(&self, user_id: &str) -> Result<Vec<MessageReadModel>, Self::Error>;
     fn upsert_message(

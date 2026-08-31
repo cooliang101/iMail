@@ -106,3 +106,24 @@ export type MailNotification = {
   messageId?: string;
   accountId: string;
 };
+export type RuleCondition =
+  | { field: 'sender' | 'senderDomain' | 'recipient' | 'subjectContains' | 'bodyContains' | 'mailboxRole' | 'label'; value: string }
+  | { field: 'hasAttachments' | 'unread' | 'flagged'; value: boolean };
+export type RuleAction =
+  | { type: 'addLabel' | 'removeLabel'; value: string }
+  | { type: 'markRead' | 'flag' | 'mute'; value: boolean }
+  | { type: 'archive' };
+export interface MailRuleInput {
+  name: string; enabled: boolean; priority: number; accountIds: string[];
+  matchMode: 'all' | 'any'; conditions: RuleCondition[]; actions: RuleAction[]; stopProcessing: boolean;
+}
+export interface MailRule extends MailRuleInput { id: string; revision: number; createdAt: string; updatedAt: string }
+export interface RulePreview {
+  token: string | null; total: number; eligible: number; expiresAt: string | null;
+  messages: Array<{ id: string; accountId: string; subject: string; from: unknown; date: string }>;
+}
+export interface RuleRun {
+  id: string; ruleId: string; ruleName: string; revision: number; accountId: string; messageId: string;
+  source: 'automatic' | 'manual'; status: 'pending' | 'running' | 'succeeded' | 'failed' | 'needsReview' | 'cancelled';
+  completedActions: number; totalActions: number; errorCode: string | null; createdAt: string; updatedAt: string;
+}

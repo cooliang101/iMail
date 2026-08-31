@@ -99,6 +99,7 @@ export function AppSelect({ name, value, defaultValue, options, onValueChange, c
       else openListbox();
     } else if (event.key === 'Escape' && open) {
       event.preventDefault();
+      event.stopPropagation();
       closeListbox(true);
     } else if ((event.key === 'Home' || event.key === 'End') && open) {
       event.preventDefault();

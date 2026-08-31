@@ -12,6 +12,7 @@ use std::{
 
 mod account_watchers;
 mod embedded_executor;
+mod rule_executor;
 mod sync_workers;
 pub use account_watchers::{AccountWakeContext, AccountWakeExecutor};
 pub use embedded_executor::{

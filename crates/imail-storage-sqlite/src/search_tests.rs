@@ -3,7 +3,7 @@ use imail_core::search::{SearchFilters, SmartFolderInput};
 
 #[test]
 fn search_dates_flags_labels_gateway_scope_and_account_deletion_are_consistent() {
-    let fixture = Fixture::new(13);
+    let fixture = Fixture::new(14);
     let mut store = SqliteAuthStore::open_database(fixture.root.join("imail.sqlite")).unwrap();
     let mut message = store.message("user-1", "m1").unwrap().unwrap();
     message.date = "2026-08-31T00:30:00Z".into();
@@ -122,7 +122,7 @@ fn search_dates_flags_labels_gateway_scope_and_account_deletion_are_consistent()
 
 #[test]
 fn body_index_records_large_cache_search_size_and_rebuild_cost() {
-    let fixture = Fixture::new(13);
+    let fixture = Fixture::new(14);
     let mut store = SqliteAuthStore::open_database(fixture.root.join("imail.sqlite")).unwrap();
     let started = std::time::Instant::now();
     let body = "常规内容 monthly archive. ".repeat(160);
@@ -183,7 +183,7 @@ fn body_index_records_large_cache_search_size_and_rebuild_cost() {
 
 #[test]
 fn advanced_search_is_literal_combined_paginated_and_owner_scoped() {
-    let fixture = Fixture::new(13);
+    let fixture = Fixture::new(14);
     let mut store = SqliteAuthStore::open_database(fixture.root.join("imail.sqlite")).unwrap();
     let mut message = store.message("user-1", "m1").unwrap().unwrap();
     message.text = "季度预算 ABC %_ \"OR\" 混合内容".into();
@@ -291,7 +291,7 @@ fn migration_backfills_cached_bodies_and_is_idempotent() {
     let fixture = Fixture::new(12);
     let path = fixture.root.join("imail.sqlite");
     let report = migrate_database(&path).unwrap();
-    assert_eq!(report.applied_versions, [13]);
+    assert_eq!(report.applied_versions, [13, 14]);
     assert!(migrate_database(&path).unwrap().applied_versions.is_empty());
     let store = SqliteAuthStore::open_database(path).unwrap();
     let message = store.message("user-1", "m1").unwrap().unwrap();
@@ -314,7 +314,7 @@ fn migration_backfills_cached_bodies_and_is_idempotent() {
 
 #[test]
 fn smart_folders_persist_conditions_without_copying_mail_and_reject_foreign_accounts() {
-    let fixture = Fixture::new(13);
+    let fixture = Fixture::new(14);
     let path = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&path).unwrap();
     let user = store

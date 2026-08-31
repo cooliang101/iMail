@@ -239,6 +239,30 @@ pub enum EmbeddedDomainCall {
     },
     PreferencesGet,
     SmartFoldersList,
+    MailRulesList,
+    MailRuleCreate {
+        input: serde_json::Value,
+    },
+    MailRuleUpdate {
+        #[serde(rename = "ruleId")]
+        rule_id: String,
+        input: serde_json::Value,
+    },
+    MailRuleDelete {
+        #[serde(rename = "ruleId")]
+        rule_id: String,
+    },
+    MailRulePreview {
+        input: serde_json::Value,
+    },
+    MailRuleApply {
+        input: serde_json::Value,
+    },
+    MailRuleRuns,
+    MailRuleRetry {
+        #[serde(rename = "runId")]
+        run_id: String,
+    },
     SmartFolderCreate {
         input: serde_json::Value,
     },
@@ -561,6 +585,28 @@ impl EmbeddedDomainCall {
             ),
             Self::PreferencesGet => ("/api/preferences".into(), "GET", None),
             Self::SmartFoldersList => ("/api/smart-folders".into(), "GET", None),
+            Self::MailRulesList => ("/api/mail-rules".into(), "GET", None),
+            Self::MailRuleCreate { input } => json_request("/api/mail-rules", "POST", input),
+            Self::MailRuleUpdate { rule_id, input } => json_request(
+                format!("/api/mail-rules/{}", path_segment(&rule_id)),
+                "PUT",
+                input,
+            ),
+            Self::MailRuleDelete { rule_id } => (
+                format!("/api/mail-rules/{}", path_segment(&rule_id)),
+                "DELETE",
+                None,
+            ),
+            Self::MailRulePreview { input } => {
+                json_request("/api/mail-rules/preview", "POST", input)
+            }
+            Self::MailRuleApply { input } => json_request("/api/mail-rules/apply", "POST", input),
+            Self::MailRuleRuns => ("/api/mail-rule-runs".into(), "GET", None),
+            Self::MailRuleRetry { run_id } => (
+                format!("/api/mail-rule-runs/{}/retry", path_segment(&run_id)),
+                "POST",
+                None,
+            ),
             Self::SmartFolderCreate { input } => json_request("/api/smart-folders", "POST", input),
             Self::SmartFolderUpdate { folder_id, input } => json_request(
                 format!("/api/smart-folders/{}", path_segment(&folder_id)),
@@ -1486,6 +1532,55 @@ impl EmbeddedMailServiceState {
                 Ok(Some(embedded_operation_response(
                     host.sync_all(user_id, role.clone()).await,
                 )))
+            }
+            EmbeddedDomainCall::MailRulesList
+            | EmbeddedDomainCall::MailRuleCreate { .. }
+            | EmbeddedDomainCall::MailRuleUpdate { .. }
+            | EmbeddedDomainCall::MailRuleDelete { .. }
+            | EmbeddedDomainCall::MailRulePreview { .. }
+            | EmbeddedDomainCall::MailRuleApply { .. }
+            | EmbeddedDomainCall::MailRuleRuns
+            | EmbeddedDomainCall::MailRuleRetry { .. } => {
+                let Some(owner) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let (operation, id, input) = match call {
+                    EmbeddedDomainCall::MailRulesList => ("list", None, None),
+                    EmbeddedDomainCall::MailRuleCreate { input } => {
+                        ("create", None, Some(input.clone()))
+                    }
+                    EmbeddedDomainCall::MailRuleUpdate { rule_id, input } => {
+                        ("update", Some(rule_id.clone()), Some(input.clone()))
+                    }
+                    EmbeddedDomainCall::MailRuleDelete { rule_id } => {
+                        ("delete", Some(rule_id.clone()), None)
+                    }
+                    EmbeddedDomainCall::MailRulePreview { input } => {
+                        ("preview", None, Some(input.clone()))
+                    }
+                    EmbeddedDomainCall::MailRuleApply { input } => {
+                        ("apply", None, Some(input.clone()))
+                    }
+                    EmbeddedDomainCall::MailRuleRuns => ("runs", None, None),
+                    EmbeddedDomainCall::MailRuleRetry { run_id } => {
+                        ("retry", Some(run_id.clone()), None)
+                    }
+                    _ => unreachable!(),
+                };
+                let result = tokio::task::spawn_blocking(move || {
+                    let mut store = SqliteAuthStore::open_database(database)
+                        .map_err(imail_core::ApplicationError::Repository)?;
+                    imail_http::rules::execute(&mut store, &owner, operation, id.as_deref(), input)
+                })
+                .await
+                .map_err(|_| "邮件规则任务失败".to_string())?;
+                Ok(Some(match result {
+                    Ok(value) => json_response(200, value),
+                    Err(imail_core::ApplicationError::Domain {
+                        status, message, ..
+                    }) => json_response(status, serde_json::json!({"error":message})),
+                    Err(_) => json_response(500, serde_json::json!({"error":"邮件规则操作失败"})),
+                }))
             }
             EmbeddedDomainCall::SmartFoldersList
             | EmbeddedDomainCall::SmartFolderCreate { .. }
@@ -3883,6 +3978,8 @@ mod tests {
             (EmbeddedDomainCall::MessageStats, "/api/message-stats"),
             (EmbeddedDomainCall::LabelsList, "/api/labels"),
             (EmbeddedDomainCall::NotificationsList, "/api/notifications"),
+            (EmbeddedDomainCall::MailRulesList, "/api/mail-rules"),
+            (EmbeddedDomainCall::MailRuleRuns, "/api/mail-rule-runs"),
             (EmbeddedDomainCall::PreferencesGet, "/api/preferences"),
             (
                 EmbeddedDomainCall::DeveloperTokensList,

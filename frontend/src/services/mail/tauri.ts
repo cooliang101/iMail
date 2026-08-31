@@ -50,6 +50,14 @@ export type EmbeddedDomainCall =
   | { operation: 'draftDelete'; draftId: string }
   | { operation: 'preferencesGet' }
   | { operation: 'smartFoldersList' }
+  | { operation: 'mailRulesList' }
+  | { operation: 'mailRuleCreate'; input: Record<string, unknown> }
+  | { operation: 'mailRuleUpdate'; ruleId: string; input: Record<string, unknown> }
+  | { operation: 'mailRuleDelete'; ruleId: string }
+  | { operation: 'mailRulePreview'; input: Record<string, unknown> }
+  | { operation: 'mailRuleApply'; input: Record<string, unknown> }
+  | { operation: 'mailRuleRuns' }
+  | { operation: 'mailRuleRetry'; runId: string }
   | { operation: 'smartFolderCreate'; input: Record<string, unknown> }
   | { operation: 'smartFolderUpdate'; folderId: string; input: Record<string, unknown> }
   | { operation: 'smartFolderDelete'; folderId: string }
@@ -101,6 +109,8 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
       '/api/drafts': { operation: 'draftsList' },
       '/api/preferences': { operation: 'preferencesGet' },
       '/api/smart-folders': { operation: 'smartFoldersList' },
+      '/api/mail-rules': { operation: 'mailRulesList' },
+      '/api/mail-rule-runs': { operation: 'mailRuleRuns' },
       '/api/translation-settings': { operation: 'translationSettingsGet' },
       '/api/developer-tokens': { operation: 'developerTokensList' },
       '/api/external-access': { operation: 'externalAccessGet' },
@@ -182,6 +192,16 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   if (draft && method === 'DELETE' && options.body === undefined) return { operation: 'draftDelete', draftId: decodeURIComponent(draft[1]) };
   if (method === 'PATCH' && url.pathname === '/api/preferences' && body) return { operation: 'preferencesUpdate', input: body };
   if (method === 'POST' && url.pathname === '/api/smart-folders' && body) return { operation: 'smartFolderCreate', input: body };
+  if (method === 'POST' && body) {
+    if (url.pathname === '/api/mail-rules') return { operation: 'mailRuleCreate', input: body };
+    if (url.pathname === '/api/mail-rules/preview') return { operation: 'mailRulePreview', input: body };
+    if (url.pathname === '/api/mail-rules/apply') return { operation: 'mailRuleApply', input: body };
+  }
+  const mailRule = url.pathname.match(/^\/api\/mail-rules\/([^/]+)$/);
+  if (mailRule && method === 'PUT' && body) return { operation: 'mailRuleUpdate', ruleId: decodeURIComponent(mailRule[1]), input: body };
+  if (mailRule && method === 'DELETE' && options.body === undefined) return { operation: 'mailRuleDelete', ruleId: decodeURIComponent(mailRule[1]) };
+  const ruleRetry = url.pathname.match(/^\/api\/mail-rule-runs\/([^/]+)\/retry$/);
+  if (ruleRetry && method === 'POST') return { operation: 'mailRuleRetry', runId: decodeURIComponent(ruleRetry[1]) };
   const smartFolder = url.pathname.match(/^\/api\/smart-folders\/([^/]+)$/);
   if (smartFolder && method === 'PUT' && body) return { operation: 'smartFolderUpdate', folderId: decodeURIComponent(smartFolder[1]), input: body };
   if (smartFolder && method === 'DELETE' && options.body === undefined) return { operation: 'smartFolderDelete', folderId: decodeURIComponent(smartFolder[1]) };

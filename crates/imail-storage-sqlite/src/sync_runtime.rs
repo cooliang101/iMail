@@ -35,6 +35,8 @@ pub enum SyncRuntimeError {
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Rules(#[from] crate::AuthStoreError),
 }
 
 #[derive(Debug, Clone)]
@@ -317,6 +319,10 @@ impl SyncRuntimeStore {
             return Err(SyncRuntimeError::InvalidInput("account_id"));
         };
         let before = sync_message_summaries(&transaction, &plan.account_id)?;
+        let rules = crate::rules::load_rules(&transaction, &owner_id)?;
+        let previously_synced = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM mailbox_sync_states WHERE account_id=?1 AND mailbox=?2 AND last_success_at IS NOT NULL)",
+            params![plan.account_id,plan.mailbox], |r| r.get::<_,bool>(0))?;
         let mut created_messages = Vec::new();
         let mut incoming = plan.incoming.clone();
         for message in &mut incoming {
@@ -328,8 +334,8 @@ impl SyncRuntimeStore {
             }
             let previous: Option<(String, Option<String>)> = transaction
                 .query_row(
-                    "SELECT labels_json,snoozed_until FROM messages WHERE id=?1",
-                    [&message.id],
+                    "SELECT labels_json,snoozed_until FROM messages WHERE account_id=?2 AND (id=?1 OR (?3 IS NOT NULL AND message_id=?3)) ORDER BY id=?1 DESC LIMIT 1",
+                    params![message.id,message.account_id,message.message_id],
                     |row| Ok((row.get(0)?, row.get(1)?)),
                 )
                 .optional()?;
@@ -337,6 +343,19 @@ impl SyncRuntimeStore {
                 message.labels = serde_json::from_str(&labels)?;
                 message.snoozed_until = snoozed_until;
             } else {
+                let unseen = transaction.execute(
+                    "INSERT OR IGNORE INTO mail_rule_message_state(account_id,identity,muted) VALUES(?1,?2,0)",
+                    params![plan.account_id,crate::rules::message_identity(message)])? > 0;
+                if unseen && previously_synced && message.mailbox_role == "inbox" {
+                    crate::rules::enqueue_matches(
+                        &transaction,
+                        &owner_id,
+                        &rules,
+                        message,
+                        "automatic",
+                        &completed_at,
+                    )?;
+                }
                 created_messages.push(message.clone());
             }
         }
@@ -733,6 +752,28 @@ impl SyncRuntimeStore {
                 )?);
             }
         }
+        // Explicit historical work and interrupted rule actions must resume even
+        // if normal scheduled fetching is disabled. Respect active jobs and auth backoff.
+        let due_accounts = {
+            let mut query = self.connection.prepare("SELECT DISTINCT r.account_id FROM mail_rule_runs r JOIN accounts a ON a.id=r.account_id WHERE a.status='connected' AND r.status IN ('pending','running') AND (r.lease_until IS NULL OR r.lease_until<=?1) AND NOT EXISTS(SELECT 1 FROM mail_rule_runs earlier WHERE earlier.account_id=r.account_id AND earlier.identity=r.identity AND earlier.sequence<r.sequence AND earlier.status IN ('pending','running','failed','needsReview')) AND NOT EXISTS(SELECT 1 FROM sync_jobs j WHERE j.account_id=r.account_id AND j.status IN ('queued','running')) AND NOT EXISTS(SELECT 1 FROM mailbox_sync_states s WHERE s.account_id=r.account_id AND (s.connection_status='authRequired' OR (s.sync_state='backoff' AND s.next_sync_at>?1)))")?;
+            let rows = query
+                .query_map([&now_iso], |r| r.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            rows
+        };
+        for account_id in due_accounts {
+            jobs.push(self.enqueue(
+                &SyncEnqueue {
+                    account_id,
+                    mailbox: None,
+                    mailbox_role: "inbox".into(),
+                    reason: "recovery".into(),
+                    priority: 5,
+                    not_before: Some(now),
+                },
+                now,
+            )?);
+        }
         self.prune_events(now - Duration::days(7))?;
         Ok(jobs)
     }
@@ -793,6 +834,9 @@ impl SyncRuntimeStore {
         for message in messages {
             if message.account_id != account_id {
                 return Err(SyncRuntimeError::InvalidInput("message owner"));
+            }
+            if crate::rules::is_muted(&transaction, message)? {
+                continue;
             }
             let attachments = message
                 .attachments
@@ -1255,6 +1299,9 @@ mod tests {
                 .unwrap();
             connection
                 .execute_batch(include_str!("../sql/migration-v12-composition.sql"))
+                .unwrap();
+            connection
+                .execute_batch(include_str!("../sql/migration-v14-rules.sql"))
                 .unwrap();
             connection
                 .execute(

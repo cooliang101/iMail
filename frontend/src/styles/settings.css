@@ -1,4 +1,5 @@
 .settings-modal { height: 100%; background: var(--color-surface); }
+.settings-feature-panel { min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .settings-layout { height: 100%; min-height: 0; display: grid; grid-template-columns: 236px minmax(0, 1fr); }
 .settings-sidebar { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border-right: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-surface-subtle) 88%, var(--color-accent-subtle)); }
 .settings-sidebar::before { position: absolute; inset: 0 0 auto; height: 132px; background: radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 70%); content: ''; pointer-events: none; }

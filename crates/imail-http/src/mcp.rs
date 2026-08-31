@@ -34,7 +34,11 @@ use uuid::Uuid;
 
 use crate::AppState;
 
-const MANAGEMENT_TOOLS: [&str; 18] = [
+const MANAGEMENT_TOOLS: [&str; 22] = [
+    "mail_rule_save",
+    "mail_rule_delete",
+    "mail_rule_apply",
+    "mail_rule_retry",
     "settings_update",
     "theme_custom_update",
     "account_add_with_code",
@@ -491,9 +495,11 @@ async fn execute_rpc(
             "jsonrpc":"2.0", "id":response_id,
             "error":{"code":-32601,"message":"方法或工具不存在"}
         })),
-        Err(McpError::Invalid(message)) => Some(tool_error_value(response_id, message)),
-        Err(McpError::Application(message)) => Some(tool_error_value(response_id, &message)),
-        Err(_) => Some(tool_error_value(response_id, "工具执行失败")),
+        Err(McpError::Invalid(message)) => Some(tool_error_value(response_id, message, modern)),
+        Err(McpError::Application(message)) => {
+            Some(tool_error_value(response_id, &message, modern))
+        }
+        Err(_) => Some(tool_error_value(response_id, "工具执行失败", modern)),
     }
 }
 
@@ -861,6 +867,16 @@ async fn call_tool(
             "sync_policy_get" => sync_policy_get(store, &sync_database, &owner_id, arguments)?,
             "sync_policy_update" => sync_policy_update(store, &sync_database, &owner_id, arguments)?,
             "smart_folders_list" => crate::search::execute(store, &owner_id, "GET", None, None)?,
+            "mail_rules_list" => crate::rules::execute(store,&owner_id,"list",None,None)?,
+            "mail_rule_save" => {
+                let id=optional_string(&arguments,"ruleId");
+                crate::rules::execute(store,&owner_id,if id.is_some(){"update"}else{"create"},id,arguments.get("input").cloned())?
+            },
+            "mail_rule_delete" => crate::rules::execute(store,&owner_id,"delete",Some(required_string(&arguments,"ruleId")?),None)?,
+            "mail_rule_preview" => crate::rules::execute(store,&owner_id,"preview",None,Some(arguments))?,
+            "mail_rule_apply" => crate::rules::execute(store,&owner_id,"apply",None,Some(arguments))?,
+            "mail_rule_runs" => crate::rules::execute(store,&owner_id,"runs",None,None)?,
+            "mail_rule_retry" => crate::rules::execute(store,&owner_id,"retry",Some(required_string(&arguments,"runId")?),None)?,
             "smart_folder_save" => {
                 let id = optional_string(&arguments, "folderId");
                 crate::search::execute(store, &owner_id, if id.is_some() { "PUT" } else { "POST" }, id, Some(json!({"name":arguments.get("name"),"filters":arguments.get("filters")})))?
@@ -1356,6 +1372,19 @@ fn search_filters_schema() -> Value {
 fn tool_schema(name: &str) -> Value {
     let empty = || json!({"type":"object","properties":{},"additionalProperties":false});
     match name {
+        "mail_rules_list" | "mail_rule_save" | "mail_rule_delete" | "mail_rule_preview"
+        | "mail_rule_apply" | "mail_rule_runs" | "mail_rule_retry" => {
+            let contract: Value =
+                serde_json::from_str(include_str!("../../../contracts/mcp-tools.json"))
+                    .expect("valid MCP contract");
+            contract["tools"]
+                .as_array()
+                .expect("tools array")
+                .iter()
+                .find(|tool| tool["name"] == name)
+                .expect("rule tool exists")["inputSchema"]
+                .clone()
+        }
         "smart_folders_list" => empty(),
         "smart_folder_save" => {
             json!({"type":"object","properties":{"folderId":{"type":"string","format":"uuid"},"name":{"type":"string","minLength":1,"maxLength":80},"filters":search_filters_schema()},"required":["name","filters"],"additionalProperties":false})
@@ -1786,8 +1815,14 @@ fn rpc_http_error(status: StatusCode, id: Value, code: i64, message: &str) -> Re
     )
         .into_response()
 }
-fn tool_error_value(id: Value, message: &str) -> Value {
-    json!({"jsonrpc":"2.0","id":id,"result":{"content":[{"type":"text","text":message}],"isError":true}})
+fn tool_error_value(id: Value, message: &str, modern: bool) -> Value {
+    let result = json!({"content":[{"type":"text","text":message}],"isError":true});
+    let result = if modern {
+        modern_result("tools/call", result)
+    } else {
+        result
+    };
+    json!({"jsonrpc":"2.0","id":id,"result":result})
 }
 
 enum McpError {

@@ -17,6 +17,8 @@ impl PrivacyRepository for SqliteAuthStore {
             return Err(AuthStoreError::UserNotFound);
         }
         let transaction = self.connection.transaction()?;
+        transaction.execute("DELETE FROM mail_rules WHERE user_id=?1", [user_id])?;
+        transaction.execute("DELETE FROM mail_rule_previews WHERE user_id=?1", [user_id])?;
         let account_count = transaction.query_row(
             "SELECT count(*) FROM accounts WHERE user_id=?1",
             [user_id],

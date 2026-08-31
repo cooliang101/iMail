@@ -28,6 +28,7 @@ mod developer_tokens;
 mod export_encryption;
 mod migration;
 mod privacy_data;
+pub mod rules;
 mod search;
 mod sync_runtime;
 mod translation_cache;

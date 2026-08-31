@@ -13,6 +13,7 @@ The project is currently in internal testing. Its supported deliverables are the
 - OAuth sign-in, app-specific passwords, and email authorization codes
 - Continuous background mail delivery and synchronization while the window is hidden
 - Search, stars, read status, archive, trash, and custom labels
+- [Mail rules](docs/mail-rules.md) with conditions, labels, mute, archive, historical preview and execution history
 - Compose, reply, forward, drafts, and attachment downloads
 - Contacts, sender logos, and recipient suggestions
 - Hide My Email address management for iCloud accounts

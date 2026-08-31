@@ -79,7 +79,7 @@ describe('official TypeScript SDK against the Rust MCP transport', () => {
       expect(client.getServerVersion()).toMatchObject({ name: 'imail', version: '1.0.0' });
       expect(client.getServerCapabilities()).toMatchObject({ tools: { listChanged: true } });
       const listed = await client.listTools();
-      expect(listed.tools).toHaveLength(44);
+      expect(listed.tools).toHaveLength(51);
       expect(listed.tools.map((tool) => tool.name)).toContain('conversation_get');
       expect(listed.tools.map((tool) => tool.name)).toContain('imail_status');
       expect(listed.tools.map((tool) => tool.name)).toContain('translation_profiles_list');
@@ -97,6 +97,27 @@ describe('official TypeScript SDK against the Rust MCP transport', () => {
       expect(results.isError).not.toBe(true);
       const removed = await client.callTool({ name: 'smart_folder_delete', arguments: { folderId: folder.id } });
       expect(removed.structuredContent).toMatchObject({ deleted: true });
+      const ruleInput = { name: '开发通知', enabled: false, priority: 100, accountIds: [], matchMode: 'all', conditions: [{ field: 'senderDomain', value: 'github.com' }], actions: [{ type: 'addLabel', value: '开发通知' }], stopProcessing: false };
+      const ruleSaved = await client.callTool({ name: 'mail_rule_save', arguments: { input: ruleInput } });
+      expect(ruleSaved.isError).not.toBe(true);
+      const rule = (ruleSaved.structuredContent as { rule: { id: string } }).rule;
+      const rules = await client.callTool({ name: 'mail_rules_list', arguments: {} });
+      expect(rules.structuredContent).toMatchObject({ rules: [{ id: rule.id, enabled: false }] });
+      const preview = await client.callTool({ name: 'mail_rule_preview', arguments: { ruleId: rule.id, input: ruleInput } });
+      expect(preview.isError).not.toBe(true);
+      const token = (preview.structuredContent as { token: string }).token;
+      expect(token).toBeTypeOf('string');
+      expect(preview.structuredContent).toMatchObject({ total: 0, eligible: 0 });
+      const applied = await client.callTool({ name: 'mail_rule_apply', arguments: { token, confirmed: true } });
+      expect(applied.structuredContent).toMatchObject({ queued: 0 });
+      const repeated = await client.callTool({ name: 'mail_rule_apply', arguments: { token, confirmed: true } });
+      expect(repeated.isError).toBe(true);
+      const runs = await client.callTool({ name: 'mail_rule_runs', arguments: {} });
+      expect(runs.structuredContent).toMatchObject({ runs: [] });
+      const missingRun = await client.callTool({ name: 'mail_rule_retry', arguments: { runId: 'not-owned' } });
+      expect(missingRun.isError).toBe(true);
+      const ruleRemoved = await client.callTool({ name: 'mail_rule_delete', arguments: { ruleId: rule.id } });
+      expect(ruleRemoved.structuredContent).toMatchObject({ deleted: true });
     } finally {
       await client.close();
     }

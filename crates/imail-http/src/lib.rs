@@ -55,6 +55,7 @@ mod mcp;
 pub mod messages;
 mod oauth;
 mod preferences;
+pub mod rules;
 pub mod search;
 mod security;
 mod sync_control;
@@ -980,6 +981,7 @@ fn build_router_state(
         .merge(oauth::protected_routes())
         .merge(preferences::routes())
         .merge(search::routes())
+        .merge(rules::routes())
         .merge(security::routes())
         .merge(sync_control::routes())
         .merge(system::protected_routes())
@@ -1355,6 +1357,8 @@ fn validate_instance_id(value: &str) -> Result<String, HttpAdapterError> {
 #[cfg(test)]
 mod tests {
     mod real_mail_fixture;
+    #[path = "../rules_http_tests.rs"]
+    mod rules_http_tests;
     #[path = "../search_http_tests.rs"]
     mod search_http_tests;
 
@@ -2413,7 +2417,7 @@ mod tests {
                 .unwrap(),
         )
         .await;
-        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 44);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 51);
         assert!(listed.to_string().contains("accounts_list"));
         let tools = listed["result"]["tools"].as_array().unwrap();
         let shared_contract: Value =

@@ -15,7 +15,7 @@ button:disabled { cursor: not-allowed !important; opacity: .42; }
 .app-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .app-scrollbar::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: var(--color-border-strong); background-clip: padding-box; }
 .app-scrollbar::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
-@supports selector(::-webkit-scrollbar) { .app-scrollbar { scrollbar-width: auto; scrollbar-color: auto; } }
+@supports selector(::-webkit-scrollbar) { .app-scrollbar, .settings-panel-body.app-scrollbar { scrollbar-width: auto; scrollbar-color: auto; } }
 
 [data-icon-tone="primary"] { --icon-color: var(--color-accent); --icon-surface: var(--color-accent-subtle); }
 [data-icon-tone="info"] { --icon-color: var(--color-info); --icon-surface: var(--color-info-subtle); }

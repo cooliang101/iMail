@@ -5,7 +5,7 @@ use imail_core::{
     oauth_refresh::RefreshingConnectionService,
     sync_execution::MailboxSyncApplicationService,
     sync_runtime::{classify_sync_failure, retry_minutes},
-    AccountRepository,
+    AccountRepository, MessageRepository,
 };
 use imail_mail::{ImapWakePort, SyncCursor, SyncTarget};
 use imail_mail_network::{NetworkCancellation, NetworkMailAdapter};
@@ -28,6 +28,12 @@ pub trait SyncImapPort: imail_mail::ImapSyncPort + ImapWakePort + Send {}
 impl<T> SyncImapPort for T where T: imail_mail::ImapSyncPort + ImapWakePort + Send {}
 
 pub trait SyncMailTransportFactory: Send + Sync + 'static {
+    fn create_rule_imap(
+        &self,
+        _cancellation: Arc<dyn NetworkCancellation>,
+    ) -> Result<Box<dyn imail_mail::ImapPort>, String> {
+        Err("当前传输不支持规则远程动作".into())
+    }
     fn create(
         &self,
         cancellation: Arc<dyn NetworkCancellation>,
@@ -38,6 +44,14 @@ pub trait SyncMailTransportFactory: Send + Sync + 'static {
 pub struct NetworkSyncMailTransportFactory;
 
 impl SyncMailTransportFactory for NetworkSyncMailTransportFactory {
+    fn create_rule_imap(
+        &self,
+        cancellation: Arc<dyn NetworkCancellation>,
+    ) -> Result<Box<dyn imail_mail::ImapPort>, String> {
+        NetworkMailAdapter::with_cancellation(cancellation)
+            .map(|adapter| Box::new(adapter) as Box<dyn imail_mail::ImapPort>)
+            .map_err(|_| "规则邮件连接创建失败".into())
+    }
     fn create(
         &self,
         cancellation: Arc<dyn NetworkCancellation>,
@@ -168,7 +182,32 @@ impl EmbeddedSyncExecutor {
         let mut imap = self
             .mail_transport_factory
             .create(Arc::new(JobNetworkCancellation(context.clone())))?;
-        let execution =
+        let track_rules = repository
+            .list_mail_rules(&owner_id)
+            .map_err(display_auth_error)?
+            .iter()
+            .any(|rule| rule.input.enabled)
+            || repository
+                .has_pending_rule_actions(&owner_id, &job.account_id)
+                .map_err(display_auth_error)?;
+        let before_rules = if track_rules {
+            repository
+                .conversation_candidates(&owner_id)
+                .map_err(display_auth_error)?
+                .into_iter()
+                .filter(|m| m.account_id == job.account_id)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        self.execute_rules(
+            &mut repository,
+            &owner_id,
+            &job.account_id,
+            &config,
+            context,
+        )?;
+        let mut execution =
             MailboxSyncApplicationService::new(&repository, &codec, &mut imap, &mut sync_store)
                 .execute_with_config(
                     &owner_id,
@@ -179,6 +218,33 @@ impl EmbeddedSyncExecutor {
                     Utc::now(),
                 )
                 .map_err(|error| error.to_string())?;
+        self.execute_rules(
+            &mut repository,
+            &owner_id,
+            &job.account_id,
+            &config,
+            context,
+        )?;
+        // Notification snapshots reflect successful read/flag/archive actions.
+        if track_rules {
+            let after_rules = repository
+                .conversation_candidates(&owner_id)
+                .map_err(display_auth_error)?
+                .into_iter()
+                .filter(|m| m.account_id == job.account_id)
+                .collect();
+            execution.commit.message_changes =
+                crate::rule_executor::message_changes(before_rules, after_rules);
+        }
+        execution.notification_messages = execution
+            .notification_messages
+            .iter()
+            .map(|message| repository.message(&owner_id, &message.id))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(display_auth_error)?
+            .into_iter()
+            .flatten()
+            .collect();
         let account_email = repository
             .account(&owner_id, &job.account_id)
             .map_err(|error| error.to_string())?
@@ -194,6 +260,28 @@ impl EmbeddedSyncExecutor {
             .map_err(|error| error.to_string())?;
         SyncCompletion::from_mailbox_commit(&execution.plan, &execution.commit)
             .map_err(|error| error.to_string())
+    }
+
+    fn execute_rules(
+        &self,
+        repository: &mut imail_storage_sqlite::SqliteAuthStore,
+        owner: &str,
+        account: &str,
+        config: &imail_mail::MailConnectionConfig,
+        context: &JobExecutionContext,
+    ) -> Result<(), String> {
+        if !repository
+            .has_pending_rule_actions(owner, account)
+            .map_err(display_auth_error)?
+        {
+            return Ok(());
+        }
+        let mut imap = self
+            .mail_transport_factory
+            .create_rule_imap(Arc::new(JobNetworkCancellation(context.clone())))?;
+        crate::rule_executor::drain_rules(repository, owner, account, config, imap.as_mut(), || {
+            context.is_cancelled()
+        })
     }
 }
 

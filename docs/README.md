@@ -8,6 +8,8 @@
 
 ## 使用与部署
 
+- [邮件规则引擎](mail-rules.md)：条件、动作、历史预览与确认、执行顺序、去重、恢复及 HTTP/MCP 接入。
+
 - [写信与会话](composition-and-conversations.md)：回复全部、密送、签名、模板、附件提醒、会话关联和引用折叠的行为与安全边界。
 - [部署模式](deployment-modes.md)：Windows 本地嵌入、桌面远程连接与 Docker 服务端的边界。
 - [运维手册](operator-runbook.md)：环境变量、Docker/HTTPS、备份恢复、升级和故障排查。

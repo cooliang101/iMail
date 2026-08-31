@@ -83,6 +83,9 @@ Authorization: Bearer imail_mcp_xxx
 | 搜索 | `smart_folders_list` | 列出当前用户保存的查询定义 |
 | 搜索 | `smart_folder_save` | 用 `name` 和 `filters` 新建；提供 `folderId` 时更新单个查询 |
 | 搜索 | `smart_folder_delete` | 删除保存的查询定义，不删除邮件 |
+| 规则 | `mail_rules_list`、`mail_rule_save`、`mail_rule_delete` | 列出、创建/更新、删除当前用户的邮件规则 |
+| 规则 | `mail_rule_preview`、`mail_rule_apply` | 只读预览；使用一次性令牌和 `confirmed: true` 单独确认处理历史邮件 |
+| 规则 | `mail_rule_runs`、`mail_rule_retry` | 最近 200 条执行记录；重试失败的未完成动作，不重放结果不确定的归档；详见[邮件规则引擎](mail-rules.md) |
 | 邮件 | `message_get` | 完整正文、HTML、标签与附件元数据 |
 | 邮件 | `conversation_get` | 按明确回复头读取本地会话摘要；保留账户/文件夹副本，不修改已读状态 |
 | 邮件 | `message_update` | 已读、星标、标签和稍后处理 |

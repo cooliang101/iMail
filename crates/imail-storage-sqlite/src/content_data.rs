@@ -10,8 +10,29 @@ use rusqlite::{params, OptionalExtension, Row};
 
 use crate::{AuthStoreError, SqliteAuthStore};
 
+pub(crate) fn rule_message(
+    connection: &rusqlite::Connection,
+    owner: &str,
+    id: &str,
+) -> Result<Option<MessageReadModel>, AuthStoreError> {
+    connection.query_row(
+        "SELECT m.id,m.account_id,m.mailbox,m.mailbox_role,m.uid,m.message_id,m.from_json,m.to_json,m.subject,m.preview,m.text_body,m.html_body,m.received_at,m.unread,m.flagged,m.has_attachments,m.attachments_json,m.labels_json,m.snoozed_until,m.mail_headers_json FROM messages m JOIN accounts a ON a.id=m.account_id WHERE m.id=?1 AND a.user_id=?2",
+        params![id,owner],message_row).optional()?.map(message_from_raw).transpose()
+}
+
 impl ContentRepository for SqliteAuthStore {
     type Error = AuthStoreError;
+
+    fn notification_messages(&self, user_id: &str) -> Result<Vec<MessageReadModel>, Self::Error> {
+        self.list_messages(user_id)?
+            .into_iter()
+            .filter_map(|m| match crate::rules::is_muted(&self.connection, &m) {
+                Ok(true) => None,
+                Ok(false) => Some(Ok(m)),
+                Err(error) => Some(Err(error.into())),
+            })
+            .collect()
+    }
 
     fn list_messages(&self, user_id: &str) -> Result<Vec<MessageReadModel>, Self::Error> {
         let mut statement = self.connection.prepare(
