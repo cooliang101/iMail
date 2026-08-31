@@ -238,6 +238,19 @@ pub enum EmbeddedDomainCall {
         draft_id: String,
     },
     PreferencesGet,
+    SmartFoldersList,
+    SmartFolderCreate {
+        input: serde_json::Value,
+    },
+    SmartFolderUpdate {
+        #[serde(rename = "folderId")]
+        folder_id: String,
+        input: serde_json::Value,
+    },
+    SmartFolderDelete {
+        #[serde(rename = "folderId")]
+        folder_id: String,
+    },
     PreferencesUpdate {
         input: serde_json::Value,
     },
@@ -547,6 +560,18 @@ impl EmbeddedDomainCall {
                 None,
             ),
             Self::PreferencesGet => ("/api/preferences".into(), "GET", None),
+            Self::SmartFoldersList => ("/api/smart-folders".into(), "GET", None),
+            Self::SmartFolderCreate { input } => json_request("/api/smart-folders", "POST", input),
+            Self::SmartFolderUpdate { folder_id, input } => json_request(
+                format!("/api/smart-folders/{}", path_segment(&folder_id)),
+                "PUT",
+                input,
+            ),
+            Self::SmartFolderDelete { folder_id } => (
+                format!("/api/smart-folders/{}", path_segment(&folder_id)),
+                "DELETE",
+                None,
+            ),
             Self::PreferencesUpdate { input } => json_request("/api/preferences", "PATCH", input),
             Self::TranslationSettingsGet => ("/api/translation-settings".into(), "GET", None),
             Self::TranslationSettingsUpdate { input } => {
@@ -1461,6 +1486,41 @@ impl EmbeddedMailServiceState {
                 Ok(Some(embedded_operation_response(
                     host.sync_all(user_id, role.clone()).await,
                 )))
+            }
+            EmbeddedDomainCall::SmartFoldersList
+            | EmbeddedDomainCall::SmartFolderCreate { .. }
+            | EmbeddedDomainCall::SmartFolderUpdate { .. }
+            | EmbeddedDomainCall::SmartFolderDelete { .. } => {
+                let Some(owner) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let (method, id, input) = match call {
+                    EmbeddedDomainCall::SmartFoldersList => ("GET", None, None),
+                    EmbeddedDomainCall::SmartFolderCreate { input } => {
+                        ("POST", None, Some(input.clone()))
+                    }
+                    EmbeddedDomainCall::SmartFolderUpdate { folder_id, input } => {
+                        ("PUT", Some(folder_id.clone()), Some(input.clone()))
+                    }
+                    EmbeddedDomainCall::SmartFolderDelete { folder_id } => {
+                        ("DELETE", Some(folder_id.clone()), None)
+                    }
+                    _ => unreachable!(),
+                };
+                let result = tokio::task::spawn_blocking(move || {
+                    let mut store = SqliteAuthStore::open_database(database)
+                        .map_err(imail_core::ApplicationError::Repository)?;
+                    imail_http::search::execute(&mut store, &owner, method, id.as_deref(), input)
+                })
+                .await
+                .map_err(|_| "智能文件夹任务失败".to_string())?;
+                Ok(Some(match result {
+                    Ok(value) => json_response(200, value),
+                    Err(imail_core::ApplicationError::Domain {
+                        status, message, ..
+                    }) => json_response(status, serde_json::json!({"error":message})),
+                    Err(_) => json_response(500, serde_json::json!({"error":"智能文件夹操作失败"})),
+                }))
             }
             EmbeddedDomainCall::MessagesList { query } => {
                 let Some(user_id) = self.current_user_id()? else {
@@ -2936,7 +2996,7 @@ mod tests {
                 )
                 .unwrap();
             connection
-                .execute_batch("DROP TABLE apple_hme_sessions; ALTER TABLE messages DROP COLUMN mail_headers_json; ALTER TABLE drafts DROP COLUMN compose_json;")
+                .execute_batch("DROP TRIGGER messages_body_insert; DROP TRIGGER messages_body_delete; DROP TRIGGER messages_body_update; DROP TABLE message_body_fts; DROP TABLE smart_folders; DROP TABLE apple_hme_sessions; ALTER TABLE messages DROP COLUMN mail_headers_json; ALTER TABLE drafts DROP COLUMN compose_json;")
                 .unwrap();
         }
         write_private_session(

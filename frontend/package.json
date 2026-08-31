@@ -3,7 +3,7 @@
   "version": "0.1.12",
   "license": "MIT",
   "imail": {
-    "schemaVersion": 12
+    "schemaVersion": 13
   },
   "private": true,
   "type": "module",

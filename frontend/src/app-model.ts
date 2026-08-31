@@ -1,7 +1,16 @@
 import type { DeveloperToken } from './types';
 
 export type Notice = { kind: 'success' | 'error'; text: string } | null;
-export type AppView = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'trash' | 'junk' | 'folder' | 'drafts' | 'contacts' | 'tokens';
+export type AppView = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'trash' | 'junk' | 'folder' | 'drafts' | 'contacts' | 'tokens' | 'search';
+
+export type SearchFilters = {
+  accountIds?: string[]; group?: string | null; q?: string | null; subject?: string | null;
+  body?: string | null; sender?: string | null; recipient?: string | null;
+  since?: string | null; before?: string | null; unread?: boolean | null; flagged?: boolean | null;
+  hasAttachments?: boolean | null; labels?: string[]; mailboxRole?: string | null;
+  mailbox?: string | null; mailboxName?: string | null; snoozed?: boolean | null;
+};
+export type SmartFolder = { id: string; name: string; filters: SearchFilters; createdAt: string; updatedAt: string };
 
 export type ApiGatewayCredential = {
   rawToken: string;

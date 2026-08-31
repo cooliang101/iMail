@@ -1,11 +1,13 @@
 import { useCallback, useState } from 'preact/compat';
-import type { AppView, ParticipantFilters, WorkspaceFolder } from '../../app-model';
+import type { AppView, ParticipantFilters, SearchFilters, WorkspaceFolder } from '../../app-model';
 
 export function useWorkspaceNavigation(initialView: AppView) {
   const [view, setView] = useState<AppView>(initialView);
   const [accountFilter, setAccountFilter] = useState('all');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [searchFilters, setSearchFilters] = useState<SearchFilters | null>(null);
+  const [smartFolderId, setSmartFolderId] = useState<string | null>(null);
   const [participantFilters, setParticipantFilters] = useState<ParticipantFilters>({ sender: null, recipient: null });
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [activeMailbox, setActiveMailbox] = useState<WorkspaceFolder | null>(null);
@@ -13,6 +15,7 @@ export function useWorkspaceNavigation(initialView: AppView) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const selectScope = useCallback((nextView: AppView, nextAccount = 'all', nextGroup: string | null = null) => {
+    setSearchFilters(null); setSmartFolderId(null);
     setSearch((current) => (view === 'contacts') !== (nextView === 'contacts') ? '' : current);
     setView(nextView);
     setAccountFilter(nextAccount);
@@ -23,6 +26,7 @@ export function useWorkspaceNavigation(initialView: AppView) {
   }, [view]);
 
   const selectMailbox = useCallback((folder: WorkspaceFolder) => {
+    setSearchFilters(null); setSmartFolderId(null);
     setView('folder');
     setAccountFilter('all');
     setGroupFilter(null);
@@ -32,6 +36,7 @@ export function useWorkspaceNavigation(initialView: AppView) {
   }, []);
 
   const selectLabel = useCallback((label: string) => {
+    setSearchFilters(null); setSmartFolderId(null);
     setView('inbox');
     setAccountFilter('all');
     setGroupFilter(null);
@@ -41,6 +46,7 @@ export function useWorkspaceNavigation(initialView: AppView) {
   }, []);
 
   return {
+    searchFilters, setSearchFilters, smartFolderId, setSmartFolderId,
     view, setView,
     accountFilter, setAccountFilter,
     groupFilter, setGroupFilter,

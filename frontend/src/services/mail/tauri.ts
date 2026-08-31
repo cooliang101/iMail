@@ -49,6 +49,10 @@ export type EmbeddedDomainCall =
   | { operation: 'draftUpdate'; draftId: string; input: Record<string, unknown> }
   | { operation: 'draftDelete'; draftId: string }
   | { operation: 'preferencesGet' }
+  | { operation: 'smartFoldersList' }
+  | { operation: 'smartFolderCreate'; input: Record<string, unknown> }
+  | { operation: 'smartFolderUpdate'; folderId: string; input: Record<string, unknown> }
+  | { operation: 'smartFolderDelete'; folderId: string }
   | { operation: 'preferencesUpdate'; input: Record<string, unknown> }
   | { operation: 'translationSettingsGet' }
   | { operation: 'translationSettingsUpdate'; input: Record<string, unknown> }
@@ -96,6 +100,7 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
       '/api/notifications': { operation: 'notificationsList' },
       '/api/drafts': { operation: 'draftsList' },
       '/api/preferences': { operation: 'preferencesGet' },
+      '/api/smart-folders': { operation: 'smartFoldersList' },
       '/api/translation-settings': { operation: 'translationSettingsGet' },
       '/api/developer-tokens': { operation: 'developerTokensList' },
       '/api/external-access': { operation: 'externalAccessGet' },
@@ -176,6 +181,10 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   if (draft && method === 'PUT' && body) return { operation: 'draftUpdate', draftId: decodeURIComponent(draft[1]), input: body };
   if (draft && method === 'DELETE' && options.body === undefined) return { operation: 'draftDelete', draftId: decodeURIComponent(draft[1]) };
   if (method === 'PATCH' && url.pathname === '/api/preferences' && body) return { operation: 'preferencesUpdate', input: body };
+  if (method === 'POST' && url.pathname === '/api/smart-folders' && body) return { operation: 'smartFolderCreate', input: body };
+  const smartFolder = url.pathname.match(/^\/api\/smart-folders\/([^/]+)$/);
+  if (smartFolder && method === 'PUT' && body) return { operation: 'smartFolderUpdate', folderId: decodeURIComponent(smartFolder[1]), input: body };
+  if (smartFolder && method === 'DELETE' && options.body === undefined) return { operation: 'smartFolderDelete', folderId: decodeURIComponent(smartFolder[1]) };
   if (method === 'PUT' && url.pathname === '/api/translation-settings' && body) return { operation: 'translationSettingsUpdate', input: body };
   const translationProfile = url.pathname.match(/^\/api\/translation-profiles\/([^/]+)$/);
   if (translationProfile && method === 'PUT' && body) return { operation: 'translationProfileUpsert', profileId: decodeURIComponent(translationProfile[1]), input: body };

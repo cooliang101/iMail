@@ -1086,6 +1086,148 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "filters": {
+            "type": "object",
+            "properties": {
+              "group": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "q": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "subject": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "body": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sender": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 320
+              },
+              "recipient": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 320
+              },
+              "mailbox": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "mailboxName": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "since": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "before": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "unread": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "flagged": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "hasAttachments": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "snoozed": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "accountIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "maxItems": 100
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "maxItems": 30
+              },
+              "mailboxRole": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  null,
+                  "inbox",
+                  "sent",
+                  "archive",
+                  "drafts",
+                  "trash",
+                  "junk",
+                  "custom"
+                ]
+              }
+            },
+            "additionalProperties": false
           }
         }
       },
@@ -1920,6 +2062,216 @@
       "annotations": {
         "destructiveHint": true,
         "idempotentHint": true
+      }
+    },
+    {
+      "name": "smart_folders_list",
+      "title": "列出智能文件夹",
+      "description": "读取当前用户保存的动态查询，不复制邮件。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "smart_folder_save",
+      "title": "保存智能文件夹",
+      "description": "新建或按 folderId 更新当前用户的智能文件夹；保存名称与完整条件，不移动邮件。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "folderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "filters": {
+            "type": "object",
+            "properties": {
+              "group": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "q": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "subject": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "body": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sender": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 320
+              },
+              "recipient": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 320
+              },
+              "mailbox": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "mailboxName": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "since": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "before": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "unread": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "flagged": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "hasAttachments": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "snoozed": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "accountIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "maxItems": 100
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "maxItems": 30
+              },
+              "mailboxRole": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  null,
+                  "inbox",
+                  "sent",
+                  "archive",
+                  "drafts",
+                  "trash",
+                  "junk",
+                  "custom"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "filters"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "smart_folder_delete",
+      "title": "删除智能文件夹",
+      "description": "只删除当前用户的保存查询，不删除邮件。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "folderId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "folderId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": false
       }
     }
   ]

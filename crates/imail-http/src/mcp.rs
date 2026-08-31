@@ -860,6 +860,12 @@ async fn call_tool(
             "mailbox_sync" => mailbox_sync(store, &sync_database, &owner_id, arguments)?,
             "sync_policy_get" => sync_policy_get(store, &sync_database, &owner_id, arguments)?,
             "sync_policy_update" => sync_policy_update(store, &sync_database, &owner_id, arguments)?,
+            "smart_folders_list" => crate::search::execute(store, &owner_id, "GET", None, None)?,
+            "smart_folder_save" => {
+                let id = optional_string(&arguments, "folderId");
+                crate::search::execute(store, &owner_id, if id.is_some() { "PUT" } else { "POST" }, id, Some(json!({"name":arguments.get("name"),"filters":arguments.get("filters")})))?
+            }
+            "smart_folder_delete" => crate::search::execute(store, &owner_id, "DELETE", Some(required_string(&arguments, "folderId")?), None)?,
             "messages_list" => list_messages(store, &owner_id, arguments)?,
             "message_get" => {
                 let message_id = required_string(&arguments, "messageId")?;
@@ -1134,6 +1140,7 @@ fn list_messages(store: &SqliteAuthStore, owner: &str, input: Value) -> Result<V
         return Err(McpError::Invalid("limit 必须在 1..100 之间"));
     }
     let query = MessageQuery {
+        filters: input.get("filters").cloned().map(parse).transpose()?,
         account_id,
         group: optional_string(&input, "group").map(str::to_string),
         text: optional_string(&input, "query").map(str::to_string),
@@ -1341,9 +1348,21 @@ fn tools() -> Vec<Value> {
         .clone()
 }
 
+fn search_filters_schema() -> Value {
+    serde_json::from_str(include_str!("../../../contracts/search-filters.json"))
+        .expect("valid search schema")
+}
+
 fn tool_schema(name: &str) -> Value {
     let empty = || json!({"type":"object","properties":{},"additionalProperties":false});
     match name {
+        "smart_folders_list" => empty(),
+        "smart_folder_save" => {
+            json!({"type":"object","properties":{"folderId":{"type":"string","format":"uuid"},"name":{"type":"string","minLength":1,"maxLength":80},"filters":search_filters_schema()},"required":["name","filters"],"additionalProperties":false})
+        }
+        "smart_folder_delete" => {
+            json!({"type":"object","properties":{"folderId":{"type":"string","format":"uuid"}},"required":["folderId"],"additionalProperties":false})
+        }
         "imail_status" | "settings_get" | "theme_custom_get" | "accounts_list" | "labels_list" => {
             empty()
         }
@@ -1410,7 +1429,7 @@ fn tool_schema(name: &str) -> Value {
             json!({"type":"object","properties":{"email":email_schema(),"enabled":{"type":"boolean"},"folderMode":{"type":"string","enum":["inbox","standard","selected"]},"selectedMailboxes":{"type":"array","items":{"type":"string","minLength":1,"maxLength":500},"maxItems":100},"notifyOnError":{"type":"boolean"}},"additionalProperties":false,"minProperties":1})
         }
         "messages_list" => {
-            json!({"type":"object","properties":{"email":email_schema(),"group":{"type":"string","maxLength":40},"query":{"type":"string","maxLength":200},"mailboxRole":mailbox_role_schema(),"mailboxPath":{"type":"string","maxLength":500},"unread":{"type":"boolean"},"flagged":{"type":"boolean"},"hasAttachments":{"type":"boolean"},"snoozed":{"type":"boolean"},"label":{"type":"string","maxLength":80},"limit":{"type":"integer","minimum":1,"maximum":100,"default":25},"offset":{"type":"integer","minimum":0,"default":0}},"additionalProperties":false})
+            json!({"type":"object","properties":{"filters":search_filters_schema(),"email":email_schema(),"group":{"type":"string","maxLength":40},"query":{"type":"string","maxLength":200},"mailboxRole":mailbox_role_schema(),"mailboxPath":{"type":"string","maxLength":500},"unread":{"type":"boolean"},"flagged":{"type":"boolean"},"hasAttachments":{"type":"boolean"},"snoozed":{"type":"boolean"},"label":{"type":"string","maxLength":80},"limit":{"type":"integer","minimum":1,"maximum":100,"default":25},"offset":{"type":"integer","minimum":0,"default":0}},"additionalProperties":false})
         }
         "message_get" | "conversation_get" => message_id_schema(),
         "translation_profiles_list" => empty(),

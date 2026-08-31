@@ -21,6 +21,7 @@ pub mod oauth_accounts;
 pub mod oauth_refresh;
 pub mod preferences;
 pub mod privacy;
+pub mod search;
 pub mod sync_execution;
 pub mod sync_runtime;
 pub mod theme;

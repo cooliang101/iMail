@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { api, desktopLog, describeDesktopLogValue, subscribeSyncEvents } from '../../services';
 import { buildMessageQuery } from '../../app/selectors';
 import type { Account, Contact, Message } from '../../types';
-import type { AppView, MessageStats, Notice, ParticipantFilters, WorkspaceFolder } from '../../app-model';
+import type { AppView, MessageStats, Notice, ParticipantFilters, SearchFilters, WorkspaceFolder } from '../../app-model';
 import { appendMessagePage, applyMessageChanges, applyMessageStatsChanges, cacheMessageBody, messageTotalDelta, type MessageChange } from './message-cache';
 import type { MailListFilter } from './MessagePane';
 
 type MessagePage = { messages: Message[]; total: number; nextOffset: number; nextCursor?: string; hasMore: boolean };
 
 type Options = {
+  searchFilters?: SearchFilters | null;
   accounts: Account[];
   view: AppView;
   accountFilter: string;
@@ -35,7 +36,7 @@ export function useMessageCollection(options: Options) {
   const [ready, setReady] = useState(false);
   const [revision, setRevision] = useState(0);
   const [stats, setStats] = useState<MessageStats>({ total: 0, unread: 0, byAccount: [], byGroup: [] });
-  const query = useMemo(() => buildMessageQuery({ accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox, participantFilters }), [accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox, participantFilters]);
+  const query = useMemo(() => buildMessageQuery({ accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox, participantFilters, searchFilters: options.searchFilters }), [accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox, participantFilters, options.searchFilters]);
   const queryRef = useRef(query);
   const accountsRef = useRef(accounts);
   const implicitSelectedIdRef = useRef<string | null>(null);
@@ -52,6 +53,15 @@ export function useMessageCollection(options: Options) {
     try {
       const changes = ((JSON.parse(event.data) as { payload?: { messageChanges?: MessageChange[] } }).payload?.messageChanges ?? [])
         .filter((change) => !actionActiveRef.current?.(change.after?.id ?? change.before?.id ?? ''));
+      if (new URLSearchParams(queryRef.current).has('filters')) {
+        // Sync summaries omit bodies. Re-query the authoritative index, never infer
+        // advanced matches or counts from incomplete client-side messages.
+        setRevision((value) => value + 1);
+        void api<MessageStats>('/api/message-stats').then(setStats).catch(() => {});
+        void api<{ contacts: Contact[] }>('/api/contacts').then((result) => setContacts(result.contacts))
+          .catch((error) => desktopLog('warn', 'contacts.refresh_failed', describeDesktopLogValue(error)));
+        return;
+      }
       if (changes.length === 0) return;
       const currentQuery = queryRef.current;
       const currentAccounts = accountsRef.current;

@@ -128,6 +128,7 @@ async fn mailboxes(
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct MessageQueryInput {
+    filters: Option<String>,
     mailbox: Option<String>,
     limit: Option<String>,
     cursor: Option<String>,
@@ -220,6 +221,7 @@ async fn list_messages_inner(
         let page = store.query_gateway_messages(
             &token.owner_id,
             &GatewayMessageQuery {
+                filters: input.filters,
                 account_ids,
                 recipient,
                 mailbox_role: input.mailbox_role,
@@ -745,6 +747,7 @@ fn strip_bearer(value: &str) -> &str {
 }
 
 struct ValidatedQuery {
+    filters: Option<imail_core::search::SearchFilters>,
     mailbox: Option<String>,
     limit: usize,
     cursor: Option<GatewayMessageCursor>,
@@ -756,6 +759,19 @@ struct ValidatedQuery {
 }
 
 fn validate_query(input: MessageQueryInput) -> Result<ValidatedQuery, GatewayFailure> {
+    let filters = input
+        .filters
+        .as_deref()
+        .map(|raw| {
+            if raw.len() > 32_768 {
+                return Err(GatewayFailure::invalid());
+            }
+            let filters: imail_core::search::SearchFilters =
+                serde_json::from_str(raw).map_err(|_| GatewayFailure::invalid())?;
+            filters.validate().map_err(|_| GatewayFailure::invalid())?;
+            Ok(filters)
+        })
+        .transpose()?;
     if input
         .mailbox
         .as_ref()
@@ -802,6 +818,7 @@ fn validate_query(input: MessageQueryInput) -> Result<ValidatedQuery, GatewayFai
     }
     let cursor = input.cursor.as_deref().map(decode_cursor).transpose()?;
     Ok(ValidatedQuery {
+        filters,
         mailbox: input.mailbox,
         limit,
         cursor,

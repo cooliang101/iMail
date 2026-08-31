@@ -1,11 +1,15 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/compat';
 import { ArrowCounterClockwise, Check, WarningCircle } from './components/icons';
 import { api, desktopLog, describeDesktopLogValue } from './services';
-import { buildWorkspaceFolders } from './app/selectors';
+import { buildMessageQuery, buildWorkspaceFolders } from './app/selectors';
 import type { Account, Contact, DeveloperToken, Draft, Message, ProviderId } from './types';
-import type { ApiGatewayCredential, AppView, ContextTarget, MailNotification, MailParticipant, MessageStats, Notice, ParticipantRole, WorkspaceFolder } from './app-model';
+import type { ApiGatewayCredential, AppView, ContextTarget, MailNotification, MailParticipant, MessageStats, Notice, ParticipantRole, SearchFilters, SmartFolder, WorkspaceFolder } from './app-model';
 import { AppAccountRail, AppSidebar, AppTopbar, useWorkspaceNavigation } from './features/navigation';
 import { applyOptimisticMessageMutation, clearParticipantFilter, EMPTY_PARTICIPANT_FILTERS, MessageActionCoordinator, MessagePane, MessageReader, rollbackOptimisticMessageMutation, setParticipantFilter, type MailListFilter, useMessageCollection } from './features/mail';
+import { AdvancedSearchPanel } from './features/search/AdvancedSearchPanel';
+import { SmartFoldersNav } from './features/search/SmartFoldersNav';
+import { useSmartFolders } from './features/search/useSmartFolders';
+import { filtersFromQuery } from './features/search/search-model';
 import { ContactsWorkspace } from './features/contacts/ContactsWorkspace';
 import { DraftWelcome } from './features/compose/DraftWelcome';
 import { DraftWorkspace } from './features/compose/DraftWorkspace';
@@ -41,7 +45,9 @@ function App() {
   const [labels, setLabels] = useState<string[]>([]);
   const [notice, setNotice] = useState<Notice>(null);
   const { preferences, shortcutBindings, preferencesSyncIssue, dismissPreferencesSyncIssue, savePreferences, saveShortcutBindings } = useAppPreferences(user.id, setNotice);
-  const { view, setView, accountFilter, setAccountFilter, groupFilter, setGroupFilter, search, setSearch, participantFilters, setParticipantFilters, activeLabel, activeMailbox, sidebarOpen, setSidebarOpen, sidebarCollapsed, setSidebarCollapsed, selectScope: selectNavigationScope, selectMailbox: selectNavigationMailbox, selectLabel: selectNavigationLabel } = useWorkspaceNavigation(preferences.startupView);
+  const { searchFilters, setSearchFilters, smartFolderId, setSmartFolderId, view, setView, accountFilter, setAccountFilter, groupFilter, setGroupFilter, search, setSearch, participantFilters, setParticipantFilters, activeLabel, activeMailbox, sidebarOpen, setSidebarOpen, sidebarCollapsed, setSidebarCollapsed, selectScope: selectNavigationScope, selectMailbox: selectNavigationMailbox, selectLabel: selectNavigationLabel } = useWorkspaceNavigation(preferences.startupView);
+  const smartFolders = useSmartFolders(user.id);
+  const [searchEditor, setSearchEditor] = useState<{ filters: SearchFilters; folder?: SmartFolder } | null>(null);
   const [mailFilter, setMailFilter] = useState<MailListFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addAccountIntent, setAddAccountIntent] = useState<AddAccountIntent | null>(null);
@@ -78,6 +84,7 @@ function App() {
     groupFilter,
     search,
     participantFilters,
+    searchFilters,
     mailFilter,
     activeLabel,
     activeMailbox,
@@ -315,6 +322,24 @@ function App() {
     setNotice({ kind: 'success', text: '已撤销邮件移动' });
   }
 
+  function openAdvancedSearch() {
+    const filters = filtersFromQuery(buildMessageQuery({ accountFilter, groupFilter, search, view, mailFilter, activeLabel, activeMailbox, participantFilters, searchFilters }));
+    setSearchEditor({ filters, folder: smartFolderId ? smartFolders.folders.find((folder) => folder.id === smartFolderId) : undefined });
+  }
+
+  async function applySearch(filters: SearchFilters, folderId?: string) {
+    if (composePaneRef.current && !await composePaneRef.current.close()) return false;
+    selectNavigationScope('search');
+    setSearchFilters(filters); setSearch(filters.q ?? ''); setSmartFolderId(folderId ?? null);
+    setMailFilter('all'); setParticipantFilters(EMPTY_PARTICIPANT_FILTERS); setSelectedId(null);
+    return true;
+  }
+
+  async function deleteSmartFolder(id: string) {
+    await smartFolders.remove(id);
+    if (smartFolderId === id) setSmartFolderId(null);
+  }
+
   async function selectScope(nextView: AppView, nextAccount = 'all', nextGroup: string | null = null) {
     if (composePaneRef.current && !await composePaneRef.current.close()) return;
     selectNavigationScope(nextView, nextAccount, nextGroup); setSelectedId(null);
@@ -344,6 +369,7 @@ function App() {
   function keepOnlyParticipantFilters() {
     setSearch('');
     setMailFilter('all');
+    if (view === 'search') { setSearchFilters({}); setSmartFolderId(null); }
   }
 
   function focusSearch() {
@@ -416,18 +442,19 @@ function App() {
     {notice && <div className={`toast toast-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'} aria-live={notice.kind === 'error' ? 'assertive' : 'polite'}>{notice.kind === 'success' ? <Check size={18} /> : <WarningCircle size={18} />}<span>{notice.text}</span></div>}
     {pendingMove && <div className="toast toast-success toast-action" role="status" aria-live="polite"><span>{t(pendingMove.destination === 'archive' ? '邮件即将归档' : '邮件即将移至垃圾箱')}</span><button type="button" onClick={undoPendingMove}><ArrowCounterClockwise size={15} />{t('撤销')}</button></div>}
 
+    {searchEditor && <AdvancedSearchPanel initial={searchEditor.filters} folder={searchEditor.folder} accounts={accounts} labels={labels} onClose={() => setSearchEditor(null)} onApply={applySearch} onSave={smartFolders.save} onDelete={deleteSmartFolder} />}
     <AppAccountRail user={user} accounts={accounts} accountFilter={accountFilter} onSelect={(accountId) => selectScope('inbox', accountId)} onAdd={() => setAddAccountIntent({})} onSettings={() => setSettingsTab('general')} onSwitchAccount={() => void logout()} onContextMenu={(event, accountId) => { event.preventDefault(); setContextTarget(accountId ? { kind: 'account', accountId, x: event.clientX, y: event.clientY } : { kind: 'background', x: event.clientX, y: event.clientY }); }} />
-    <AppSidebar user={user} accounts={accounts} groups={groups} workspaceFolders={workspaceFolders} labels={labels} messageStats={messageStats} draftsCount={drafts.length} contactsCount={contacts.length} view={view} accountFilter={accountFilter} groupFilter={groupFilter} activeLabel={activeLabel} activeMailbox={activeMailbox} expandedWorkspaces={expandedWorkspaces} sidebarOpen={sidebarOpen}
+    <AppSidebar smartFolders={<SmartFoldersNav folders={smartFolders.folders} activeId={view === 'search' ? smartFolderId : null} loading={smartFolders.loading} error={smartFolders.error} onRetry={() => void smartFolders.reload()} onSelect={(folder) => void applySearch(folder.filters, folder.id)} onEdit={(folder) => setSearchEditor({ filters: folder.filters, folder })} onCreate={() => setSearchEditor({ filters: {} })} />} user={user} accounts={accounts} groups={groups} workspaceFolders={workspaceFolders} labels={labels} messageStats={messageStats} draftsCount={drafts.length} contactsCount={contacts.length} view={view} accountFilter={accountFilter} groupFilter={groupFilter} activeLabel={activeLabel} activeMailbox={activeMailbox} expandedWorkspaces={expandedWorkspaces} sidebarOpen={sidebarOpen}
       onClose={() => setSidebarOpen(false)} onCompose={openCompose} onAddAccount={() => { setAddAccountIntent({}); setSidebarOpen(false); }} onSettings={() => { setSettingsTab('general'); setSidebarOpen(false); }} onSelectScope={selectScope} onSelectMailbox={selectMailbox} onSelectLabel={selectLabel} onEditWorkspace={setWorkspaceOpen}
       onToggleWorkspace={(group) => setExpandedWorkspaces((current) => { const next = new Set(current); if (next.has(group)) next.delete(group); else next.add(group); return next; })} onContextTarget={setContextTarget} onLogout={() => void logout()} />
 
     <main className="workspace">
-      <AppTopbar sidebarCollapsed={sidebarCollapsed} sidebarOpen={sidebarOpen} search={search} searchPlaceholder={view === 'contacts' ? '搜索联系人姓名或邮箱' : '搜索当前范围内的邮件'} searchShortcut={shortcutLabel(shortcutBindings.focusSearch)} searchInputRef={searchInputRef} onToggleSidebar={() => setSidebarCollapsed((current) => !current)} onOpenMobileSidebar={() => setSidebarOpen(true)} onSearchChange={setSearch} onAbout={() => setSettingsTab('about')} onNotifications={() => void openNotifications()} />
+      <AppTopbar onAdvancedSearch={view !== 'contacts' && view !== 'tokens' ? openAdvancedSearch : undefined} advancedActive={view === 'search'} sidebarCollapsed={sidebarCollapsed} sidebarOpen={sidebarOpen} search={search} searchPlaceholder={view === 'contacts' ? '搜索联系人姓名或邮箱' : '搜索当前范围内的邮件'} searchShortcut={shortcutLabel(shortcutBindings.focusSearch)} searchInputRef={searchInputRef} onToggleSidebar={() => setSidebarCollapsed((current) => !current)} onOpenMobileSidebar={() => setSidebarOpen(true)} onSearchChange={setSearch} onAbout={() => setSettingsTab('about')} onNotifications={() => void openNotifications()} />
 
       <WorkspaceErrorBoundary label={view === 'tokens' ? '外部接入' : view === 'contacts' ? '联系人' : composeMode ? '写信编辑器' : '邮件工作区'} resetKey={`${view}:${selected?.id ?? ''}:${composeMode ?? ''}`}>
       {view === 'contacts' ? <Suspense fallback={<FeatureFallback label="联系人" />}><ContactsWorkspace contacts={contacts} search={search} onCompose={(contact) => openCompose(activeAccount?.id, [contact.address])} /></Suspense> : view === 'tokens' ? <Suspense fallback={<FeatureFallback label="外部接入" />}><TokenWorkspace accounts={realAccounts} tokens={tokens} latestApiCredential={latestApiCredential} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /></Suspense> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
-          {view === 'drafts' ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => void openDraft(draft)} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => void openDraft()} /></Suspense> : <MessagePane title={groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} participantFilters={participantFilters} hasOtherFilters={Boolean(search.trim()) || mailFilter !== 'all'} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onClearParticipantFilter={removeParticipantFilter} onClearParticipantFilters={clearParticipantFilters} onKeepOnlyParticipantFilters={keepOnlyParticipantFilters} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddAccountIntent({})} />}
+          {view === 'drafts' ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => void openDraft(draft)} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => void openDraft()} /></Suspense> : <MessagePane title={view === 'search' ? smartFolders.folders.find((folder) => folder.id === smartFolderId)?.name ?? '高级搜索' : groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} participantFilters={participantFilters} hasOtherFilters={Boolean(search.trim()) || mailFilter !== 'all' || (view === 'search' && Object.keys(searchFilters ?? {}).length > 0)} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onClearParticipantFilter={removeParticipantFilter} onClearParticipantFilters={clearParticipantFilters} onKeepOnlyParticipantFilters={keepOnlyParticipantFilters} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddAccountIntent({})} />}
           {composeMode ? <Suspense fallback={<FeatureFallback label="写信编辑器" />}><ComposePane ref={composePaneRef} key={`${composeMode}-${(activeDraft?.id ?? (composeMode === 'new' ? composeAccountId ?? composeInitialTo.join(',') : conversationComposeSource?.id ?? selected?.id)) || 'new'}`} accounts={realAccounts} contacts={contacts} composition={preferences.composition} mode={composeMode} initialAccountId={composeAccountId} initialTo={composeInitialTo} original={composeMode === 'new' ? undefined : conversationComposeSource ?? selected} draft={activeDraft} onClose={() => { setComposeMode(null); setConversationComposeSource(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setConversationComposeSource(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /></Suspense> : view === 'drafts' && !selected ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWelcome onCreate={() => openCompose(activeAccount?.id)} /></Suspense> : <MessageReader message={selected} accounts={accounts} onComposeConversationMessage={(message, mode) => { setConversationComposeSource(message); setActiveDraft(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setComposeMode(mode); }} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} contacts={contacts} defaultBodyView={preferences.defaultMessageView} onReplyAll={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('replyAll'); }} onReply={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('forward'); }} onComposeSender={(address) => openCompose(selected?.accountId, [address])} onFilterParticipant={filterParticipant} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}

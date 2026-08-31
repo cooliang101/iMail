@@ -79,7 +79,7 @@ describe('official TypeScript SDK against the Rust MCP transport', () => {
       expect(client.getServerVersion()).toMatchObject({ name: 'imail', version: '1.0.0' });
       expect(client.getServerCapabilities()).toMatchObject({ tools: { listChanged: true } });
       const listed = await client.listTools();
-      expect(listed.tools).toHaveLength(41);
+      expect(listed.tools).toHaveLength(44);
       expect(listed.tools.map((tool) => tool.name)).toContain('conversation_get');
       expect(listed.tools.map((tool) => tool.name)).toContain('imail_status');
       expect(listed.tools.map((tool) => tool.name)).toContain('translation_profiles_list');
@@ -87,6 +87,16 @@ describe('official TypeScript SDK against the Rust MCP transport', () => {
       const status = await client.callTool({ name: 'imail_status', arguments: {} });
       expect(status.isError).not.toBe(true);
       expect(status.structuredContent).toMatchObject({ accounts: 0, messages: 0, drafts: 0 });
+      const saved = await client.callTool({ name: 'smart_folder_save', arguments: { name: '项目预算', filters: { body: '季度预算', unread: false } } });
+      expect(saved.isError).not.toBe(true);
+      const folder = (saved.structuredContent as { folder: { id: string; filters: { body: string; unread: boolean } } }).folder;
+      expect(folder.filters).toMatchObject({ body: '季度预算', unread: false });
+      const folders = await client.callTool({ name: 'smart_folders_list', arguments: {} });
+      expect(folders.structuredContent).toMatchObject({ folders: [{ id: folder.id }] });
+      const results = await client.callTool({ name: 'messages_list', arguments: { filters: folder.filters } });
+      expect(results.isError).not.toBe(true);
+      const removed = await client.callTool({ name: 'smart_folder_delete', arguments: { folderId: folder.id } });
+      expect(removed.structuredContent).toMatchObject({ deleted: true });
     } finally {
       await client.close();
     }

@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { AppButton } from '../../components/AppButton';
 import { AddressBook, Archive, ArrowRight, ArrowsLeftRight, CaretDown, Clock, Code, FolderSimplePlus, Gear, PaperPlaneTilt, PencilSimple, Plus, Star, Tag, Trash, Tray, WarningCircle, X } from '../../components/icons';
 import type { Account } from '../../types';
@@ -6,7 +7,8 @@ import { WorkspaceFolderItem, WorkspaceIcon } from '../organize';
 import { AccountProviderMark } from '../../components/provider-icons';
 import { useI18n } from '../i18n';
 
-export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, messageStats, draftsCount, contactsCount, view, accountFilter, groupFilter, activeLabel, activeMailbox, expandedWorkspaces, sidebarOpen, onClose, onCompose, onAddAccount, onSettings, onSelectScope, onSelectMailbox, onSelectLabel, onEditWorkspace, onToggleWorkspace, onContextTarget, onLogout }: {
+export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, messageStats, draftsCount, contactsCount, view, accountFilter, groupFilter, activeLabel, activeMailbox, expandedWorkspaces, sidebarOpen, onClose, onCompose, onAddAccount, onSettings, onSelectScope, onSelectMailbox, onSelectLabel, onEditWorkspace, onToggleWorkspace, onContextTarget, onLogout, smartFolders }: {
+  smartFolders?: ComponentChildren;
   user: { login: string; displayName: string }; accounts: Account[]; groups: string[]; workspaceFolders: Map<string, WorkspaceFolder[]>; labels: string[]; messageStats: MessageStats; draftsCount: number;
   contactsCount: number;
   view: AppView; accountFilter: string; groupFilter: string | null; activeLabel: string | null; activeMailbox: WorkspaceFolder | null; expandedWorkspaces: Set<string>; sidebarOpen: boolean;
@@ -36,6 +38,7 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
       <button title={t('已删除邮件')} aria-label={t('已删除邮件')} data-icon-tone="danger" className={view === 'trash' ? 'active' : ''} onClick={() => onSelectScope('trash')}><Trash size={19} /><span>{t('已删除邮件')}</span></button>
       <button title={t('垃圾邮件')} aria-label={t('垃圾邮件')} data-icon-tone="warning" className={view === 'junk' ? 'active' : ''} onClick={() => onSelectScope('junk')}><WarningCircle size={19} /><span>{t('垃圾邮件')}</span></button>
     </nav>
+    {smartFolders}
     <section className="workspace-section"><div className="section-label"><span>{t('工作空间')}</span><button className="workspace-add" title={t('新增或整理工作空间')} aria-label={t('新增工作空间')} onClick={() => onEditWorkspace(null)}><FolderSimplePlus size={16} /></button></div>
       <nav className="nav-block groups workspace-list">{groups.map((group) => {
         const folders = workspaceFolders.get(group) ?? []; const expanded = expandedWorkspaces.has(group); const visibleFolders = expanded ? folders : folders.slice(0, 3);

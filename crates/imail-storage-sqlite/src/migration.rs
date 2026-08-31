@@ -140,6 +140,10 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
         }
         applied_versions.push(12);
     }
+    if from_version < 13 {
+        transaction.execute_batch(include_str!("../sql/migration-v13-search.sql"))?;
+        applied_versions.push(13);
+    }
     ensure_message_query_indexes(&transaction)?;
     if from_version < CURRENT_SCHEMA_VERSION {
         transaction.execute(

@@ -1,0 +1,142 @@
+{
+  "type": "object",
+  "properties": {
+    "group": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "q": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "subject": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "body": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "sender": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 320
+    },
+    "recipient": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 320
+    },
+    "mailbox": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "mailboxName": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "since": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "before": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "unread": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "flagged": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "hasAttachments": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "snoozed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "accountIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "maxItems": 100
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+      },
+      "maxItems": 30
+    },
+    "mailboxRole": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "inbox",
+        "sent",
+        "archive",
+        "drafts",
+        "trash",
+        "junk",
+        "custom"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

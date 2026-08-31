@@ -72,6 +72,7 @@ pub(crate) fn routes() -> Router<Arc<AppState>> {
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MessageQueryInput {
+    filters: Option<String>,
     account_id: Option<String>,
     group: Option<String>,
     q: Option<String>,
@@ -109,6 +110,7 @@ pub fn embedded_message_query(
     fields: &BTreeMap<String, String>,
 ) -> Result<MessageQuery, &'static str> {
     validate_query(MessageQueryInput {
+        filters: fields.get("filters").cloned(),
         account_id: fields.get("accountId").cloned(),
         group: fields.get("group").cloned(),
         q: fields.get("q").cloned(),
@@ -1203,6 +1205,19 @@ async fn notifications(
 }
 
 fn validate_query(input: MessageQueryInput) -> Result<MessageQuery, ()> {
+    let filters = input
+        .filters
+        .as_deref()
+        .map(|raw| {
+            if raw.len() > 32_768 {
+                return Err(());
+            }
+            let filters: imail_core::search::SearchFilters =
+                serde_json::from_str(raw).map_err(|_| ())?;
+            filters.validate().map_err(|_| ())?;
+            Ok(filters)
+        })
+        .transpose()?;
     if input.q.as_ref().is_some_and(|value| utf16(value) > 200)
         || invalid_optional(&input.mailbox, 500, true)
         || invalid_optional(&input.mailbox_name, 500, true)
@@ -1251,7 +1266,7 @@ fn validate_query(input: MessageQueryInput) -> Result<MessageQuery, ()> {
         unread,
         flagged,
         has_attachments,
-        mailbox_role: if has_named_mailbox {
+        mailbox_role: if has_named_mailbox || (filters.is_some() && input.mailbox_role.is_none()) {
             None
         } else {
             Some(input.mailbox_role.unwrap_or_else(|| "inbox".into()))
@@ -1263,6 +1278,7 @@ fn validate_query(input: MessageQueryInput) -> Result<MessageQuery, ()> {
         limit,
         offset,
         cursor,
+        filters,
     })
 }
 

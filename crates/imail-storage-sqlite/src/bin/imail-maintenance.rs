@@ -26,6 +26,12 @@ fn main() {
 
 fn execute(arguments: &[String], data_root: PathBuf) -> Result<Value, Box<dyn Error>> {
     match arguments {
+        [command] if command == "search-rebuild" => {
+            let started = std::time::Instant::now();
+            let mut store = imail_storage_sqlite::SqliteAuthStore::open_database(data_root.join("imail.sqlite"))?;
+            store.rebuild_body_search_index()?;
+            Ok(json!({"ok":true,"schemaVersion":CURRENT_SCHEMA_VERSION,"elapsedMs":started.elapsed().as_millis()}))
+        }
         [command, backup_root] if command == "backup" => {
             let report = create_data_backup(
                 data_root,
@@ -85,7 +91,7 @@ fn execute(arguments: &[String], data_root: PathBuf) -> Result<Value, Box<dyn Er
                 "foreignKeysVerified": migration.foreign_keys_verified,
             }))
         }
-        _ => Err("用法：imail-maintenance backup <新备份目录> | restore <备份目录> <新恢复目录> | upgrade-preflight <新备份目录> <新预检目录>".into()),
+        _ => Err("用法：imail-maintenance backup <新备份目录> | restore <备份目录> <新恢复目录> | upgrade-preflight <新备份目录> <新预检目录> | search-rebuild".into()),
     }
 }
 

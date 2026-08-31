@@ -461,6 +461,18 @@ impl MessageRepository for SqliteAuthStore {
             );
             values.push(SqlValue::Text(recipient.to_string()));
         }
+        if let Some(filters) = &query.filters {
+            crate::search::append_filters(filters, &mut clauses, &mut values, now)?;
+        }
+        // Total describes the entire query, not only rows after the paging cursor.
+        let total: i64 = self.connection.query_row(
+            &format!(
+                "SELECT count(*) FROM messages m JOIN accounts a ON a.id=m.account_id WHERE {}",
+                clauses.join(" AND ")
+            ),
+            rusqlite::params_from_iter(values.iter()),
+            |row| row.get(0),
+        )?;
         if let Some(cursor) = &query.cursor {
             clauses.push("(m.received_at < ? OR (m.received_at = ? AND m.id < ?))".into());
             values.extend([
@@ -473,11 +485,6 @@ impl MessageRepository for SqliteAuthStore {
             "FROM messages m JOIN accounts a ON a.id=m.account_id WHERE {}",
             clauses.join(" AND ")
         );
-        let total: i64 = self.connection.query_row(
-            &format!("SELECT count(*) {from}"),
-            rusqlite::params_from_iter(values.iter()),
-            |row| row.get(0),
-        )?;
         values.push(SqlValue::Integer((query.limit + 1) as i64));
         values.push(SqlValue::Integer(query.offset as i64));
         let mut statement = self.connection.prepare(&format!(
@@ -657,6 +664,14 @@ impl MessageRepository for SqliteAuthStore {
                 SqlValue::Text(cursor.date.clone()),
                 SqlValue::Text(cursor.id.clone()),
             ]);
+        }
+        if let Some(filters) = &query.filters {
+            crate::search::append_filters(
+                filters,
+                &mut clauses,
+                &mut values,
+                &chrono::Utc::now().to_rfc3339(),
+            )?;
         }
         values.push(SqlValue::Integer((query.limit + 1) as i64));
         let mut statement = self.connection.prepare(&format!(

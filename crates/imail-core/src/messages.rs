@@ -7,6 +7,7 @@ mod conversation;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MessageQuery {
+    pub filters: Option<crate::search::SearchFilters>,
     pub account_id: Option<String>,
     pub group: Option<String>,
     pub text: Option<String>,
@@ -40,6 +41,7 @@ pub struct GatewayMessageCursor {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GatewayMessageQuery {
+    pub filters: Option<crate::search::SearchFilters>,
     pub account_ids: Vec<String>,
     pub recipient: Option<String>,
     pub mailbox_role: Option<String>,
@@ -133,6 +135,15 @@ impl<'a, R: MessageRepository> MessageQueryService<'a, R> {
         query: &MessageQuery,
         now: &str,
     ) -> Result<MessagePage, ApplicationError<R::Error>> {
+        if let Some(filters) = &query.filters {
+            filters
+                .validate()
+                .map_err(|message| ApplicationError::Domain {
+                    code: "SEARCH_FILTERS_INVALID",
+                    status: 400,
+                    message,
+                })?;
+        }
         self.repository
             .query_messages(user_id, query, now)
             .map_err(ApplicationError::Repository)

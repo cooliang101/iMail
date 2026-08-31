@@ -80,6 +80,9 @@ Authorization: Bearer imail_mcp_xxx
 | 同步 | `sync_policy_get` | 读取默认/账户级自动同步设置、邮箱状态和最近任务 |
 | 同步 | `sync_policy_update` | 更新自动同步开关、文件夹范围与失败通知 |
 | 邮件 | `messages_list` | 分页和多条件查询本地缓存 |
+| 搜索 | `smart_folders_list` | 列出当前用户保存的查询定义 |
+| 搜索 | `smart_folder_save` | 用 `name` 和 `filters` 新建；提供 `folderId` 时更新单个查询 |
+| 搜索 | `smart_folder_delete` | 删除保存的查询定义，不删除邮件 |
 | 邮件 | `message_get` | 完整正文、HTML、标签与附件元数据 |
 | 邮件 | `conversation_get` | 按明确回复头读取本地会话摘要；保留账户/文件夹副本，不修改已读状态 |
 | 邮件 | `message_update` | 已读、星标、标签和稍后处理 |
@@ -99,6 +102,8 @@ Authorization: Bearer imail_mcp_xxx
 `theme_custom_update` 接受 9 个 `#RRGGBB` 颜色字段以及受限的圆角、阴影和字体枚举。它与 `/api/preferences` 的 `customTheme` 共用用户级安全主题存储；返回的 `theme` JSON 可直接粘贴到“设置 → 主题 → 自定义主题”。两条控制面都拒绝任意 CSS、URL、透明色与额外字段。完整生成约束见 [`custom-theme.md`](custom-theme.md)。
 
 ## 4. 推荐工作流
+
+高级搜索：`messages_list.filters` 接受账户、主题、正文、To/Cc、日期和状态等组合条件对象。先用 `smart_folders_list` 读取定义，再把所选文件夹的 `filters` 传入 `messages_list` 执行动态查询。条件与既有参数及授权范围取交集；正文仅覆盖本实例缓存，不搜索附件。完整语义、限制和维护方式见[高级搜索与智能文件夹](advanced-search.md)。
 
 - 操作账户前先调用 `accounts_list`，使用邮箱地址定位，不猜内部 ID。
 - 操作邮件前先调用 `messages_list` 或 `message_get`，确认发件人、主题和目标邮箱。

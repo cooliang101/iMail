@@ -53,6 +53,7 @@ async function installMailFixture(page: Page) {
     const method = request.method();
     if (path === '/api/auth/status') return json(route, { setupRequired: false, registrationOpen: true, user: { id: 'user-1', login: 'fixture', displayName: 'Fixture User', createdAt: '2026-08-13T00:00:00Z' } });
     if (path === '/api/accounts') return json(route, { accounts: [account] });
+    if (path === '/api/smart-folders' && method === 'GET') return json(route, { folders: [] });
     if (path === '/api/developer-tokens') return json(route, { tokens: [] });
     if (path === '/api/external-access') return json(route, { settings: { mcpEnabled: false, gatewayEnabled: false } });
     if (path === '/api/preferences') return json(route, method === 'PATCH' ? { preferences: { ...preferences, ...request.postDataJSON() } } : { preferences });
