@@ -3,6 +3,7 @@ import { forwardRef } from 'preact/compat';
 import addressBook from '@iconify-icons/ph/address-book';
 import addressBookDuotone from '@iconify-icons/ph/address-book-duotone';
 import archive from '@iconify-icons/ph/archive';
+import arrowBendDoubleUpLeft from '@iconify-icons/ph/arrow-bend-double-up-left';
 import arrowBendUpLeft from '@iconify-icons/ph/arrow-bend-up-left';
 import arrowBendUpRight from '@iconify-icons/ph/arrow-bend-up-right';
 import arrowClockwise from '@iconify-icons/ph/arrow-clockwise';
@@ -149,6 +150,7 @@ function createIcon(name: string, weights: AvailableWeights) {
 
 export const AddressBook = createIcon('AddressBook', { regular: addressBook, duotone: addressBookDuotone });
 export const Archive = createIcon('Archive', { regular: archive });
+export const ArrowBendDoubleUpLeft = createIcon('ArrowBendDoubleUpLeft', { regular: arrowBendDoubleUpLeft });
 export const ArrowBendUpLeft = createIcon('ArrowBendUpLeft', { regular: arrowBendUpLeft });
 export const ArrowBendUpRight = createIcon('ArrowBendUpRight', { regular: arrowBendUpRight });
 export const ArrowClockwise = createIcon('ArrowClockwise', { regular: arrowClockwise });
