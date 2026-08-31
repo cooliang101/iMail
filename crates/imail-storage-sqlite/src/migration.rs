@@ -121,6 +121,25 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
         transaction.execute_batch(MIGRATION_V11_MESSAGE_SOURCES)?;
         applied_versions.push(11);
     }
+    if from_version < 12 {
+        transaction.execute_batch(include_str!("../sql/migration-v12-composition.sql"))?;
+        // Preserve historical reply relationships where exact source was already cached.
+        // Stream one source at a time; neither rewrite nor fetch original messages.
+        let mut statement =
+            transaction.prepare("SELECT message_id, source FROM message_sources")?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            let id: String = row.get(0)?;
+            let source: Vec<u8> = row.get(1)?;
+            if let Ok(parsed) = imail_mail::parse_rfc822(&source) {
+                transaction.execute(
+                    "UPDATE messages SET mail_headers_json=?1 WHERE id=?2",
+                    (serde_json::to_string(&parsed.headers)?, id),
+                )?;
+            }
+        }
+        applied_versions.push(12);
+    }
     ensure_message_query_indexes(&transaction)?;
     if from_version < CURRENT_SCHEMA_VERSION {
         transaction.execute(

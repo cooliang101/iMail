@@ -2409,7 +2409,7 @@ mod tests {
                 .unwrap(),
         )
         .await;
-        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 40);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 41);
         assert!(listed.to_string().contains("accounts_list"));
         let tools = listed["result"]["tools"].as_array().unwrap();
         let shared_contract: Value =
@@ -2524,6 +2524,7 @@ mod tests {
                 .upsert_message(
                     &owner_id,
                     &imail_protocol::MessageReadModel {
+                        headers: Default::default(),
                         id: "mcp-side-effect".into(), account_id: future.id, mailbox: "INBOX".into(), mailbox_role: "inbox".into(), uid: 7,
                         message_id: Some("<mcp@example.net>".into()), from: json!({"name":"Sender","address":"sender@example.org"}), to: json!([{"address":"future@example.net"}]),
                         subject: "MCP side effects".into(), preview: "Body".into(), text: "Body".into(), html: None, date: "2026-08-10T08:00:00.000Z".into(),
@@ -2837,6 +2838,7 @@ mod tests {
                 .upsert_message(
                     &owner.id,
                     &imail_protocol::MessageReadModel {
+                        headers: Default::default(),
                         id: id.into(),
                         account_id: account_id.clone(),
                         mailbox: "INBOX".into(),
@@ -3332,6 +3334,7 @@ mod tests {
         );
 
         let event_message = imail_protocol::MessageReadModel {
+            headers: Default::default(),
             id: "ws-message".into(),
             account_id: account_id.clone(),
             mailbox: "INBOX".into(),
@@ -5761,6 +5764,7 @@ mod tests {
         let message_id = "owned-message".to_string();
         let message = |id: String, account_id: String, sender: &str| {
             imail_protocol::MessageReadModel {
+                headers: Default::default(),
                 id,
                 account_id,
                 mailbox: "INBOX".into(),
@@ -5796,6 +5800,8 @@ mod tests {
         project_message.mailbox = "Projects/2026".into();
         project_message.mailbox_role = "custom".into();
         project_message.subject = "Project note".into();
+        project_message.message_id = Some("<project@example.com>".into());
+        project_message.headers.reply.in_reply_to = vec!["<owned@example.com>".into()];
         project_message.date = "2026-08-09T08:00:00.000Z".into();
         store.upsert_message(&owner.id, &project_message).unwrap();
         store
@@ -5826,6 +5832,7 @@ mod tests {
             .upsert_draft(
                 &owner.id,
                 &imail_protocol::DraftReadModel {
+                    envelope: Default::default(),
                     id: draft_id.clone(),
                     account_id: account_id.clone(),
                     to: json!([]),
@@ -5898,6 +5905,51 @@ mod tests {
                 .body(body)
                 .unwrap()
         };
+
+        let conversation_uri = format!("/api/messages/{message_id}/conversation");
+        let conversation = router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                conversation_uri.clone(),
+                &owner_session,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(conversation.status(), StatusCode::OK);
+        let conversation = json(conversation).await;
+        assert_eq!(conversation["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(conversation["messages"][0]["id"], "project-message");
+        assert_eq!(conversation["messages"][0]["mailbox"], "Projects/2026");
+        assert!(conversation["messages"][0].get("text").is_none());
+        assert!(conversation["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|message| message["unread"] == true));
+        let foreign = router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                conversation_uri,
+                &other_session,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::NOT_FOUND);
+        let anonymous = router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                format!("/api/messages/{message_id}/conversation"),
+                "",
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
 
         let listed = router
             .clone()

@@ -171,7 +171,10 @@ mod tests {
         assert_eq!(report["noHttpListener"], true);
         assert_eq!(report["syncWorker"], false);
         assert_eq!(report["protectedFilesUnchanged"], true);
-        assert_eq!(report["inventory"]["schemaVersion"], 11);
+        assert_eq!(
+            report["inventory"]["schemaVersion"],
+            imail_protocol::CURRENT_SCHEMA_VERSION
+        );
     }
 
     #[test]

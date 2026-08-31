@@ -74,6 +74,8 @@ async function installMailFixture(page: Page) {
       const page = cursor ? messages.slice(60) : messages.slice(0, 60);
       return json(route, { messages: page, total: 70, nextOffset: cursor ? 70 : 60, nextCursor: cursor ? undefined : 'fixture-cursor', hasMore: !cursor });
     }
+    const conversation = path.match(/^\/api\/messages\/(message-\d{3})\/conversation$/);
+    if (conversation && method === 'GET') return json(route, { messages: messages.filter(item => item.id === conversation[1]) });
     const detail = path.match(/^\/api\/messages\/(message-\d{3})$/);
     if (detail && method === 'GET') {
       const message = messages.find((item) => item.id === detail[1])!;

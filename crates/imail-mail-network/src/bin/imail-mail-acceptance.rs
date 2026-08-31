@@ -64,6 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let send = sender_adapter.send(
             &sender_config,
             &OutgoingMessage {
+                envelope: Default::default(),
                 from: MailAddressView {
                     name: sender_config.display_name.clone(),
                     address: sender_config.email.clone(),

@@ -123,6 +123,7 @@ fn exercise(arguments: &[String]) -> Result<serde_json::Value, Box<dyn std::erro
         r#"{"defaultMessageView":"source"}"#,
     )?;
     let rust_message = MessageReadModel {
+        headers: Default::default(),
         id: "rust-contract-message".into(),
         account_id: rust_account.id.clone(),
         mailbox: "INBOX".into(),
@@ -145,6 +146,7 @@ fn exercise(arguments: &[String]) -> Result<serde_json::Value, Box<dyn std::erro
     };
     store.upsert_message(&rust_user.id, &rust_message)?;
     let rust_draft = DraftReadModel {
+        envelope: Default::default(),
         id: "rust-contract-draft".into(),
         account_id: rust_account.id.clone(),
         to: json!(["recipient@example.test"]),

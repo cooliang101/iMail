@@ -18,7 +18,7 @@ impl ContentRepository for SqliteAuthStore {
             "SELECT m.id, m.account_id, m.mailbox, m.mailbox_role, m.uid, m.message_id,
                     m.from_json, m.to_json, m.subject, m.preview, m.text_body, m.html_body,
                     m.received_at, m.unread, m.flagged, m.has_attachments,
-                    m.attachments_json, m.labels_json, m.snoozed_until
+                    m.attachments_json, m.labels_json, m.snoozed_until, m.mail_headers_json
              FROM messages m JOIN accounts a ON a.id=m.account_id
              WHERE a.user_id=?1 ORDER BY m.received_at DESC, m.id",
         )?;
@@ -49,8 +49,8 @@ impl ContentRepository for SqliteAuthStore {
             "INSERT INTO messages
              (id, account_id, mailbox, mailbox_role, uid, message_id, from_json, to_json,
               subject, preview, text_body, html_body, received_at, unread, flagged,
-              has_attachments, attachments_json, labels_json, snoozed_until)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+              has_attachments, attachments_json, labels_json, snoozed_until, mail_headers_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
              ON CONFLICT(id) DO UPDATE SET
                mailbox=excluded.mailbox, mailbox_role=excluded.mailbox_role, uid=excluded.uid,
                message_id=excluded.message_id, from_json=excluded.from_json,
@@ -59,7 +59,7 @@ impl ContentRepository for SqliteAuthStore {
                received_at=excluded.received_at, unread=excluded.unread,
                flagged=excluded.flagged, has_attachments=excluded.has_attachments,
                attachments_json=excluded.attachments_json, labels_json=excluded.labels_json,
-               snoozed_until=excluded.snoozed_until",
+               snoozed_until=excluded.snoozed_until, mail_headers_json=excluded.mail_headers_json",
             params![
                 message.id,
                 message.account_id,
@@ -80,6 +80,7 @@ impl ContentRepository for SqliteAuthStore {
                 attachments,
                 labels,
                 message.snoozed_until,
+                serde_json::to_string(&message.headers)?,
             ],
         )?;
         transaction.commit()?;
@@ -98,7 +99,7 @@ impl ContentRepository for SqliteAuthStore {
     fn list_drafts(&self, user_id: &str) -> Result<Vec<DraftReadModel>, Self::Error> {
         let mut statement = self.connection.prepare(
             "SELECT d.id, d.account_id, d.to_json, d.cc_json, d.subject, d.text_body,
-                    d.html_body, d.attachments_json, d.created_at, d.updated_at
+                    d.html_body, d.attachments_json, d.created_at, d.updated_at, d.compose_json
              FROM drafts d JOIN accounts a ON a.id=d.account_id
              WHERE a.user_id=?1 ORDER BY d.updated_at DESC, d.id",
         )?;
@@ -115,12 +116,14 @@ impl ContentRepository for SqliteAuthStore {
                     row.get::<_, String>(7)?,
                     row.get::<_, String>(8)?,
                     row.get::<_, String>(9)?,
+                    row.get::<_, String>(10)?,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         rows.into_iter()
             .map(|row| {
                 Ok(DraftReadModel {
+                    envelope: serde_json::from_str(&row.10)?,
                     id: row.0,
                     account_id: row.1,
                     to: serde_json::from_str(&row.2)?,
@@ -151,13 +154,13 @@ impl ContentRepository for SqliteAuthStore {
         transaction.execute(
             "INSERT INTO drafts
              (id, account_id, to_json, cc_json, subject, text_body, html_body,
-              attachments_json, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+              attachments_json, created_at, updated_at, compose_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id,
                to_json=excluded.to_json, cc_json=excluded.cc_json,
                subject=excluded.subject, text_body=excluded.text_body,
                html_body=excluded.html_body, attachments_json=excluded.attachments_json,
-               updated_at=excluded.updated_at",
+               updated_at=excluded.updated_at, compose_json=excluded.compose_json",
             params![
                 draft.id,
                 draft.account_id,
@@ -169,6 +172,7 @@ impl ContentRepository for SqliteAuthStore {
                 attachments,
                 draft.created_at,
                 draft.updated_at,
+                serde_json::to_string(&draft.envelope)?,
             ],
         )?;
         transaction.commit()?;
@@ -346,6 +350,21 @@ impl ContentRepository for SqliteAuthStore {
 impl MessageRepository for SqliteAuthStore {
     type Error = AuthStoreError;
 
+    fn conversation_candidates(&self, user_id: &str) -> Result<Vec<MessageReadModel>, Self::Error> {
+        let mut statement = self.connection.prepare(
+            "SELECT m.id, m.account_id, m.mailbox, m.mailbox_role, m.uid, m.message_id,
+                    m.from_json, m.to_json, m.subject, m.preview, '', NULL,
+                    m.received_at, m.unread, m.flagged, m.has_attachments,
+                    m.attachments_json, m.labels_json, m.snoozed_until, m.mail_headers_json
+             FROM messages m JOIN accounts a ON a.id=m.account_id
+             WHERE a.user_id=?1 ORDER BY m.received_at, m.id",
+        )?;
+        let rows = statement
+            .query_map([user_id], message_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter().map(message_from_raw).collect()
+    }
+
     fn query_messages(
         &self,
         user_id: &str,
@@ -465,7 +484,7 @@ impl MessageRepository for SqliteAuthStore {
             "SELECT m.id, m.account_id, m.mailbox, m.mailbox_role, m.uid, m.message_id,
                     m.from_json, m.to_json, m.subject, m.preview, m.text_body, m.html_body,
                     m.received_at, m.unread, m.flagged, m.has_attachments,
-                    m.attachments_json, m.labels_json, m.snoozed_until
+                    m.attachments_json, m.labels_json, m.snoozed_until, m.mail_headers_json
              {from} ORDER BY m.received_at DESC, m.id DESC LIMIT ? OFFSET ?"
         ))?;
         let rows = statement
@@ -493,7 +512,7 @@ impl MessageRepository for SqliteAuthStore {
             "SELECT m.id, m.account_id, m.mailbox, m.mailbox_role, m.uid, m.message_id,
                     m.from_json, m.to_json, m.subject, m.preview, m.text_body, m.html_body,
                     m.received_at, m.unread, m.flagged, m.has_attachments,
-                    m.attachments_json, m.labels_json, m.snoozed_until
+                    m.attachments_json, m.labels_json, m.snoozed_until, m.mail_headers_json
              FROM messages m JOIN accounts a ON a.id=m.account_id
              WHERE m.id=?1 AND a.user_id=?2",
         )?;
@@ -644,7 +663,7 @@ impl MessageRepository for SqliteAuthStore {
             "SELECT m.id, m.account_id, m.mailbox, m.mailbox_role, m.uid, m.message_id,
                     m.from_json, m.to_json, m.subject, m.preview, m.text_body, m.html_body,
                     m.received_at, m.unread, m.flagged, m.has_attachments,
-                    m.attachments_json, m.labels_json, m.snoozed_until
+                    m.attachments_json, m.labels_json, m.snoozed_until, m.mail_headers_json
              FROM messages m JOIN accounts a ON a.id=m.account_id
              WHERE {} ORDER BY m.received_at DESC, m.id DESC LIMIT ?",
             clauses.join(" AND ")
@@ -712,6 +731,7 @@ type RawMessage = (
     String,
     String,
     Option<String>,
+    String,
 );
 
 fn message_row(row: &Row<'_>) -> rusqlite::Result<RawMessage> {
@@ -735,11 +755,13 @@ fn message_row(row: &Row<'_>) -> rusqlite::Result<RawMessage> {
         row.get(16)?,
         row.get(17)?,
         row.get(18)?,
+        row.get(19)?,
     ))
 }
 
 fn message_from_raw(row: RawMessage) -> Result<MessageReadModel, AuthStoreError> {
     Ok(MessageReadModel {
+        headers: serde_json::from_str(&row.19)?,
         id: row.0,
         account_id: row.1,
         mailbox: row.2,

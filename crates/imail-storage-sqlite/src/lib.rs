@@ -135,7 +135,13 @@ impl SqliteReadOnlyStore {
     }
 
     fn list_messages(&self) -> Result<Vec<MessageReadModel>, StorageError> {
-        collect(&self.connection, "SELECT id, account_id, mailbox, mailbox_role, uid, message_id, from_json, to_json, subject, preview, text_body, html_body, received_at, unread, flagged, has_attachments, attachments_json, labels_json, snoozed_until FROM messages ORDER BY received_at DESC", |row| Ok(MessageReadModel {
+        let headers = if self.schema_version()? >= 12 {
+            "mail_headers_json"
+        } else {
+            "'{}'"
+        };
+        collect(&self.connection, &format!("SELECT id, account_id, mailbox, mailbox_role, uid, message_id, from_json, to_json, subject, preview, text_body, html_body, received_at, unread, flagged, has_attachments, attachments_json, labels_json, snoozed_until, {headers} FROM messages ORDER BY received_at DESC"), |row| Ok(MessageReadModel {
+            headers: json(row, 19)?,
             id: row.get(0)?, account_id: row.get(1)?, mailbox: row.get(2)?, mailbox_role: row.get(3)?,
             uid: row.get(4)?, message_id: row.get(5)?, from: json(row, 6)?, to: json(row, 7)?,
             subject: row.get(8)?, preview: row.get(9)?, text: row.get(10)?, html: row.get(11)?,
@@ -146,7 +152,13 @@ impl SqliteReadOnlyStore {
     }
 
     fn list_drafts(&self) -> Result<Vec<DraftReadModel>, StorageError> {
-        collect(&self.connection, "SELECT id, account_id, to_json, cc_json, subject, text_body, html_body, attachments_json, created_at, updated_at FROM drafts ORDER BY updated_at DESC, id", |row| Ok(DraftReadModel {
+        let envelope = if self.schema_version()? >= 12 {
+            "compose_json"
+        } else {
+            "'{}'"
+        };
+        collect(&self.connection, &format!("SELECT id, account_id, to_json, cc_json, subject, text_body, html_body, attachments_json, created_at, updated_at, {envelope} FROM drafts ORDER BY updated_at DESC, id"), |row| Ok(DraftReadModel {
+            envelope: json(row, 10)?,
             id: row.get(0)?, account_id: row.get(1)?, to: json(row, 2)?, cc: json(row, 3)?,
             subject: row.get(4)?, text: row.get(5)?, html: row.get(6)?, attachments: json(row, 7)?,
             created_at: row.get(8)?, updated_at: row.get(9)?,

@@ -3,6 +3,8 @@ use serde::Serialize;
 
 use crate::{ApplicationError, MessageRepository};
 
+mod conversation;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MessageQuery {
     pub account_id: Option<String>,
@@ -82,6 +84,47 @@ pub struct MessageQueryService<'a, R: MessageRepository> {
 impl<'a, R: MessageRepository> MessageQueryService<'a, R> {
     pub fn new(repository: &'a R) -> Self {
         Self { repository }
+    }
+
+    pub fn conversation(
+        &self,
+        user_id: &str,
+        message_id: &str,
+    ) -> Result<Vec<MessageReadModel>, ApplicationError<R::Error>> {
+        let candidates = self
+            .repository
+            .conversation_candidates(user_id)
+            .map_err(ApplicationError::Repository)?;
+        let mut counts = std::collections::HashMap::<String, usize>::new();
+        for candidate in &candidates {
+            if let Some(id) = candidate
+                .message_id
+                .as_deref()
+                .and_then(imail_protocol::normalize_message_id)
+            {
+                *counts.entry(id).or_default() += 1;
+            }
+        }
+        // Only duplicates need cached body comparison. Retain hashes, never all bodies.
+        let mut fingerprints = std::collections::HashMap::new();
+        for candidate in &candidates {
+            if candidate
+                .message_id
+                .as_deref()
+                .and_then(imail_protocol::normalize_message_id)
+                .is_some_and(|id| counts.get(&id).copied().unwrap_or_default() > 1)
+            {
+                let full = self.get(user_id, &candidate.id)?;
+                fingerprints.insert(candidate.id.clone(), conversation::fingerprint(&full));
+            }
+        }
+        conversation::related(candidates, message_id, &fingerprints).ok_or(
+            ApplicationError::Domain {
+                code: "MESSAGE_NOT_FOUND",
+                status: 404,
+                message: "邮件不存在",
+            },
+        )
     }
 
     pub fn query(

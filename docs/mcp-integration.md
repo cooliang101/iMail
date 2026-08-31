@@ -45,10 +45,18 @@ Authorization: Bearer imail_mcp_xxx
 
 ## 3. 工具速查
 
+写信与会话的完整边界见[写信与会话](composition-and-conversations.md)。
+
+- `message_send` / `draft_save` 新增可选 `bcc: string[]`、`inReplyTo: string[]`、`references: string[]`，每组最多 100 项。发送时 To/Cc/Bcc 合计至少一人；Bcc 不写入投递 MIME。
+- `conversation_get` 输入 `{ "messageId": "记录 ID" }`，返回按时间排列的 `messages` 摘要，不含正文。使用每条摘要的 `id` 调用 `message_get`；不要把它与 RFC Message-ID 混淆。
+- `settings_update.composition` 为当前用户整体替换写信配置，包含 `signatures` 与 `templates` 数组。签名字段为 `accountId`、`text`、`newMessages`、`replies`；模板字段为 `id`、`name`、`subject`、`text`。签名账户 ID 可从 `accounts_list` 取得，且必须属于当前用户。
+- 签名和模板保存的是纯文本；调用发送/草稿工具时不会由服务端隐式追加签名或展开模板。客户端或 Agent 应先读取配置，生成明确正文，再保存或发送，避免重复追加。
+- 会话查询仅向登录应用用户和 `mcp:full` 提供；Gateway 不增加跨邮箱会话聚合入口，保持 Token 的邮箱授权边界。
+
 | 领域 | 工具 | 说明 |
 | --- | --- | --- |
 | 状态 | `imail_status` | 账户、邮件、未读、草稿和最近同步概览 |
-| 设置 | `settings_get` / `settings_update` | 读取或更新主题、启动、阅读、通知、邮件展示与快捷键偏好 |
+| 设置 | `settings_get` / `settings_update` | 读取或更新主题、启动、阅读、通知、邮件展示、写信签名/模板与快捷键偏好 |
 | 主题 | `theme_custom_get` / `theme_custom_update` | 读取或保存经过校验的自定义主题令牌，不接受任意 CSS |
 | 账户 | `accounts_list` | 非敏感账户元数据与文件夹 |
 | 账户 | `account_add_with_code` | 用服务商授权码/应用专用密码添加 IMAP/SMTP 账户 |
@@ -73,14 +81,15 @@ Authorization: Bearer imail_mcp_xxx
 | 同步 | `sync_policy_update` | 更新自动同步开关、文件夹范围与失败通知 |
 | 邮件 | `messages_list` | 分页和多条件查询本地缓存 |
 | 邮件 | `message_get` | 完整正文、HTML、标签与附件元数据 |
+| 邮件 | `conversation_get` | 按明确回复头读取本地会话摘要；保留账户/文件夹副本，不修改已读状态 |
 | 邮件 | `message_update` | 已读、星标、标签和稍后处理 |
 | 邮件 | `message_move` | 归档或移至垃圾箱，并写回 IMAP |
-| 邮件 | `message_send` | 文本/HTML 发信及 Base64 附件 |
+| 邮件 | `message_send` | 文本/HTML 发信、Bcc、回复关联头及 Base64 附件 |
 | 翻译 | `translation_profiles_list` | 列出当前用户可用翻译 Profile 与状态，不返回凭据原文 |
 | 翻译 | `message_translate` | 使用已配置的服务端 Profile 翻译可见正文；不支持 WebView 本地 Profile |
 | 附件 | `attachment_download` | 从用户隔离的本地缓存读取；未命中时从 IMAP 下载、写入缓存并返回 Base64 内容 |
 | 草稿 | `drafts_list` / `draft_get` | 查询草稿摘要或完整内容 |
-| 草稿 | `draft_save` / `draft_delete` | 新建、覆盖或删除本地草稿 |
+| 草稿 | `draft_save` / `draft_delete` | 新建、覆盖或删除本地草稿；Bcc 与回复关联头随草稿保存 |
 | 整理 | `labels_list` / `notifications_list` | 标签与连接/未读/稍后通知 |
 
 `settings_update.theme` 接受 `mint-fresh`、`tech`、`business-blue`、`soft-neubrutalism` 或 `constructivist-red`；未提供该字段时保持当前主题。

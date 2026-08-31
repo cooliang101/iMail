@@ -18,14 +18,16 @@ import { AppleHmeSettingsPanel } from './AppleHmeSettingsPanel';
 import { AboutPanel } from './AboutPanel';
 import { TranslationSettingsPanel } from '../translation';
 import { useI18n } from '../i18n';
+import { CompositionSettingsPanel } from '../compose/CompositionSettingsPanel';
 
-export type SettingsTab = 'general' | 'service' | 'appearance' | 'accounts' | 'apple-hme' | 'translation' | 'shortcuts' | 'notifications' | 'display' | 'privacy' | 'about';
+export type SettingsTab = 'general' | 'service' | 'appearance' | 'accounts' | 'apple-hme' | 'translation' | 'shortcuts' | 'notifications' | 'display' | 'privacy' | 'about' | 'composition';
 
 const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof Gear }> = [
   { id: 'general', label: '通用', detail: '启动与阅读行为', icon: Gear },
   { id: 'service', label: '服务连接', detail: '本地或远程服务', icon: HardDrives },
   { id: 'appearance', label: '主题', detail: '界面风格与色彩', icon: Palette },
   { id: 'accounts', label: '邮箱管理', detail: '授权、代理与工作空间', icon: Envelope },
+  { id: 'composition', label: '写信', detail: '账户签名与模板', icon: Envelope },
   { id: 'apple-hme', label: '隐私邮箱', detail: 'iCloud Hide My Email', icon: Cloud },
   { id: 'translation', label: '翻译服务', detail: '翻译服务与语言', icon: Globe },
   { id: 'shortcuts', label: '快捷键', detail: '键盘操作与绑定', icon: Keyboard },
@@ -61,6 +63,7 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
           <button className="settings-close" type="button" aria-label={t('关闭设置')} title={t('关闭设置')} onClick={onClose}><X size={21} /></button>
         </div>
         {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
+        {activeTab === 'composition' && <CompositionSettingsPanel accounts={accounts} preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'service' && <ServicePanel />}
         {activeTab === 'appearance' && <AppearancePanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'accounts' && <AccountSettingsPanel accounts={accounts} onAddAccount={() => onAddAccount(undefined, 'accounts')} onReload={onReload} setNotice={setNotice} />}

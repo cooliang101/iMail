@@ -51,6 +51,11 @@ export type Account = {
 };
 
 export type Message = {
+  messageId?: string;
+  cc?: Array<{ name: string; address: string }>;
+  replyTo?: Array<{ name: string; address: string }>;
+  inReplyTo?: string[];
+  references?: string[];
   id: string;
   accountId: string;
   mailbox: string;
@@ -94,6 +99,9 @@ export type ContactLogo = {
 };
 
 export type Draft = {
+  bcc?: string[];
+  inReplyTo?: string[];
+  references?: string[];
   id: string;
   accountId: string;
   to: string[];

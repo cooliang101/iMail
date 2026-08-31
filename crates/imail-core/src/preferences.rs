@@ -1,6 +1,6 @@
 use imail_protocol::{
-    AppLanguage, AppPreferences, AppPreferencesPatch, MessageView, NotificationKinds,
-    ShortcutBindings, ShortcutBindingsPatch, StartupView, ThemeId,
+    AppLanguage, AppPreferences, AppPreferencesPatch, CompositionPreferences, MessageView,
+    NotificationKinds, ShortcutBindings, ShortcutBindingsPatch, StartupView, ThemeId,
 };
 use serde::Deserialize;
 
@@ -28,6 +28,15 @@ impl<'a, R: AccountRepository> PreferencesService<'a, R> {
             .and_then(parse_stored)
             .unwrap_or_else(AppPreferences::default);
         preferences.custom_theme = read_custom_theme(self.repository, user_id)?;
+        let owned_accounts = self
+            .repository
+            .list_accounts(user_id)
+            .map_err(ApplicationError::Repository)?;
+        preferences.composition.signatures.retain(|signature| {
+            owned_accounts
+                .iter()
+                .any(|account| account.id == signature.account_id)
+        });
         Ok(preferences)
     }
 
@@ -55,6 +64,30 @@ impl<'a, R: AccountRepository> PreferencesService<'a, R> {
             ));
         }
         let mut next = self.read(user_id)?;
+        if let Some(value) = patch.composition {
+            if !value.is_valid() {
+                return Err(domain(
+                    "PREFERENCES_COMPOSITION_INVALID",
+                    400,
+                    "签名或模板参数无效",
+                ));
+            }
+            for signature in &value.signatures {
+                if self
+                    .repository
+                    .account(user_id, &signature.account_id)
+                    .map_err(ApplicationError::Repository)?
+                    .is_none()
+                {
+                    return Err(domain(
+                        "PREFERENCES_COMPOSITION_INVALID",
+                        400,
+                        "签名账户不可用",
+                    ));
+                }
+            }
+            next.composition = value;
+        }
         if let Some(value) = patch.language {
             next.language = value;
         }
@@ -98,6 +131,7 @@ impl<'a, R: AccountRepository> PreferencesService<'a, R> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredPreferences {
+    composition: Option<CompositionPreferences>,
     language: Option<AppLanguage>,
     theme: Option<ThemeId>,
     startup_view: Option<StartupView>,
@@ -117,6 +151,12 @@ fn parse_stored(raw: &str) -> Option<AppPreferences> {
         return None;
     }
     let mut preferences = AppPreferences::default();
+    if let Some(value) = stored.composition {
+        if !value.is_valid() {
+            return None;
+        }
+        preferences.composition = value;
+    }
     if let Some(value) = stored.language {
         preferences.language = value;
     }
@@ -143,6 +183,7 @@ fn parse_stored(raw: &str) -> Option<AppPreferences> {
 
 fn patch_is_empty(patch: &AppPreferencesPatch) -> bool {
     patch.language.is_none()
+        && patch.composition.is_none()
         && patch.theme.is_none()
         && patch.custom_theme.is_none()
         && patch.startup_view.is_none()

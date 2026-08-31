@@ -396,14 +396,32 @@ async fn download_attachment(
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SendInput {
+    #[serde(default)]
+    bcc: Vec<String>,
+    #[serde(default)]
+    in_reply_to: Vec<String>,
+    #[serde(default)]
+    references: Vec<String>,
     mailbox: String,
     to: Vec<String>,
     cc: Option<Vec<String>>,
     subject: String,
     text: String,
     html: Option<String>,
+}
+
+impl SendInput {
+    fn envelope(&self) -> imail_protocol::ComposeEnvelope {
+        imail_protocol::ComposeEnvelope {
+            bcc: self.bcc.clone(),
+            reply: imail_protocol::ReplyHeaders {
+                in_reply_to: self.in_reply_to.clone(),
+                references: self.references.clone(),
+            },
+        }
+    }
 }
 
 async fn send(
@@ -446,6 +464,7 @@ async fn send(
         Err(_) => return gateway_error(&request_id.0, GatewayFailure::internal()),
     };
     let message = SendMessageInput {
+        envelope: input.envelope(),
         account_id,
         to: input.to,
         cc: input.cc,
@@ -889,7 +908,10 @@ fn message_has_recipient(value: &Value, email: &str) -> bool {
 
 fn valid_send(input: &SendInput) -> bool {
     valid_email(&input.mailbox)
-        && !input.to.is_empty()
+        && (!input.to.is_empty()
+            || input.cc.as_ref().is_some_and(|values| !values.is_empty())
+            || !input.bcc.is_empty())
+        && input.envelope().is_valid()
         && input.to.len() <= 100
         && input.to.iter().all(|value| valid_email(value))
         && input.cc.as_ref().map_or(true, |values| {
@@ -1077,4 +1099,27 @@ fn openapi_document() -> Value {
             "messages": { "connected": { "example": { "type": "connected", "occurredAt": "2026-07-29T10:00:00.000Z" } }, "messageCreated": { "type": "message.created" } }
         }
     })
+}
+
+#[cfg(test)]
+mod composition_tests {
+    use super::*;
+
+    #[test]
+    fn bcc_only_send_preserves_reply_headers_and_rejects_injection() {
+        let mut value = json!({ "mailbox": "me@example.test", "to": [],
+            "bcc": ["hidden@example.test"], "subject": "Reply", "text": "Body",
+            "inReplyTo": ["<parent@example.test>"], "references": ["<root@example.test>"] });
+        let input: SendInput = serde_json::from_value(value.clone()).unwrap();
+        assert!(valid_send(&input));
+        assert_eq!(input.envelope().bcc, ["hidden@example.test"]);
+        assert_eq!(
+            input.envelope().reply.in_reply_to,
+            ["<parent@example.test>"]
+        );
+        value["inReplyTo"] = json!(["<parent@example.test>\r\nBcc: attacker@example.test"]);
+        assert!(!valid_send(&serde_json::from_value(value.clone()).unwrap()));
+        value["unknown"] = json!(true);
+        assert!(serde_json::from_value::<SendInput>(value).is_err());
+    }
 }

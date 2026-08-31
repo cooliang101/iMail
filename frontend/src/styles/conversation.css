@@ -1,0 +1,13 @@
+.mail-conversation { margin-top: 32px; border-top: 1px solid var(--color-border); padding-top: 20px; display: grid; gap: 12px; min-width: 0; }
+.mail-conversation > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mail-conversation h3 { margin: 0; font-size: var(--font-size-3); }
+.mail-conversation > p { margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-2); }
+.conversation-message { border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; min-width: 0; }
+.conversation-message > summary { cursor: pointer; padding: 14px; background: var(--color-surface-subtle); overflow-wrap: anywhere; }
+.conversation-message > summary > span, .conversation-message > summary > small { display: block; margin-top: 4px; }
+.conversation-message > summary > small, .conversation-current > span { color: var(--color-text-secondary); font-size: var(--font-size-2); }
+.conversation-current { display: grid; gap: 4px; padding: 10px 14px; border-left: 3px solid var(--color-accent); overflow-wrap: anywhere; }
+.conversation-message-content { display: grid; gap: 14px; padding: 16px; min-width: 0; overflow-wrap: anywhere; }
+.mail-quoted-history, .mail-html-stage details { margin: 14px 0; border-left: 2px solid var(--color-border); padding-left: 12px; }
+.mail-quoted-history > summary, .mail-html-stage details > summary { color: var(--color-text-secondary); cursor: pointer; }
+@media (max-width: 600px) { .conversation-message-content { padding: 10px; } }

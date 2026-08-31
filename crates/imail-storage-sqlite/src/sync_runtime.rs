@@ -251,7 +251,11 @@ impl SyncRuntimeStore {
         validate_enqueue(input)?;
         let not_before = timestamp(input.not_before.unwrap_or(now));
         let now = timestamp(now);
-        let transaction = self.connection.transaction()?;
+        // Reserve the writer before reading the deduplication state. A deferred
+        // read snapshot cannot be upgraded after a worker commits concurrently.
+        let transaction = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let existing_id: Option<String> = transaction
             .query_row(
                 "SELECT id FROM sync_jobs WHERE account_id=?1 AND coalesce(mailbox,'')=coalesce(?2,'') AND mailbox_role=?3 AND status IN ('queued','running') ORDER BY created_at LIMIT 1",
@@ -299,7 +303,9 @@ impl SyncRuntimeStore {
             return Err(SyncRuntimeError::InvalidInput("mailbox sync plan"));
         }
         let completed_at = timestamp(completed_at);
-        let transaction = self.connection.transaction()?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let owner_id: Option<String> = transaction
             .query_row(
                 "SELECT user_id FROM accounts WHERE id=?1",
@@ -1106,8 +1112,8 @@ fn upsert_sync_message(
     message: &MessageReadModel,
 ) -> Result<(), SyncRuntimeError> {
     transaction.execute(
-        "INSERT INTO messages(id,account_id,mailbox,mailbox_role,uid,message_id,from_json,to_json,subject,preview,text_body,html_body,received_at,unread,flagged,has_attachments,attachments_json,labels_json,snoozed_until) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19) ON CONFLICT(id) DO UPDATE SET mailbox=excluded.mailbox,mailbox_role=excluded.mailbox_role,uid=excluded.uid,message_id=excluded.message_id,from_json=excluded.from_json,to_json=excluded.to_json,subject=excluded.subject,preview=excluded.preview,text_body=excluded.text_body,html_body=excluded.html_body,received_at=excluded.received_at,unread=excluded.unread,flagged=excluded.flagged,has_attachments=excluded.has_attachments,attachments_json=excluded.attachments_json,labels_json=excluded.labels_json,snoozed_until=excluded.snoozed_until",
-        params![message.id,message.account_id,message.mailbox,message.mailbox_role,message.uid,message.message_id,serde_json::to_string(&message.from)?,serde_json::to_string(&message.to)?,message.subject,message.preview,message.text,message.html,message.date,i64::from(message.unread),i64::from(message.flagged),i64::from(message.has_attachments),serde_json::to_string(&message.attachments)?,serde_json::to_string(&message.labels)?,message.snoozed_until],
+        "INSERT INTO messages(id,account_id,mailbox,mailbox_role,uid,message_id,from_json,to_json,subject,preview,text_body,html_body,received_at,unread,flagged,has_attachments,attachments_json,labels_json,snoozed_until,mail_headers_json) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20) ON CONFLICT(id) DO UPDATE SET mailbox=excluded.mailbox,mailbox_role=excluded.mailbox_role,uid=excluded.uid,message_id=excluded.message_id,from_json=excluded.from_json,to_json=excluded.to_json,subject=excluded.subject,preview=excluded.preview,text_body=excluded.text_body,html_body=excluded.html_body,received_at=excluded.received_at,unread=excluded.unread,flagged=excluded.flagged,has_attachments=excluded.has_attachments,attachments_json=excluded.attachments_json,labels_json=excluded.labels_json,snoozed_until=excluded.snoozed_until,mail_headers_json=excluded.mail_headers_json",
+        params![message.id,message.account_id,message.mailbox,message.mailbox_role,message.uid,message.message_id,serde_json::to_string(&message.from)?,serde_json::to_string(&message.to)?,message.subject,message.preview,message.text,message.html,message.date,i64::from(message.unread),i64::from(message.flagged),i64::from(message.has_attachments),serde_json::to_string(&message.attachments)?,serde_json::to_string(&message.labels)?,message.snoozed_until,serde_json::to_string(&message.headers)?],
     )?;
     Ok(())
 }
@@ -1117,7 +1123,7 @@ fn sync_message_summaries(
     account_id: &str,
 ) -> Result<Vec<MessageReadModel>, SyncRuntimeError> {
     let mut statement = connection.prepare(
-        "SELECT id,account_id,mailbox,mailbox_role,uid,message_id,from_json,to_json,subject,preview,received_at,unread,flagged,has_attachments,attachments_json,labels_json,snoozed_until FROM messages WHERE account_id=?1 ORDER BY received_at DESC,id",
+        "SELECT id,account_id,mailbox,mailbox_role,uid,message_id,from_json,to_json,subject,preview,received_at,unread,flagged,has_attachments,attachments_json,labels_json,snoozed_until,mail_headers_json FROM messages WHERE account_id=?1 ORDER BY received_at DESC,id",
     )?;
     let rows = statement.query_map([account_id], sync_summary_row)?;
     Ok(rows.collect::<Result<_, _>>()?)
@@ -1138,6 +1144,13 @@ fn sync_summary_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageReadMode
         })
     };
     Ok(MessageReadModel {
+        headers: serde_json::from_str(&row.get::<_, String>(17)?).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                17,
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        })?,
         id: row.get(0)?,
         account_id: row.get(1)?,
         mailbox: row.get(2)?,
@@ -1170,7 +1183,7 @@ fn reconcile_sync_contacts(
         .collect::<Result<Vec<_>, _>>()?;
     let messages = transaction
         .prepare(
-            "SELECT m.id,m.account_id,m.mailbox,m.mailbox_role,m.uid,m.message_id,m.from_json,m.to_json,m.subject,m.preview,m.received_at,m.unread,m.flagged,m.has_attachments,m.attachments_json,m.labels_json,m.snoozed_until FROM messages m JOIN accounts a ON a.id=m.account_id WHERE a.user_id=?1 ORDER BY m.received_at DESC,m.id",
+            "SELECT m.id,m.account_id,m.mailbox,m.mailbox_role,m.uid,m.message_id,m.from_json,m.to_json,m.subject,m.preview,m.received_at,m.unread,m.flagged,m.has_attachments,m.attachments_json,m.labels_json,m.snoozed_until,m.mail_headers_json FROM messages m JOIN accounts a ON a.id=m.account_id WHERE a.user_id=?1 ORDER BY m.received_at DESC,m.id",
         )?
         .query_map([owner_id], sync_summary_row)?
         .collect::<Result<Vec<_>, _>>()?;
@@ -1241,6 +1254,9 @@ mod tests {
                 .execute_batch(include_str!("../sql/migration-v11-message-sources.sql"))
                 .unwrap();
             connection
+                .execute_batch(include_str!("../sql/migration-v12-composition.sql"))
+                .unwrap();
+            connection
                 .execute(
                     "INSERT INTO metadata(key,value) VALUES ('schema_version',?1)",
                     [CURRENT_SCHEMA_VERSION.to_string()],
@@ -1277,6 +1293,7 @@ mod tests {
 
     fn message(id: &str, uid: i64, subject: &str) -> MessageReadModel {
         MessageReadModel {
+            headers: Default::default(),
             id: id.into(),
             account_id: "account-1".into(),
             mailbox: "INBOX".into(),
@@ -1603,6 +1620,33 @@ mod tests {
         assert_eq!(secret["accessToken"], "rotated-access");
         assert_eq!(secret["refreshToken"], "refresh-old");
         assert_eq!(secret["proxyPassword"], "proxy-secret");
+    }
+
+    #[test]
+    fn concurrent_enqueue_deduplicates_without_snapshot_upgrade_failures() {
+        let fixture = Fixture::new();
+        // Open before spawning: the test exercises enqueue, not connection setup.
+        let stores = (0..8)
+            .map(|_| SyncRuntimeStore::open_database(&fixture.0).unwrap())
+            .collect::<Vec<_>>();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(stores.len()));
+        let handles = stores
+            .into_iter()
+            .map(|mut store| {
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    (0..20)
+                        .map(|_| store.enqueue(&input("manual", 100), at(0)).unwrap().id)
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>();
+        let ids = handles
+            .into_iter()
+            .flat_map(|handle| handle.join().unwrap())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(ids.len(), 1);
     }
 
     #[test]

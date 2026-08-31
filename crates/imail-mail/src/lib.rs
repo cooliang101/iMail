@@ -130,6 +130,7 @@ pub struct OutgoingAttachment {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutgoingMessage {
+    pub envelope: imail_protocol::ComposeEnvelope,
     pub from: MailAddressView,
     pub to: Vec<String>,
     pub cc: Option<Vec<String>>,
@@ -303,6 +304,7 @@ impl<'a, I: ImapPort + ?Sized, S: SmtpPort + ?Sized> RemoteMailService<'a, I, S>
             .send(
                 config,
                 &OutgoingMessage {
+                    envelope: input.envelope.clone(),
                     from: MailAddressView {
                         name: config.display_name.clone(),
                         address: config.email.clone(),
@@ -371,6 +373,20 @@ pub fn parse_rfc822(input: &[u8]) -> Result<ParsedMailView, MailParseError> {
         })
         .collect();
     Ok(ParsedMailView {
+        headers: imail_protocol::MailHeaders {
+            cc: message
+                .cc()
+                .map(|values| values.iter().map(address).collect())
+                .unwrap_or_default(),
+            reply_to: message
+                .reply_to()
+                .map(|values| values.iter().map(address).collect())
+                .unwrap_or_default(),
+            reply: imail_protocol::ReplyHeaders {
+                in_reply_to: reply_ids(message.in_reply_to()),
+                references: reply_ids(message.references()),
+            },
+        },
         message_id: message.message_id().map(node_message_id),
         from,
         to,
@@ -386,6 +402,16 @@ pub fn parse_rfc822(input: &[u8]) -> Result<ParsedMailView, MailParseError> {
         preview,
         attachments,
     })
+}
+
+fn reply_ids(value: &mail_parser::HeaderValue<'_>) -> Vec<String> {
+    value
+        .as_text_list()
+        .unwrap_or_default()
+        .iter()
+        .take(100)
+        .filter_map(|id| imail_protocol::normalize_message_id(id))
+        .collect()
 }
 
 pub fn attachment_content(input: &[u8], index: usize) -> Result<Vec<u8>, MailParseError> {
@@ -556,6 +582,7 @@ mod tests {
             flagged: Some(true),
         };
         let send = SendMessageInput {
+            envelope: Default::default(),
             account_id: "account-1".into(),
             to: vec!["recipient@example.com".into()],
             cc: None,

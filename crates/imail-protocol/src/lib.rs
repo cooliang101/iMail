@@ -3,11 +3,13 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod composition;
 mod translation;
 
+pub use composition::*;
 pub use translation::*;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 11;
+pub const CURRENT_SCHEMA_VERSION: u32 = 12;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,6 +111,8 @@ pub struct ShortcutBindings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
+    #[serde(default, skip_serializing_if = "CompositionPreferences::is_empty")]
+    pub composition: CompositionPreferences,
     pub language: AppLanguage,
     pub theme: ThemeId,
     pub custom_theme: CustomTheme,
@@ -123,6 +127,7 @@ impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             language: AppLanguage::ZhCn,
+            composition: CompositionPreferences::default(),
             theme: ThemeId::MintFresh,
             custom_theme: CustomTheme::default(),
             startup_view: StartupView::Inbox,
@@ -187,6 +192,7 @@ pub struct ShortcutBindingsPatch {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferencesPatch {
+    pub composition: Option<CompositionPreferences>,
     pub language: Option<AppLanguage>,
     pub theme: Option<ThemeId>,
     pub custom_theme: Option<CustomTheme>,
@@ -200,6 +206,8 @@ pub struct AppPreferencesPatch {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DraftInput {
+    #[serde(default, flatten)]
+    pub envelope: ComposeEnvelope,
     pub account_id: String,
     pub to: Value,
     pub cc: Value,
@@ -433,6 +441,8 @@ pub struct ParsedAttachmentView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsedMailView {
+    #[serde(default, flatten)]
+    pub headers: MailHeaders,
     pub message_id: Option<String>,
     pub from: MailAddressView,
     pub to: Vec<MailAddressView>,
@@ -476,6 +486,8 @@ pub struct SendAttachmentInput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMessageInput {
+    #[serde(default, flatten)]
+    pub envelope: ComposeEnvelope,
     pub account_id: String,
     pub to: Vec<String>,
     pub cc: Option<Vec<String>>,
@@ -617,6 +629,8 @@ pub struct AccountReadModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageReadModel {
+    #[serde(default, flatten)]
+    pub headers: MailHeaders,
     pub id: String,
     pub account_id: String,
     pub mailbox: String,
@@ -641,6 +655,8 @@ pub struct MessageReadModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DraftReadModel {
+    #[serde(default, flatten)]
+    pub envelope: ComposeEnvelope,
     pub id: String,
     pub account_id: String,
     pub to: Value,

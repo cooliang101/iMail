@@ -250,6 +250,7 @@ mod tests {
 
     fn message(owner_variant: &str) -> MessageReadModel {
         MessageReadModel {
+            headers: Default::default(),
             id: format!("message-{owner_variant}"),
             account_id: "account".into(),
             mailbox: "INBOX".into(),

@@ -349,6 +349,7 @@ fn cache_message(
         .as_array()
         .is_some_and(|items| !items.is_empty());
     Ok(MessageReadModel {
+        headers: parsed.headers,
         id,
         account_id: account_id.into(),
         mailbox: mailbox.into(),
@@ -411,6 +412,7 @@ mod tests {
 
     fn cached(uid: i64, unread: bool, flagged: bool) -> MessageReadModel {
         MessageReadModel {
+            headers: Default::default(),
             id: format!("cached-{uid}"),
             account_id: "account-1".into(),
             mailbox: "INBOX".into(),

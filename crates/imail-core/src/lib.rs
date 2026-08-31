@@ -292,6 +292,9 @@ pub trait ContentRepository {
 pub trait MessageRepository {
     type Error: Error + Send + Sync + 'static;
 
+    /// Owner-scoped metadata only; conversation discovery must not load all bodies.
+    fn conversation_candidates(&self, user_id: &str) -> Result<Vec<MessageReadModel>, Self::Error>;
+
     fn query_messages(
         &self,
         user_id: &str,

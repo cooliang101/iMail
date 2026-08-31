@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'preact/compat';
+import { forwardRef, useImperativeHandle, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'preact/compat';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -7,6 +7,13 @@ import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
 import { ArrowClockwise, ArrowCounterClockwise, ImageSquare, LinkSimple, ListBullets, ListNumbers, Paperclip, Quotes, TextAlignCenter, TextAlignLeft, TextB, TextHTwo, TextItalic, TextStrikethrough, TextUnderline } from '../../components/icons';
 import { selectRichTextToolbarState, type RichTextToolbarState } from './rich-text-toolbar-state';
+import { ComposeSignature, signatureHtml } from './signature-node';
+import { textToHtml } from './compose-utils';
+
+export type RichTextEditorHandle = {
+  insertText: (text: string) => void;
+  switchSignature: (accountId: string, text: string) => boolean;
+};
 
 function fileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -17,12 +24,13 @@ function fileAsDataUrl(file: File) {
   });
 }
 
-export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onError }: {
+export const RichTextEditor = forwardRef<RichTextEditorHandle, {
   initialHtml: string;
+  manageSignature?: boolean;
   onChange: (html: string, text: string) => void;
   onAddAttachments: (files: File[]) => void;
   onError: (message: string) => void;
-}) {
+}>(function RichTextEditor({ initialHtml, manageSignature = false, onChange, onAddAttachments, onError }, ref) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkValue, setLinkValue] = useState('');
   const [editor, setEditor] = useState<Editor | null>(null);
@@ -32,6 +40,7 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const onChangeRef = useRef(onChange);
+  const managedSignature = useRef<string | null>(null);
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -42,6 +51,7 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
       element,
       extensions: [
         StarterKit.configure({ link: false }),
+        ComposeSignature,
         Link.configure({ openOnClick: false, defaultProtocol: 'https' }),
         Image.configure({ allowBase64: true }),
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -50,6 +60,9 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
       content: initialHtmlRef.current,
       editorProps: { attributes: { class: 'composer-editor-content', 'aria-label': '邮件正文' } },
       onUpdate: ({ editor: current }) => onChangeRef.current(current.getHTML(), current.getText({ blockSeparator: '\n' })),
+    });
+    if (manageSignature) currentEditor.state.doc.forEach(node => {
+      if (node.type.name === 'composeSignature') managedSignature.current = JSON.stringify(node.toJSON());
     });
     const updateToolbarState = () => setState(selectRichTextToolbarState({ editor: currentEditor }));
 
@@ -63,6 +76,28 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
     };
     // The editor owns its initial document. Draft switches remount this component.
   }, []);
+
+  useImperativeHandle(ref, () => ({
+    insertText(value) { editor?.chain().focus().insertContent(textToHtml(value)).run(); },
+    switchSignature(accountId, value) {
+      if (!editor || !manageSignature) return false;
+      let found: { from: number; to: number; fingerprint: string } | undefined;
+      let quoteAt: number | undefined;
+      editor.state.doc.forEach((node, offset) => {
+        if (node.type.name === 'composeSignature') found = { from: offset, to: offset + node.nodeSize, fingerprint: JSON.stringify(node.toJSON()) };
+        if (node.type.name === 'blockquote' && quoteAt === undefined) quoteAt = offset;
+      });
+      if (found && found.fingerprint !== managedSignature.current) return false;
+      const content = signatureHtml(accountId, value);
+      if (found) editor.chain().insertContentAt({ from: found.from, to: found.to }, content || []).run();
+      else if (content) editor.chain().insertContentAt(quoteAt ?? editor.state.doc.content.size, content).run();
+      managedSignature.current = null;
+      editor.state.doc.forEach(node => {
+        if (node.type.name === 'composeSignature') managedSignature.current = JSON.stringify(node.toJSON());
+      });
+      return true;
+    },
+  }), [editor, manageSignature]);
 
   async function addInlineImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0]; event.currentTarget.value = '';
@@ -112,4 +147,4 @@ export function RichTextEditor({ initialHtml, onChange, onAddAttachments, onErro
     </div>
     <div ref={editorContainerRef} />
   </section>;
-}
+});

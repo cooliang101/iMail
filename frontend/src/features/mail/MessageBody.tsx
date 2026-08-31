@@ -1,12 +1,16 @@
 import { HtmlEmailBody } from './HtmlEmailBody';
 import type { MessageBodyView } from '../../app-model';
+import { splitPlainHistory } from './quoted-history';
 
 export function MessageBody({ text, html, subject, view }: { text: string; html?: string; subject: string; view: MessageBodyView }) {
   const plainText = emailPlainText(text, html);
   return view === 'rendered' && html
     ? <HtmlEmailBody html={html} subject={subject} />
     : <div className="mail-plain-body">{plainText
-      ? plainText.split(/\n{2,}/).map((block, index) => <p className={isPreformattedBlock(block) ? 'mail-plain-preformatted' : undefined} key={`${index}-${block.slice(0, 24)}`}>{block}</p>)
+      ? splitPlainHistory(plainText).map((section, index) => {
+        const content = section.text.split(/\n{2,}/).map((block, blockIndex) => <p className={isPreformattedBlock(block) ? 'mail-plain-preformatted' : undefined} key={blockIndex}>{block}</p>);
+        return section.quoted ? <details key={index} className="mail-quoted-history"><summary>展开引用内容</summary>{content}</details> : <div key={index}>{content}</div>;
+      })
       : <p>（邮件没有可显示的文本内容）</p>}</div>;
 }
 

@@ -29,6 +29,7 @@
   "GET /api/messages",
   "GET /api/messages/:id",
   "GET /api/messages/:id/attachments/:index",
+  "GET /api/messages/:id/conversation",
   "GET /api/messages/:id/sender-logo",
   "GET /api/messages/:id/source",
   "GET /api/notifications",

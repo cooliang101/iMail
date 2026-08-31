@@ -57,6 +57,7 @@ pub(crate) fn routes() -> Router<Arc<AppState>> {
         .route("/api/contacts/logo", get(contact_logo))
         .route("/api/messages/:id", get(detail).patch(update_message))
         .route("/api/messages/:id/source", get(message_source))
+        .route("/api/messages/:id/conversation", get(conversation))
         .route("/api/messages/:id/sender-logo", get(sender_logo))
         .route("/api/messages/:id/move", post(move_message))
         .route(
@@ -153,6 +154,34 @@ pub fn embedded_message_detail(message: MessageReadModel, contacts: &[ContactRea
     json!({"message": message_view(message, &contact_map(contacts), false)})
 }
 
+pub fn embedded_conversation(
+    messages: Vec<MessageReadModel>,
+    contacts: &[ContactReadModel],
+) -> Value {
+    let logos = contact_map(contacts);
+    json!({"messages": messages.into_iter().map(|message| message_view(message, &logos, true)).collect::<Vec<_>>()})
+}
+
+async fn conversation(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(message_id): Path<String>,
+) -> Response {
+    match run(state.config.data_dir.join("imail.sqlite"), move |store| {
+        let messages =
+            MessageQueryService::new(&*store).conversation(&user.user_id, &message_id)?;
+        let contacts = store
+            .list_contacts(&user.user_id)
+            .map_err(ApplicationError::Repository)?;
+        Ok(embedded_conversation(messages, &contacts))
+    })
+    .await
+    {
+        Ok(body) => Json(body).into_response(),
+        Err(cause) => application_error(cause),
+    }
+}
+
 pub fn embedded_message_source(source: Option<Vec<u8>>) -> Value {
     match source {
         Some(source) => json!({
@@ -215,6 +244,8 @@ struct MoveInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SendInput {
+    #[serde(default, flatten)]
+    envelope: imail_protocol::ComposeEnvelope,
     account_id: String,
     to: Vec<String>,
     cc: Option<Vec<String>>,
@@ -1505,7 +1536,10 @@ fn empty(status: StatusCode, cache: &'static str) -> Response {
 
 fn validate_send(input: SendInput) -> Result<ValidatedSend, ()> {
     if uuid::Uuid::parse_str(&input.account_id).is_err()
-        || input.to.is_empty()
+        || (input.to.is_empty()
+            && input.cc.as_ref().map_or(true, Vec::is_empty)
+            && input.envelope.bcc.is_empty())
+        || !input.envelope.is_valid()
         || input.to.iter().any(|address| !valid_email(address))
         || input
             .cc
@@ -1542,6 +1576,7 @@ fn validate_send(input: SendInput) -> Result<ValidatedSend, ()> {
     }
     Ok(ValidatedSend {
         message: SendMessageInput {
+            envelope: input.envelope,
             account_id: input.account_id,
             to: input.to,
             cc: input.cc,
@@ -1768,6 +1803,20 @@ fn error(status: StatusCode, message: impl Into<String>) -> Response {
 #[cfg(test)]
 mod participant_query_tests {
     use super::*;
+
+    #[test]
+    fn accepts_bcc_only_and_reply_headers_but_rejects_injection() {
+        let input = json!({"accountId":uuid::Uuid::new_v4().to_string(),"to":[],"bcc":["hidden@example.com"],"subject":"Reply","text":"Body","inReplyTo":["<parent@example.com>"],"references":["<root@example.com>"]});
+        let validated = validate_send(serde_json::from_value(input.clone()).unwrap()).unwrap();
+        assert_eq!(validated.message.envelope.bcc, ["hidden@example.com"]);
+        assert_eq!(
+            validated.message.envelope.reply.in_reply_to,
+            ["<parent@example.com>"]
+        );
+        let mut invalid = input;
+        invalid["inReplyTo"] = json!(["<parent@example.com>\r\nBcc: attacker@example.com"]);
+        assert!(validate_send(serde_json::from_value(invalid).unwrap()).is_err());
+    }
 
     #[test]
     fn embedded_queries_normalize_participant_addresses() {

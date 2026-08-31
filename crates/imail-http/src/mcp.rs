@@ -115,6 +115,12 @@ struct McpMessageUpdate {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct McpSendInput {
+    #[serde(default)]
+    bcc: Vec<String>,
+    #[serde(default)]
+    in_reply_to: Vec<String>,
+    #[serde(default)]
+    references: Vec<String>,
     account_email: String,
     to: Vec<String>,
     cc: Option<Vec<String>>,
@@ -122,6 +128,18 @@ struct McpSendInput {
     text: String,
     html: Option<String>,
     attachments: Option<Vec<SendAttachmentInput>>,
+}
+
+impl McpSendInput {
+    fn envelope(&self) -> imail_protocol::ComposeEnvelope {
+        imail_protocol::ComposeEnvelope {
+            bcc: self.bcc.clone(),
+            reply: imail_protocol::ReplyHeaders {
+                in_reply_to: self.in_reply_to.clone(),
+                references: self.references.clone(),
+            },
+        }
+    }
 }
 
 async fn handle(State(state): State<Arc<AppState>>, request: Request) -> Response {
@@ -779,6 +797,7 @@ async fn call_tool(
             state,
             owner_id,
             SendMessageInput {
+                envelope: input.envelope(),
                 account_id,
                 to: input.to,
                 cc: input.cc,
@@ -847,6 +866,16 @@ async fn call_tool(
                 let message = MessageQueryService::new(store).get(&owner_id, message_id)?;
                 let email = account_email(store, &owner_id, &message.account_id)?;
                 json!({"message": message_detail(message, &email)})
+            }
+            "conversation_get" => {
+                let message_id = required_string(&arguments, "messageId")?;
+                let messages = MessageQueryService::new(store).conversation(&owner_id, message_id)?;
+                let mut summaries = Vec::with_capacity(messages.len());
+                for message in messages {
+                    let email = account_email(store, &owner_id, &message.account_id)?;
+                    summaries.push(message_summary(message, &email));
+                }
+                json!({"messages":summaries})
             }
             "drafts_list" => list_drafts(store, &owner_id, arguments)?,
             "draft_get" => {
@@ -1171,7 +1200,7 @@ fn list_drafts(store: &mut SqliteAuthStore, owner: &str, input: Value) -> Result
     });
     drafts.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(json!({"drafts":drafts.into_iter().map(|draft| json!({
-        "id":draft.id,"accountEmail":accounts.get(&draft.account_id).cloned().unwrap_or_default(),"to":draft.to,"cc":draft.cc,
+        "id":draft.id,"accountEmail":accounts.get(&draft.account_id).cloned().unwrap_or_default(),"to":draft.to,"cc":draft.cc,"bcc":draft.envelope.bcc,"inReplyTo":draft.envelope.reply.in_reply_to,"references":draft.envelope.reply.references,
         "subject":draft.subject,"textPreview":draft.text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(180).collect::<String>(),
         "attachments":without_attachment_data(draft.attachments),"createdAt":draft.created_at,"updatedAt":draft.updated_at
     })).collect::<Vec<_>>() }))
@@ -1204,7 +1233,12 @@ fn save_draft(store: &mut SqliteAuthStore, owner: &str, input: Value) -> Result<
             .cloned()
             .unwrap_or_else(|| json!([])),
     )?;
+    let envelope: imail_protocol::ComposeEnvelope = parse(input.clone())?;
+    if !envelope.is_valid() {
+        return Err(McpError::Invalid("密送或回复关联无效"));
+    }
     let draft_input = DraftInput {
+        envelope,
         account_id: account.id.clone(),
         to,
         cc,
@@ -1220,7 +1254,7 @@ fn save_draft(store: &mut SqliteAuthStore, owner: &str, input: Value) -> Result<
         service.create(owner, &id, &now(), draft_input)?
     };
     Ok(
-        json!({"draft":{"id":draft.id,"accountEmail":account.email,"to":draft.to,"cc":draft.cc,"subject":draft.subject,"textPreview":draft.text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(180).collect::<String>(),"attachments":without_attachment_data(draft.attachments),"createdAt":draft.created_at,"updatedAt":draft.updated_at}}),
+        json!({"draft":{"id":draft.id,"accountEmail":account.email,"to":draft.to,"cc":draft.cc,"bcc":draft.envelope.bcc,"inReplyTo":draft.envelope.reply.in_reply_to,"references":draft.envelope.reply.references,"subject":draft.subject,"textPreview":draft.text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(180).collect::<String>(),"attachments":without_attachment_data(draft.attachments),"createdAt":draft.created_at,"updatedAt":draft.updated_at}}),
     )
 }
 
@@ -1316,6 +1350,7 @@ fn tool_schema(name: &str) -> Value {
         "settings_update" => json!({"type":"object","properties":{
             "theme":{"type":"string","enum":["mint-fresh","tech","business-blue","soft-neubrutalism","constructivist-red","custom"]},
             "customTheme":custom_theme_schema(),
+            "composition":composition_schema(),
             "language":{"type":"string","enum":["zh-CN","en-US"]},
             "startupView":{"type":"string","enum":["inbox","starred"]},"markReadOnOpen":{"type":"boolean"},
             "defaultMessageView":{"type":"string","enum":["source","rendered"]},
@@ -1377,7 +1412,7 @@ fn tool_schema(name: &str) -> Value {
         "messages_list" => {
             json!({"type":"object","properties":{"email":email_schema(),"group":{"type":"string","maxLength":40},"query":{"type":"string","maxLength":200},"mailboxRole":mailbox_role_schema(),"mailboxPath":{"type":"string","maxLength":500},"unread":{"type":"boolean"},"flagged":{"type":"boolean"},"hasAttachments":{"type":"boolean"},"snoozed":{"type":"boolean"},"label":{"type":"string","maxLength":80},"limit":{"type":"integer","minimum":1,"maximum":100,"default":25},"offset":{"type":"integer","minimum":0,"default":0}},"additionalProperties":false})
         }
-        "message_get" => message_id_schema(),
+        "message_get" | "conversation_get" => message_id_schema(),
         "translation_profiles_list" => empty(),
         "message_translate" => {
             json!({"type":"object","properties":{
@@ -1394,7 +1429,7 @@ fn tool_schema(name: &str) -> Value {
             json!({"type":"object","properties":{"messageId":{"type":"string","minLength":1},"destination":{"type":"string","enum":["archive","trash"]}},"required":["messageId","destination"],"additionalProperties":false})
         }
         "message_send" => {
-            json!({"type":"object","properties":{"accountEmail":email_schema(),"to":email_array(1),"cc":email_array(0),"subject":{"type":"string","minLength":1,"maxLength":500},"text":{"type":"string","minLength":1,"maxLength":2000000},"html":{"type":"string","maxLength":8000000},"attachments":attachments_schema()},"required":["accountEmail","to","subject","text"],"additionalProperties":false})
+            json!({"type":"object","properties":{"accountEmail":email_schema(),"to":email_array(0),"cc":email_array(0),"bcc":email_array(0),"inReplyTo":reply_ids_schema(),"references":reply_ids_schema(),"subject":{"type":"string","minLength":1,"maxLength":500},"text":{"type":"string","minLength":1,"maxLength":2000000},"html":{"type":"string","maxLength":8000000},"attachments":attachments_schema()},"required":["accountEmail","to","subject","text"],"additionalProperties":false})
         }
         "attachment_download" => {
             json!({"type":"object","properties":{"messageId":{"type":"string","minLength":1},"index":{"type":"integer","minimum":0}},"required":["messageId","index"],"additionalProperties":false})
@@ -1406,7 +1441,7 @@ fn tool_schema(name: &str) -> Value {
             json!({"type":"object","properties":{"draftId":{"type":"string","format":"uuid"}},"required":["draftId"],"additionalProperties":false})
         }
         "draft_save" => {
-            json!({"type":"object","properties":{"draftId":{"type":"string","format":"uuid"},"accountEmail":email_schema(),"to":email_array(0),"cc":email_array(0),"subject":{"type":"string","maxLength":500},"text":{"type":"string","maxLength":2000000},"html":{"type":"string","maxLength":8000000},"attachments":attachments_schema()},"required":["accountEmail"],"additionalProperties":false})
+            json!({"type":"object","properties":{"draftId":{"type":"string","format":"uuid"},"accountEmail":email_schema(),"to":email_array(0),"cc":email_array(0),"bcc":email_array(0),"inReplyTo":reply_ids_schema(),"references":reply_ids_schema(),"subject":{"type":"string","maxLength":500},"text":{"type":"string","maxLength":2000000},"html":{"type":"string","maxLength":8000000},"attachments":attachments_schema()},"required":["accountEmail"],"additionalProperties":false})
         }
         "notifications_list" => {
             json!({"type":"object","properties":{"limit":{"type":"integer","minimum":1,"maximum":100,"default":30}},"additionalProperties":false})
@@ -1417,6 +1452,23 @@ fn tool_schema(name: &str) -> Value {
 
 fn email_schema() -> Value {
     json!({"type":"string","format":"email"})
+}
+fn reply_ids_schema() -> Value {
+    json!({"type":"array","items":{"type":"string","minLength":3,"maxLength":998},"maxItems":100})
+}
+fn composition_schema() -> Value {
+    json!({"type":"object","additionalProperties":false,"properties":{
+        "signatures":{"type":"array","maxItems":100,"items":{
+            "type":"object","additionalProperties":false,
+            "properties":{"accountId":{"type":"string","minLength":1,"maxLength":200},"text":{"type":"string","maxLength":16000},"newMessages":{"type":"boolean"},"replies":{"type":"boolean"}},
+            "required":["accountId","text","newMessages","replies"]
+        }},
+        "templates":{"type":"array","maxItems":100,"items":{
+            "type":"object","additionalProperties":false,
+            "properties":{"id":{"type":"string","minLength":1,"maxLength":200},"name":{"type":"string","minLength":1,"maxLength":200},"subject":{"type":"string","maxLength":1000},"text":{"type":"string","maxLength":64000}},
+            "required":["id","name","subject","text"]
+        }}
+    }})
 }
 fn email_array(minimum: usize) -> Value {
     json!({"type":"array","items":email_schema(),"minItems":minimum,"maxItems":100})
@@ -1492,7 +1544,7 @@ fn safe_application_error(body: &Value) -> String {
         .to_string()
 }
 fn message_summary(message: imail_protocol::MessageReadModel, email: &str) -> Value {
-    json!({"id":message.id,"accountEmail":email,"folder":message.mailbox,"mailboxRole":message.mailbox_role,"from":message.from,"to":message.to,"subject":message.subject,"preview":message.preview,"date":message.date,"unread":message.unread,"flagged":message.flagged,"hasAttachments":message.has_attachments,"attachments":message.attachments,"labels":message.labels,"snoozedUntil":message.snoozed_until})
+    json!({"id":message.id,"accountEmail":email,"folder":message.mailbox,"mailboxRole":message.mailbox_role,"messageId":message.message_id,"cc":message.headers.cc,"replyTo":message.headers.reply_to,"inReplyTo":message.headers.reply.in_reply_to,"references":message.headers.reply.references,"from":message.from,"to":message.to,"subject":message.subject,"preview":message.preview,"date":message.date,"unread":message.unread,"flagged":message.flagged,"hasAttachments":message.has_attachments,"attachments":message.attachments,"labels":message.labels,"snoozedUntil":message.snoozed_until})
 }
 fn message_detail(message: imail_protocol::MessageReadModel, email: &str) -> Value {
     let mut value = message_summary(message.clone(), email);
@@ -1764,4 +1816,22 @@ async fn run<T: Send + 'static>(
     })
     .await
     .map_err(|_| McpError::Join)?
+}
+
+#[cfg(test)]
+mod composition_tests {
+    use super::*;
+    #[test]
+    fn flattened_envelope_accepts_known_fields_and_rejects_unknown_fields() {
+        let input = json!({"accountEmail":"owner@example.com","to":[],"bcc":["hidden@example.com"],"subject":"Reply","text":"Body","inReplyTo":["<parent@example.com>"]});
+        let parsed: McpSendInput = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(parsed.envelope().bcc, ["hidden@example.com"]);
+        assert_eq!(
+            parsed.envelope().reply.in_reply_to,
+            ["<parent@example.com>"]
+        );
+        let mut invalid = input;
+        invalid["unexpected"] = json!(true);
+        assert!(serde_json::from_value::<McpSendInput>(invalid).is_err());
+    }
 }

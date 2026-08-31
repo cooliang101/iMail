@@ -45,7 +45,8 @@ function App() {
   const [mailFilter, setMailFilter] = useState<MailListFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addAccountIntent, setAddAccountIntent] = useState<AddAccountIntent | null>(null);
-  const [composeMode, setComposeMode] = useState<'new' | 'reply' | 'forward' | null>(null);
+  const [conversationComposeSource, setConversationComposeSource] = useState<Message>();
+  const [composeMode, setComposeMode] = useState<'new' | 'reply' | 'replyAll' | 'forward' | null>(null);
   const [tokenOpen, setTokenOpen] = useState<'api' | 'mcp' | null>(null);
   const [latestApiCredential, setLatestApiCredential] = useState<ApiGatewayCredential>();
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
@@ -253,7 +254,7 @@ function App() {
   }
 
   async function selectMessage(id: string) {
-    if (composeMode) await composePaneRef.current?.close();
+    if (composeMode && !await composePaneRef.current?.close()) return;
     setSelectedId(id);
     const message = messages.find((item) => item.id === id);
     if (!message?.unread || !preferences.markReadOnOpen) return;
@@ -314,15 +315,20 @@ function App() {
     setNotice({ kind: 'success', text: '已撤销邮件移动' });
   }
 
-  function selectScope(nextView: AppView, nextAccount = 'all', nextGroup: string | null = null) {
+  async function selectScope(nextView: AppView, nextAccount = 'all', nextGroup: string | null = null) {
+    if (composePaneRef.current && !await composePaneRef.current.close()) return;
     selectNavigationScope(nextView, nextAccount, nextGroup); setSelectedId(null);
   }
 
-  function selectMailbox(folder: WorkspaceFolder) {
+  async function selectMailbox(folder: WorkspaceFolder) {
+    if (composePaneRef.current && !await composePaneRef.current.close()) return;
     selectNavigationMailbox(folder); setSelectedId(null);
   }
 
-  function selectLabel(label: string) { selectNavigationLabel(label); setSelectedId(null); }
+  async function selectLabel(label: string) {
+    if (composePaneRef.current && !await composePaneRef.current.close()) return;
+    selectNavigationLabel(label); setSelectedId(null);
+  }
 
   function filterParticipant(role: ParticipantRole, participant: MailParticipant) {
     setParticipantFilters((current) => setParticipantFilter(current, role, participant));
@@ -345,7 +351,14 @@ function App() {
     input?.focus(); input?.select();
   }
 
-  function openCompose(accountId?: string, initialTo: string[] = []) {
+  async function openDraft(draft?: Draft) {
+    if (composePaneRef.current && !await composePaneRef.current.close()) return;
+    setConversationComposeSource(undefined); setActiveDraft(draft); setComposeMode('new');
+  }
+
+  async function openCompose(accountId?: string, initialTo: string[] = []) {
+    if (composePaneRef.current && !await composePaneRef.current.close()) return;
+    setConversationComposeSource(undefined);
     if (initialTo.length > 0) setSearch('');
     setComposeAccountId(accountId); setComposeInitialTo(initialTo); setActiveDraft(undefined); setComposeMode('new'); setView('inbox'); setSidebarOpen(false);
   }
@@ -366,7 +379,7 @@ function App() {
   }
 
   async function openMessageContext(message: Message, point: { x: number; y: number }) {
-    if (composeMode) await composePaneRef.current?.close();
+    if (composeMode && !await composePaneRef.current?.close()) return;
     setSelectedId(message.id); setContextTarget({ kind: 'message', messageId: message.id, ...point });
   }
 
@@ -384,8 +397,8 @@ function App() {
         case 'sync': void syncAll(); break;
         case 'nextMessage': if (selectedIndex >= 0 && selectedIndex < messages.length - 1) void selectMessage(messages[selectedIndex + 1].id); break;
         case 'previousMessage': if (selectedIndex > 0) void selectMessage(messages[selectedIndex - 1].id); break;
-        case 'reply': if (selected) { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); } break;
-        case 'forward': if (selected) { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); } break;
+        case 'reply': if (!composeMode && selected?.text !== undefined) { setConversationComposeSource(selected); setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); } break;
+        case 'forward': if (!composeMode && selected?.text !== undefined) { setConversationComposeSource(selected); setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); } break;
         case 'toggleStar': void toggleSelectedFlag(); break;
         case 'markUnread': void markSelectedUnread(); break;
         case 'archive': void moveSelected('archive'); break;
@@ -414,8 +427,8 @@ function App() {
       <WorkspaceErrorBoundary label={view === 'tokens' ? '外部接入' : view === 'contacts' ? '联系人' : composeMode ? '写信编辑器' : '邮件工作区'} resetKey={`${view}:${selected?.id ?? ''}:${composeMode ?? ''}`}>
       {view === 'contacts' ? <Suspense fallback={<FeatureFallback label="联系人" />}><ContactsWorkspace contacts={contacts} search={search} onCompose={(contact) => openCompose(activeAccount?.id, [contact.address])} /></Suspense> : view === 'tokens' ? <Suspense fallback={<FeatureFallback label="外部接入" />}><TokenWorkspace accounts={realAccounts} tokens={tokens} latestApiCredential={latestApiCredential} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /></Suspense> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
-          {view === 'drafts' ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => { setActiveDraft(draft); setComposeMode('new'); }} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => { setActiveDraft(undefined); setComposeMode('new'); }} /></Suspense> : <MessagePane title={groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} participantFilters={participantFilters} hasOtherFilters={Boolean(search.trim()) || mailFilter !== 'all'} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onClearParticipantFilter={removeParticipantFilter} onClearParticipantFilters={clearParticipantFilters} onKeepOnlyParticipantFilters={keepOnlyParticipantFilters} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddAccountIntent({})} />}
-          {composeMode ? <Suspense fallback={<FeatureFallback label="写信编辑器" />}><ComposePane ref={composePaneRef} key={`${composeMode}-${(activeDraft?.id ?? selected?.id ?? composeAccountId ?? composeInitialTo.join(',')) || 'new'}`} accounts={realAccounts} contacts={contacts} mode={composeMode} initialAccountId={composeAccountId} initialTo={composeInitialTo} original={composeMode === 'new' ? undefined : selected} draft={activeDraft} onClose={() => { setComposeMode(null); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /></Suspense> : view === 'drafts' && !selected ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWelcome onCreate={() => openCompose(activeAccount?.id)} /></Suspense> : <MessageReader message={selected} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} contacts={contacts} defaultBodyView={preferences.defaultMessageView} onReply={() => { setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('forward'); }} onComposeSender={(address) => openCompose(selected?.accountId, [address])} onFilterParticipant={filterParticipant} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
+          {view === 'drafts' ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => void openDraft(draft)} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => void openDraft()} /></Suspense> : <MessagePane title={groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} participantFilters={participantFilters} hasOtherFilters={Boolean(search.trim()) || mailFilter !== 'all'} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onClearParticipantFilter={removeParticipantFilter} onClearParticipantFilters={clearParticipantFilters} onKeepOnlyParticipantFilters={keepOnlyParticipantFilters} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddAccountIntent({})} />}
+          {composeMode ? <Suspense fallback={<FeatureFallback label="写信编辑器" />}><ComposePane ref={composePaneRef} key={`${composeMode}-${(activeDraft?.id ?? (composeMode === 'new' ? composeAccountId ?? composeInitialTo.join(',') : conversationComposeSource?.id ?? selected?.id)) || 'new'}`} accounts={realAccounts} contacts={contacts} composition={preferences.composition} mode={composeMode} initialAccountId={composeAccountId} initialTo={composeInitialTo} original={composeMode === 'new' ? undefined : conversationComposeSource ?? selected} draft={activeDraft} onClose={() => { setComposeMode(null); setConversationComposeSource(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onSent={async () => { setComposeMode(null); setConversationComposeSource(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /></Suspense> : view === 'drafts' && !selected ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWelcome onCreate={() => openCompose(activeAccount?.id)} /></Suspense> : <MessageReader message={selected} accounts={accounts} onComposeConversationMessage={(message, mode) => { setConversationComposeSource(message); setActiveDraft(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setComposeMode(mode); }} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} contacts={contacts} defaultBodyView={preferences.defaultMessageView} onReplyAll={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('replyAll'); }} onReply={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('forward'); }} onComposeSender={(address) => openCompose(selected?.accountId, [address])} onFilterParticipant={filterParticipant} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
             onToggleFlag={() => void toggleSelectedFlag()}
             onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}
@@ -436,8 +449,8 @@ function App() {
     {workspaceOpen !== undefined && <Suspense fallback={<FeatureFallback label="工作空间" />}><WorkspaceModal accounts={accounts} workspace={workspaceOpen ?? undefined} onClose={() => setWorkspaceOpen(undefined)} onSaved={async () => { setWorkspaceOpen(undefined); await load(); setNotice({ kind: 'success', text: '工作空间已更新' }); }} /></Suspense>}
     {contextTarget && <Suspense fallback={null}><AppContextMenu target={contextTarget} bindings={shortcutBindings} messages={messages} accounts={accounts} activeAccountId={activeAccount?.id} onClose={() => setContextTarget(null)} actions={{
       openMessage: (id) => void selectMessage(id),
-      reply: () => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); },
-      forward: () => { setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); },
+      reply: () => { setConversationComposeSource(selected); setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('reply'); },
+      forward: () => { setConversationComposeSource(selected); setComposeAccountId(undefined); setActiveDraft(undefined); setComposeMode('forward'); },
       toggleStar: (message) => void toggleSelectedFlag(message), setUnread: (message, unread) => void setMessageUnread(message, unread),
       snooze: () => setSnoozeOpen(true), labels: () => setLabelOpen(true), archive: (message) => void moveSelected('archive', message), delete: (message) => void moveSelected('trash', message),
       openAccount: (id) => selectScope('inbox', id), compose: openCompose, syncAccount: (id) => void syncAccount(id), accountSettings: () => setSettingsTab('accounts'),

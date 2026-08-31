@@ -38,6 +38,9 @@ impl<'a, R: LocalRepository> DraftService<'a, R> {
         now: &str,
         input: DraftInput,
     ) -> Result<DraftReadModel, ApplicationError<<R as crate::AccountRepository>::Error>> {
+        if !input.envelope.is_valid() {
+            return Err(domain("DRAFT_INVALID", 400, "草稿密送或回复关联无效"));
+        }
         self.require_account(user_id, &input.account_id)?;
         let created_at = self
             .list(user_id)?
@@ -58,6 +61,9 @@ impl<'a, R: LocalRepository> DraftService<'a, R> {
         now: &str,
         input: DraftInput,
     ) -> Result<DraftReadModel, ApplicationError<<R as crate::AccountRepository>::Error>> {
+        if !input.envelope.is_valid() {
+            return Err(domain("DRAFT_INVALID", 400, "草稿密送或回复关联无效"));
+        }
         self.require_account(user_id, &input.account_id)?;
         let existing = self.get(user_id, draft_id)?;
         let draft = model(draft_id, existing.created_at, now, input);
@@ -97,6 +103,7 @@ impl<'a, R: LocalRepository> DraftService<'a, R> {
 
 fn model(id: &str, created_at: String, updated_at: &str, input: DraftInput) -> DraftReadModel {
     DraftReadModel {
+        envelope: input.envelope,
         id: id.to_string(),
         account_id: input.account_id,
         to: input.to,

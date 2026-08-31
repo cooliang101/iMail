@@ -176,6 +176,10 @@ pub enum EmbeddedDomainCall {
         #[serde(rename = "messageId")]
         message_id: String,
     },
+    MessageConversation {
+        #[serde(rename = "messageId")]
+        message_id: String,
+    },
     SyncAll,
     SyncAccount {
         #[serde(rename = "accountId")]
@@ -453,6 +457,11 @@ impl EmbeddedDomainCall {
             ),
             Self::MessageSource { message_id } => (
                 format!("/api/messages/{}/source", path_segment(&message_id)),
+                "GET",
+                None,
+            ),
+            Self::MessageConversation { message_id } => (
+                format!("/api/messages/{}/conversation", path_segment(&message_id)),
                 "GET",
                 None,
             ),
@@ -1497,6 +1506,38 @@ impl EmbeddedMailServiceState {
                                 .list_contacts(&user_id)
                                 .map_err(|error| format!("读取联系人失败：{error}"))?;
                             Ok(Ok(imail_http::messages::embedded_message_detail(
+                                message, &contacts,
+                            )))
+                        }
+                        Err(ApplicationError::Domain {
+                            status, message, ..
+                        }) => Ok(Err((status, message))),
+                        Err(error) => Err(format!("读取邮件失败：{error}")),
+                    }
+                })
+                .await
+                .map_err(|_| "邮件读取任务失败".to_string())??;
+                Ok(Some(match result {
+                    Ok(body) => json_response(200, body),
+                    Err((status, message)) => {
+                        json_response(status, serde_json::json!({"error":message}))
+                    }
+                }))
+            }
+            EmbeddedDomainCall::MessageConversation { message_id } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let message_id = message_id.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    let store = SqliteAuthStore::open_database(database)
+                        .map_err(|error| format!("读取邮件失败：{error}"))?;
+                    match MessageQueryService::new(&store).conversation(&user_id, &message_id) {
+                        Ok(message) => {
+                            let contacts = store
+                                .list_contacts(&user_id)
+                                .map_err(|error| format!("读取联系人失败：{error}"))?;
+                            Ok(Ok(imail_http::messages::embedded_conversation(
                                 message, &contacts,
                             )))
                         }
@@ -2805,6 +2846,15 @@ mod tests {
 
     #[test]
     fn domain_calls_rebuild_routes_and_preserve_draft_idempotency() {
+        let conversation = EmbeddedDomainCall::MessageConversation {
+            message_id: "message/unsafe".into(),
+        }
+        .into_invocation();
+        assert_eq!(
+            conversation.request.path,
+            "/api/messages/message%2Funsafe/conversation"
+        );
+        assert_eq!(conversation.request.method, "GET");
         let invocation = EmbeddedDomainCall::DraftCreate {
             draft_id: Some("draft-id".into()),
             input: serde_json::json!({"subject":"safe"}),
@@ -2886,7 +2936,7 @@ mod tests {
                 )
                 .unwrap();
             connection
-                .execute_batch("DROP TABLE apple_hme_sessions;")
+                .execute_batch("DROP TABLE apple_hme_sessions; ALTER TABLE messages DROP COLUMN mail_headers_json; ALTER TABLE drafts DROP COLUMN compose_json;")
                 .unwrap();
         }
         write_private_session(
@@ -3855,6 +3905,27 @@ mod tests {
         );
 
         let missing_message_id = "missing-message";
+        let conversation = state
+            .direct_call(&EmbeddedDomainCall::MessageConversation {
+                message_id: missing_message_id.into(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        let routed_conversation = state
+            .request(
+                data_dir.clone(),
+                EmbeddedServiceRequest {
+                    path: format!("/api/messages/{missing_message_id}/conversation"),
+                    method: "GET".into(),
+                    body: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(conversation.status, 404);
+        assert_eq!(conversation.status, routed_conversation.status);
+        assert_eq!(conversation.body, routed_conversation.body);
         let direct = state
             .direct_call(&EmbeddedDomainCall::MessageDetail {
                 message_id: missing_message_id.into(),

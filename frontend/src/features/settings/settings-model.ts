@@ -8,6 +8,7 @@ export function preferencesStorageKeyFor(userId: string) { return `${preferences
 export type GatewayPreferences = AppPreferences;
 
 export const defaultAppPreferences: AppPreferences = {
+  composition: { signatures: [], templates: [] },
   language: 'zh-CN',
   theme: defaultThemeId,
   customTheme: { ...defaultCustomTheme },
@@ -22,6 +23,7 @@ export function loadAppPreferences(storage: Pick<Storage, 'getItem'> = localStor
   try {
     const saved = JSON.parse(storage.getItem(key) ?? '{}') as Partial<AppPreferences>;
     return {
+      composition: normalizeComposition(saved.composition),
       language: normalizeLanguage(saved.language),
       theme: normalizeThemeId(saved.theme),
       customTheme: normalizeCustomTheme(saved.customTheme),
@@ -55,7 +57,17 @@ export function mergeGatewayPreferences(local: AppPreferences, remote: GatewayPr
     && JSON.stringify(remoteCustomTheme) === JSON.stringify(defaultCustomTheme);
   return {
     ...remote,
+    composition: normalizeComposition(remote.composition),
     theme: migrateLocalCustomTheme ? 'custom' : normalizeThemeId(remote.theme),
     customTheme: migrateLocalCustomTheme ? normalizeCustomTheme(local.customTheme) : remoteCustomTheme,
+  };
+}
+
+function normalizeComposition(value: unknown): AppPreferences['composition'] {
+  if (!value || typeof value !== 'object') return { signatures: [], templates: [] };
+  const source = value as Partial<AppPreferences['composition']>;
+  return {
+    signatures: Array.isArray(source.signatures) ? source.signatures.filter(item => item && typeof item.accountId === 'string' && typeof item.text === 'string' && typeof item.newMessages === 'boolean' && typeof item.replies === 'boolean') : [],
+    templates: Array.isArray(source.templates) ? source.templates.filter(item => item && typeof item.id === 'string' && typeof item.name === 'string' && typeof item.subject === 'string' && typeof item.text === 'string') : [],
   };
 }

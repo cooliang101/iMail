@@ -32,7 +32,7 @@
     {
       "name": "settings_update",
       "title": "更新 iMail 设置",
-      "description": "更新内置或安全自定义主题、启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。",
+      "description": "更新内置或安全自定义主题、启动页面、阅读、通知、邮件展示或快捷键偏好；未提供的字段保持不变。 composition 按用户整体替换账户签名和模板；内容为纯文本，签名 accountId 必须属于当前用户。",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -51,21 +51,87 @@
           "customTheme": {
             "type": "object",
             "properties": {
-              "name": { "type": "string", "minLength": 1, "maxLength": 40 },
-              "canvas": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "surface": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "surfaceSubtle": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "rail": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "text": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "textSecondary": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "border": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "accent": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "accentSubtle": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "radius": { "type": "string", "enum": ["compact", "balanced", "rounded"] },
-              "shadow": { "type": "string", "enum": ["none", "soft", "offset"] },
-              "typography": { "type": "string", "enum": ["system", "technical", "rounded"] }
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "canvas": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "surface": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "surfaceSubtle": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "rail": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "text": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "textSecondary": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "border": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "accent": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "accentSubtle": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "radius": {
+                "type": "string",
+                "enum": [
+                  "compact",
+                  "balanced",
+                  "rounded"
+                ]
+              },
+              "shadow": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "soft",
+                  "offset"
+                ]
+              },
+              "typography": {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "technical",
+                  "rounded"
+                ]
+              }
             },
-            "required": ["name", "canvas", "surface", "surfaceSubtle", "rail", "text", "textSecondary", "border", "accent", "accentSubtle", "radius", "shadow", "typography"],
+            "required": [
+              "name",
+              "canvas",
+              "surface",
+              "surfaceSubtle",
+              "rail",
+              "text",
+              "textSecondary",
+              "border",
+              "accent",
+              "accentSubtle",
+              "radius",
+              "shadow",
+              "typography"
+            ],
             "additionalProperties": false
           },
           "startupView": {
@@ -149,6 +215,77 @@
               "openShortcutSettings": {
                 "type": "string",
                 "maxLength": 60
+              }
+            }
+          },
+          "composition": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "signatures": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "accountId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 16000
+                    },
+                    "newMessages": {
+                      "type": "boolean"
+                    },
+                    "replies": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "accountId",
+                    "text",
+                    "newMessages",
+                    "replies"
+                  ]
+                }
+              },
+              "templates": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "subject": {
+                      "type": "string",
+                      "maxLength": 1000
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 64000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "subject",
+                    "text"
+                  ]
+                }
               }
             }
           }
@@ -980,6 +1117,28 @@
       }
     },
     {
+      "name": "conversation_get",
+      "title": "读取邮件会话",
+      "description": "根据邮件关联头读取当前用户本地缓存的会话摘要，按时间排序；保留各账户与文件夹副本。不会标记已读或批量修改邮件。正文使用 message_get 按记录 ID 读取。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "messageId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
       "name": "message_update",
       "title": "更新邮件状态",
       "description": "更新源邮箱的已读/星标状态，以及 iMail 本地标签或稍后处理时间。",
@@ -1060,7 +1219,7 @@
     {
       "name": "message_send",
       "title": "发送邮件",
-      "description": "通过指定邮箱发送文本或 HTML 邮件，可携带 Base64 附件。",
+      "description": "通过指定邮箱发送文本或 HTML 邮件，可携带 Base64 附件。 To/Cc/Bcc 合计至少一个地址；Bcc 仅用于 SMTP 信封。回复时提供 inReplyTo 与 references。",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1071,7 +1230,7 @@
             "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           },
           "to": {
-            "minItems": 1,
+            "minItems": 0,
             "maxItems": 100,
             "type": "array",
             "items": {
@@ -1135,6 +1294,32 @@
                 "data"
               ]
             }
+          },
+          "bcc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "email"
+            },
+            "maxItems": 100
+          },
+          "inReplyTo": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 998
+            },
+            "maxItems": 100
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 998
+            },
+            "maxItems": 100
           }
         },
         "required": [
@@ -1304,6 +1489,32 @@
                 "data"
               ]
             }
+          },
+          "bcc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "email"
+            },
+            "maxItems": 100
+          },
+          "inReplyTo": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 998
+            },
+            "maxItems": 100
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 998
+            },
+            "maxItems": 100
           }
         },
         "required": [
@@ -1379,11 +1590,21 @@
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": { "email": { "type": "string", "format": "email" } },
-        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "idempotentHint": true }
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
     },
     {
       "name": "apple_hme_start_login",
@@ -1393,18 +1614,54 @@
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "email": { "type": "string", "format": "email" },
-          "kind": { "type": "string", "enum": ["icloudWeb", "appleAccount"] },
-          "password": { "type": "string", "minLength": 1, "maxLength": 512 },
-          "appleId": { "type": "string", "format": "email" },
-          "twoFactorMethod": { "type": "string", "enum": ["trustedDevice", "phone"] },
-          "phoneNumber": { "type": "object" },
-          "icloudHost": { "type": "string", "enum": ["https://www.icloud.com", "https://www.icloud.com.cn"] }
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "icloudWeb",
+              "appleAccount"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "appleId": {
+            "type": "string",
+            "format": "email"
+          },
+          "twoFactorMethod": {
+            "type": "string",
+            "enum": [
+              "trustedDevice",
+              "phone"
+            ]
+          },
+          "phoneNumber": {
+            "type": "object"
+          },
+          "icloudHost": {
+            "type": "string",
+            "enum": [
+              "https://www.icloud.com",
+              "https://www.icloud.com.cn"
+            ]
+          }
         },
-        "required": ["email", "kind", "password"],
+        "required": [
+          "email",
+          "kind",
+          "password"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "idempotentHint": false }
+      "annotations": {
+        "idempotentHint": false
+      }
     },
     {
       "name": "apple_hme_submit_two_factor",
@@ -1414,15 +1671,33 @@
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "email": { "type": "string", "format": "email" },
-          "pendingId": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "code": { "type": "string", "pattern": "^[0-9]{6}$" },
-          "phoneNumber": { "type": "object" }
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "pendingId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          },
+          "phoneNumber": {
+            "type": "object"
+          }
         },
-        "required": ["email", "pendingId", "code"],
+        "required": [
+          "email",
+          "pendingId",
+          "code"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "idempotentHint": false }
+      "annotations": {
+        "idempotentHint": false
+      }
     },
     {
       "name": "apple_hme_list",
@@ -1431,11 +1706,21 @@
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": { "email": { "type": "string", "format": "email" } },
-        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "idempotentHint": true }
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
     },
     {
       "name": "apple_hme_sync",
@@ -1444,11 +1729,21 @@
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": { "email": { "type": "string", "format": "email" } },
-        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": false, "idempotentHint": true }
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true
+      }
     },
     {
       "name": "apple_hme_create",
@@ -1458,15 +1753,36 @@
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "email": { "type": "string", "format": "email" },
-          "label": { "type": "string", "maxLength": 200 },
-          "note": { "type": "string", "maxLength": 500 },
-          "channel": { "type": "string", "enum": ["auto", "appleAccount", "icloudWeb"], "default": "auto" }
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "appleAccount",
+              "icloudWeb"
+            ],
+            "default": "auto"
+          }
         },
-        "required": ["email"],
+        "required": [
+          "email"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "idempotentHint": false }
+      "annotations": {
+        "idempotentHint": false
+      }
     },
     {
       "name": "apple_hme_deactivate",
@@ -1476,13 +1792,26 @@
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "email": { "type": "string", "format": "email" },
-          "anonymousId": { "type": "string", "minLength": 1, "maxLength": 200 }
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "anonymousId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
         },
-        "required": ["email", "anonymousId"],
+        "required": [
+          "email",
+          "anonymousId"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "destructiveHint": true, "idempotentHint": false }
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false
+      }
     },
     {
       "name": "apple_hme_delete",
@@ -1492,13 +1821,26 @@
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "email": { "type": "string", "format": "email" },
-          "anonymousId": { "type": "string", "minLength": 1, "maxLength": 200 }
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "anonymousId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
         },
-        "required": ["email", "anonymousId"],
+        "required": [
+          "email",
+          "anonymousId"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "destructiveHint": true, "idempotentHint": false }
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false
+      }
     },
     {
       "name": "translation_profiles_list",
@@ -1510,7 +1852,10 @@
         "properties": {},
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "idempotentHint": true }
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
     },
     {
       "name": "message_translate",
@@ -1520,15 +1865,39 @@
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "messageId": { "type": "string", "minLength": 1 },
-          "profileId": { "type": "string", "minLength": 1, "maxLength": 80 },
-          "sourceLanguage": { "type": "string", "minLength": 2, "maxLength": 35, "pattern": "^[A-Za-z0-9-]+$" },
-          "targetLanguage": { "type": "string", "minLength": 2, "maxLength": 35, "pattern": "^[A-Za-z0-9-]+$" }
+          "messageId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "profileId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "sourceLanguage": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 35,
+            "pattern": "^[A-Za-z0-9-]+$"
+          },
+          "targetLanguage": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 35,
+            "pattern": "^[A-Za-z0-9-]+$"
+          }
         },
-        "required": ["messageId", "profileId", "targetLanguage"],
+        "required": [
+          "messageId",
+          "profileId",
+          "targetLanguage"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": false, "idempotentHint": false }
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": false
+      }
     },
     {
       "name": "apple_hme_disconnect",
@@ -1537,11 +1906,21 @@
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": { "email": { "type": "string", "format": "email" } },
-        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "destructiveHint": true, "idempotentHint": true }
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true
+      }
     }
   ]
 }

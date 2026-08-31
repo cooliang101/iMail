@@ -55,6 +55,7 @@ export type CustomThemeDefinition = {
 export type NotificationKind = MailNotification['kind'];
 
 export type AppPreferences = {
+  composition: CompositionPreferences;
   language: AppLanguage;
   theme: AppThemeId;
   customTheme: CustomThemeDefinition;
@@ -64,6 +65,11 @@ export type AppPreferences = {
   notificationKinds: Record<NotificationKind, boolean>;
   shortcutBindings: ShortcutBindings;
 };
+
+export type AccountSignature = { accountId: string; text: string; newMessages: boolean; replies: boolean };
+export type ComposeTemplate = { id: string; name: string; subject: string; text: string };
+export type CompositionPreferences = { signatures: AccountSignature[]; templates: ComposeTemplate[] };
+export type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward';
 
 export type ShortcutActionId = 'focusSearch' | 'compose' | 'sync' | 'nextMessage' | 'previousMessage' | 'reply' | 'forward' | 'toggleStar' | 'markUnread' | 'archive' | 'delete' | 'openShortcutSettings';
 export type ShortcutBindings = Record<ShortcutActionId, string>;

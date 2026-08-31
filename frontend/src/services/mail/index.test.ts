@@ -58,6 +58,7 @@ describe('mail service client adapters', () => {
     });
     expect(embeddedDomainCall('/api/messages/id%20with%20space')).toEqual({ operation: 'messageDetail', messageId: 'id with space' });
     expect(embeddedDomainCall('/api/messages/id%20with%20space/source')).toEqual({ operation: 'messageSource', messageId: 'id with space' });
+    expect(embeddedDomainCall('/api/messages/id%20with%20space/conversation')).toEqual({ operation: 'messageConversation', messageId: 'id with space' });
     expect(embeddedDomainCall('/api/messages', { method: 'POST', body: '{}' })).toBeNull();
 
     const invokeMock = vi.fn(async () => ({ status: 200, body: '{}' }));
@@ -69,6 +70,9 @@ describe('mail service client adapters', () => {
   });
 
   it('maps sync and message mutations to typed calls without exposing route bodies', () => {
+    const envelope = { bcc: ['hidden@example.test'], inReplyTo: ['<parent@example.test>'], references: ['<root@example.test>'] };
+    expect(embeddedDomainCall('/api/send', { method: 'POST', body: JSON.stringify(envelope) })).toEqual({ operation: 'messageSend', input: envelope });
+    expect(embeddedDomainCall('/api/drafts/draft-1', { method: 'PUT', body: JSON.stringify(envelope) })).toEqual({ operation: 'draftUpdate', draftId: 'draft-1', input: envelope });
     expect(embeddedDomainCall('/api/sync', { method: 'POST' })).toEqual({ operation: 'syncAll' });
     expect(embeddedDomainCall('/api/accounts/account%201/sync', { method: 'POST' })).toEqual({ operation: 'syncAccount', accountId: 'account 1' });
     expect(embeddedDomainCall('/api/accounts/a/mailboxes/sync', { method: 'POST', body: '{"mailbox":"Archive/2026"}' })).toEqual({ operation: 'syncAccountMailbox', accountId: 'a', mailbox: 'Archive/2026' });

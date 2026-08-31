@@ -36,6 +36,8 @@ struct DraftAttachment {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DraftPayload {
+    #[serde(default, flatten)]
+    envelope: imail_protocol::ComposeEnvelope,
     account_id: String,
     #[serde(default)]
     to: Vec<String>,
@@ -53,7 +55,8 @@ struct DraftPayload {
 
 impl DraftPayload {
     fn validated(mut self) -> Option<DraftInput> {
-        if Uuid::parse_str(&self.account_id).is_err()
+        if !self.envelope.is_valid()
+            || Uuid::parse_str(&self.account_id).is_err()
             || !valid_addresses(&mut self.to)
             || !valid_addresses(&mut self.cc)
             || utf16_len(&self.subject) > 500
@@ -82,6 +85,7 @@ impl DraftPayload {
             return None;
         }
         Some(DraftInput {
+            envelope: self.envelope,
             account_id: self.account_id,
             to: json!(self.to),
             cc: json!(self.cc),

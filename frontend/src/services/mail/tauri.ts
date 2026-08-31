@@ -31,6 +31,7 @@ export type EmbeddedDomainCall =
   | { operation: 'messagesList'; query: Record<string, string> }
   | { operation: 'messageDetail'; messageId: string }
   | { operation: 'messageSource'; messageId: string }
+  | { operation: 'messageConversation'; messageId: string }
   | { operation: 'labelsList' }
   | { operation: 'contactsList' }
   | { operation: 'notificationsList' }
@@ -103,6 +104,8 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
     if (url.pathname === '/api/messages') return { operation: 'messagesList', query: Object.fromEntries(url.searchParams) };
   }
   const source = url.pathname.match(/^\/api\/messages\/([^/]+)\/source$/);
+  const conversation = url.pathname.match(/^\/api\/messages\/([^/]+)\/conversation$/);
+  if (method === 'GET' && options.body === undefined && conversation) return { operation: 'messageConversation', messageId: decodeURIComponent(conversation[1]) };
   if (method === 'GET' && options.body === undefined && source) return { operation: 'messageSource', messageId: decodeURIComponent(source[1]) };
   const detail = url.pathname.match(/^\/api\/messages\/([^/]+)$/);
   if (method === 'GET' && options.body === undefined && detail) return { operation: 'messageDetail', messageId: decodeURIComponent(detail[1]) };

@@ -797,12 +797,7 @@ impl SmtpPort for NetworkMailAdapter {
     ) -> Result<SendMessageResult, ProtocolFailure> {
         self.run(ProtocolStage::Smtp, async {
             let (source, message_id) = build_message_source(message)?;
-            let recipients = message
-                .to
-                .iter()
-                .chain(message.cc.as_deref().unwrap_or_default())
-                .cloned()
-                .collect::<Vec<_>>();
+            let recipients = envelope_recipients(message);
             let envelope = mail_send::smtp::message::Message::new(
                 config.email.clone(),
                 recipients.clone(),
@@ -967,6 +962,9 @@ fn smtp_credentials(config: &MailConnectionConfig) -> Credentials<String> {
 }
 
 fn build_message_source(message: &OutgoingMessage) -> Result<(Vec<u8>, String), NetworkError> {
+    if !message.envelope.is_valid() {
+        return Err(NetworkError::Provider("密送或回复关联无效".into()));
+    }
     let mut builder = MessageBuilder::new()
         .from((message.from.name.clone(), message.from.address.clone()))
         .to(message.to.clone())
@@ -974,6 +972,19 @@ fn build_message_source(message: &OutgoingMessage) -> Result<(Vec<u8>, String), 
         .text_body(message.text.clone());
     if let Some(cc) = &message.cc {
         builder = builder.cc(cc.clone());
+    }
+    // Bcc is an SMTP envelope recipient only. Never write it into delivered MIME.
+    let bare_ids = |ids: &[String]| {
+        ids.iter()
+            .filter_map(|id| imail_protocol::normalize_message_id(id))
+            .map(|id| id[1..id.len() - 1].to_string())
+            .collect::<Vec<_>>()
+    };
+    if !message.envelope.reply.in_reply_to.is_empty() {
+        builder = builder.in_reply_to(bare_ids(&message.envelope.reply.in_reply_to));
+    }
+    if !message.envelope.reply.references.is_empty() {
+        builder = builder.references(bare_ids(&message.envelope.reply.references));
     }
     if let Some(html) = &message.html {
         builder = builder.html_body(html.clone());
@@ -991,6 +1002,18 @@ fn build_message_source(message: &OutgoingMessage) -> Result<(Vec<u8>, String), 
         .message_id
         .ok_or_else(|| NetworkError::Provider("发件内容缺少 Message-ID".into()))?;
     Ok((source, message_id))
+}
+
+fn envelope_recipients(message: &OutgoingMessage) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    message
+        .to
+        .iter()
+        .chain(message.cc.iter().flatten())
+        .chain(&message.envelope.bcc)
+        .filter(|address| seen.insert(address.to_ascii_lowercase()))
+        .cloned()
+        .collect()
 }
 
 async fn connect_tunnel(
@@ -1530,11 +1553,16 @@ mod tests {
         })
     }
 
+    struct SmtpFixtureMessage {
+        source: Vec<u8>,
+        recipients: Vec<String>,
+    }
+
     fn spawn_smtp_fixture(
         listener: StdTcpListener,
         tls: Arc<rustls::ServerConfig>,
         connections: usize,
-    ) -> JoinHandle<Vec<Vec<u8>>> {
+    ) -> JoinHandle<Vec<SmtpFixtureMessage>> {
         thread::spawn(move || {
             RuntimeBuilder::new_current_thread()
                 .enable_all()
@@ -1556,7 +1584,9 @@ mod tests {
         })
     }
 
-    async fn serve_smtp_connection(mut stream: ServerTlsStream<TcpStream>) -> Option<Vec<u8>> {
+    async fn serve_smtp_connection(
+        mut stream: ServerTlsStream<TcpStream>,
+    ) -> Option<SmtpFixtureMessage> {
         stream
             .write_all(b"220 localhost iMail fixture\r\n")
             .await
@@ -1566,6 +1596,7 @@ mod tests {
         let mut login_step = 0_u8;
         let mut data: Option<Vec<u8>> = None;
         let mut collecting_data = false;
+        let mut recipients = Vec::new();
         while let Some(line) = lines.next_line().await.unwrap() {
             let upper = line.to_ascii_uppercase();
             if collecting_data {
@@ -1601,6 +1632,9 @@ mod tests {
                     .await
                     .unwrap();
             } else if upper.starts_with("MAIL FROM:") || upper.starts_with("RCPT TO:") {
+                if upper.starts_with("RCPT TO:") {
+                    recipients.push(line.clone());
+                }
                 write.write_all(b"250 2.1.0 accepted\r\n").await.unwrap();
             } else if upper == "DATA" {
                 data = Some(Vec::new());
@@ -1616,7 +1650,7 @@ mod tests {
                 write.write_all(b"500 unsupported\r\n").await.unwrap();
             }
         }
-        data
+        data.map(|source| SmtpFixtureMessage { source, recipients })
     }
 
     fn fixture_config(imap_port: u16, smtp_port: u16) -> MailConnectionConfig {
@@ -1681,6 +1715,19 @@ mod tests {
             &mut adapter,
             &config,
             &OutgoingMessage {
+                envelope: imail_protocol::ComposeEnvelope {
+                    bcc: vec![
+                        "hidden@example.test".into(),
+                        "RECIPIENT@example.test".into(),
+                    ],
+                    reply: imail_protocol::ReplyHeaders {
+                        in_reply_to: vec!["<parent@example.test>".into()],
+                        references: vec![
+                            "<root@example.test>".into(),
+                            "<parent@example.test>".into(),
+                        ],
+                    },
+                },
                 from: MailAddressView {
                     name: "Fixture Owner".into(),
                     address: "fixture@example.test".into(),
@@ -1694,7 +1741,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(sent.accepted, vec!["recipient@example.test"]);
+        assert_eq!(
+            sent.accepted,
+            vec!["recipient@example.test", "hidden@example.test"]
+        );
 
         let imap_transcript = imap.join().unwrap();
         assert!(imap_transcript
@@ -1705,9 +1755,25 @@ mod tests {
             .any(|line| line.to_ascii_uppercase().contains(" FETCH ")));
         let smtp_messages = smtp.join().unwrap();
         assert_eq!(smtp_messages.len(), 1);
-        let outbound = imail_mail::parse_rfc822(&smtp_messages[0]).unwrap();
+        let outbound = imail_mail::parse_rfc822(&smtp_messages[0].source).unwrap();
         assert_eq!(outbound.subject, "fixture outbound");
         assert_eq!(outbound.text, "fixture send body");
+        assert_eq!(
+            outbound.headers.reply.in_reply_to,
+            ["<parent@example.test>"]
+        );
+        assert_eq!(
+            outbound.headers.reply.references,
+            ["<root@example.test>", "<parent@example.test>"]
+        );
+        let delivered = String::from_utf8_lossy(&smtp_messages[0].source).to_ascii_lowercase();
+        assert!(!delivered.contains("bcc:"));
+        assert!(!delivered.contains("hidden@example.test"));
+        let recipients = &smtp_messages[0].recipients;
+        assert_eq!(recipients.len(), 2);
+        assert!(recipients
+            .iter()
+            .any(|line| line.contains("hidden@example.test")));
     }
 
     #[test]
@@ -1747,6 +1813,7 @@ mod tests {
     #[test]
     fn builds_a_safe_multipart_message_with_a_message_id() {
         let message = OutgoingMessage {
+            envelope: Default::default(),
             from: MailAddressView {
                 name: "发件人".into(),
                 address: "sender@example.com".into(),

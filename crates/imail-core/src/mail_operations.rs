@@ -152,6 +152,21 @@ where
         user_id: &str,
         input: &SendMessageInput,
     ) -> Result<SendMessageResult, MailApplicationError<RepositoryError<R>>> {
+        let recipients = input
+            .to
+            .iter()
+            .chain(input.cc.iter().flatten())
+            .chain(&input.envelope.bcc)
+            .collect::<Vec<_>>();
+        if !input.envelope.is_valid()
+            || recipients.is_empty()
+            || recipients.len() > 300
+            || recipients
+                .iter()
+                .any(|address| !imail_protocol::valid_mail_address(address))
+        {
+            return Err(domain("SEND_INPUT_INVALID", 400, "收件人或回复关联无效"));
+        }
         let config = self.account_config(user_id, &input.account_id)?;
         RemoteMailService::new(self.imap, self.smtp)
             .send_message(&config, input)
