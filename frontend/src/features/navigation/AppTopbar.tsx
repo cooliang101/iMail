@@ -1,5 +1,5 @@
 import type { RefObject } from 'preact/compat';
-import { Bell, Info, MagnifyingGlass, SidebarSimple } from '../../components/icons';
+import { Bell, Info, MagnifyingGlass, SidebarSimple, SlidersHorizontal } from '../../components/icons';
 import { AppInput } from '../../components/form-controls';
 import { useI18n } from '../i18n';
 
@@ -14,7 +14,7 @@ export function AppTopbar({ sidebarCollapsed, sidebarOpen, search, searchPlaceho
     <button className="sidebar-trigger desktop-sidebar-trigger" title={t(sidebarCollapsed ? '展开侧栏' : '收起侧栏')} aria-label={t(sidebarCollapsed ? '展开侧栏' : '收起侧栏')} aria-expanded={!sidebarCollapsed} onClick={onToggleSidebar}><SidebarSimple size={20} /></button>
     <button className="sidebar-trigger mobile-sidebar-trigger" title={t('打开侧栏')} aria-label={t('打开侧栏')} aria-expanded={sidebarOpen} onClick={onOpenMobileSidebar}><SidebarSimple size={20} /></button>
     <AppInput className="search-box" contentBefore={<MagnifyingGlass size={18} />} contentAfter={<kbd>{searchShortcut}</kbd>} ref={searchInputRef} value={search} onChange={(event) => onSearchChange(event.currentTarget.value)} placeholder={localizedPlaceholder} aria-label={localizedPlaceholder} />
-    {onAdvancedSearch && <button className="advanced-search-trigger" aria-label="高级搜索" aria-pressed={advancedActive} onClick={onAdvancedSearch}>高级</button>}
+    {onAdvancedSearch && <button type="button" data-icon-tone="neutral" className="icon-button advanced-search-trigger" title={t('高级搜索')} aria-label={t('高级搜索')} aria-pressed={Boolean(advancedActive)} onClick={onAdvancedSearch}><SlidersHorizontal size={19} /></button>}
     <button data-icon-tone="neutral" className="icon-button" title={t('关于 iMail')} aria-label={t('打开关于 iMail')} onClick={onAbout}><Info size={19} /></button>
     <button data-icon-tone="info" className="icon-button" title={t('通知中心')} aria-label={t('打开通知中心')} onClick={onNotifications}><Bell size={19} /></button>
   </header>;

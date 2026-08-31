@@ -10,6 +10,13 @@ button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2p
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 button:disabled { cursor: not-allowed !important; opacity: .42; }
 
+.app-scrollbar { scrollbar-width: thin; scrollbar-color: var(--color-border-strong) transparent; }
+.app-scrollbar::-webkit-scrollbar { width: 10px; height: 10px; }
+.app-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.app-scrollbar::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: var(--color-border-strong); background-clip: padding-box; }
+.app-scrollbar::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+@supports selector(::-webkit-scrollbar) { .app-scrollbar { scrollbar-width: auto; scrollbar-color: auto; } }
+
 [data-icon-tone="primary"] { --icon-color: var(--color-accent); --icon-surface: var(--color-accent-subtle); }
 [data-icon-tone="info"] { --icon-color: var(--color-info); --icon-surface: var(--color-info-subtle); }
 [data-icon-tone="warning"] { --icon-color: var(--color-warning); --icon-surface: var(--color-warning-subtle); }
