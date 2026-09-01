@@ -48,6 +48,8 @@ pub enum AuthStoreError {
     ContentOwnershipViolation,
     #[error("内容记录字段组合无效")]
     InvalidContentData,
+    #[error("请求幂等键已用于不同的发件任务")]
+    IdempotencyConflict,
     #[error("翻译服务配置属于其他用户")]
     TranslationProfileOwnershipViolation,
     #[error("译文缓存不属于当前用户或对应邮件")]

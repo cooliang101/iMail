@@ -2475,7 +2475,7 @@ mod tests {
                 .unwrap(),
         )
         .await;
-        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 56);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 58);
         assert!(listed.to_string().contains("accounts_list"));
         let tools = listed["result"]["tools"].as_array().unwrap();
         let shared_contract: Value =
@@ -2637,7 +2637,7 @@ mod tests {
         );
         let send_at = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
         let schedule_request = format!(
-            r#"{{"jsonrpc":"2.0","id":271,"method":"tools/call","params":{{"name":"outbox_schedule","arguments":{{"accountEmail":"future@example.net","to":["later@example.com"],"subject":"MCP scheduled","text":"Later","sendAt":"{send_at}"}}}}}}"#
+            r#"{{"jsonrpc":"2.0","id":271,"method":"tools/call","params":{{"name":"outbox_schedule","arguments":{{"accountEmail":"future@example.net","to":["later@example.com"],"subject":"MCP scheduled","text":"Later","attachments":[{{"filename":"note.txt","contentType":"text/plain","data":"aGVsbG8="}}],"requestId":"00000000-0000-4000-8000-000000000271","sendAt":"{send_at}"}}}}}}"#
         );
         let scheduled = json(
             router
@@ -2651,6 +2651,18 @@ mod tests {
             .as_str()
             .unwrap()
             .to_string();
+        let repeated = json(
+            router
+                .clone()
+                .oneshot(rpc(&schedule_request, &token))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(
+            repeated["result"]["structuredContent"]["item"]["id"],
+            outbox_id
+        );
         let outbox = json(router.clone().oneshot(rpc(
             r#"{"jsonrpc":"2.0","id":272,"method":"tools/call","params":{"name":"outbox_list","arguments":{}}}"#,
             &token,

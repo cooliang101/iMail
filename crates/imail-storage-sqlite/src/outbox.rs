@@ -1,30 +1,56 @@
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use imail_protocol::{OutboxItemReadModel, OutboxStatus, SendMessageInput};
 use rusqlite::{params, OptionalExtension, TransactionBehavior};
+use sha2::{Digest, Sha256};
 
 use crate::{AuthStoreError, SqliteAuthStore};
 
 const LEASE_MINUTES: i64 = 10;
+const TERMINAL_HISTORY_LIMIT: usize = 200;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutboxWorkItem {
     pub id: String,
     pub owner_id: String,
     pub message: SendMessageInput,
-    pub draft_id: Option<String>,
+}
+
+pub struct OutboxSchedule<'a> {
+    pub id: &'a str,
+    pub message: &'a SendMessageInput,
+    pub draft_id: Option<&'a str>,
+    pub idempotency_key: &'a str,
+    pub scheduled_at: &'a str,
+    pub now: &'a str,
 }
 
 impl SqliteAuthStore {
     pub fn schedule_outbox(
         &mut self,
         owner: &str,
-        id: &str,
-        message: &SendMessageInput,
-        draft_id: Option<&str>,
-        scheduled_at: &str,
-        now: &str,
+        input: OutboxSchedule<'_>,
     ) -> Result<OutboxItemReadModel, AuthStoreError> {
-        let owned = self.connection.query_row(
+        let OutboxSchedule {
+            id,
+            message,
+            draft_id,
+            idempotency_key,
+            scheduled_at,
+            now,
+        } = input;
+        let message_json = serde_json::to_string(message)?;
+        let request_fingerprint = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&(
+                &message_json,
+                draft_id.unwrap_or_default(),
+                scheduled_at,
+            ))?)
+        );
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let owned = tx.query_row(
             "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1 AND user_id=?2)",
             params![message.account_id, owner],
             |row| row.get::<_, bool>(0),
@@ -32,24 +58,47 @@ impl SqliteAuthStore {
         if !owned {
             return Err(AuthStoreError::AccountNotOwned);
         }
-        self.connection.execute(
-            "INSERT INTO outbox_items(id,user_id,account_id,message_json,draft_id,scheduled_at,status,created_at,updated_at)
-             VALUES(?1,?2,?3,?4,?5,?6,'scheduled',?7,?7)",
-            params![id, owner, message.account_id, serde_json::to_string(message)?, draft_id, scheduled_at, now],
-        )?;
-        self.outbox_item(owner, id)?
+        let existing = tx
+            .query_row(
+                "SELECT id,request_fingerprint FROM outbox_items
+                 WHERE user_id=?1 AND idempotency_key=?2",
+                params![owner, idempotency_key],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .optional()?;
+        let item_id = if let Some((existing_id, existing_fingerprint)) = existing {
+            if existing_fingerprint.as_deref() != Some(&request_fingerprint) {
+                return Err(AuthStoreError::IdempotencyConflict);
+            }
+            existing_id
+        } else {
+            tx.execute(
+                "INSERT INTO outbox_items(id,user_id,account_id,message_json,draft_id,idempotency_key,request_fingerprint,scheduled_at,status,created_at,updated_at)
+                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,'scheduled',?9,?9)",
+                params![id, owner, message.account_id, message_json, draft_id, idempotency_key, request_fingerprint, scheduled_at, now],
+            )?;
+            id.to_string()
+        };
+        tx.commit()?;
+        self.outbox_item(owner, &item_id)?
             .ok_or(AuthStoreError::InvalidContentData)
     }
 
     pub fn list_outbox(&self, owner: &str) -> Result<Vec<OutboxItemReadModel>, AuthStoreError> {
         let mut statement = self.connection.prepare(
             "SELECT id,account_id,message_json,scheduled_at,status,attempts,last_error_message,created_at,updated_at,sent_at
-             FROM outbox_items WHERE user_id=?1
+             FROM outbox_items WHERE user_id=?1 AND (
+               status IN ('scheduled','sending','failed','needsReview') OR id IN (
+                 SELECT id FROM outbox_items WHERE user_id=?1
+                 AND status IN ('sent','cancelled')
+                 ORDER BY updated_at DESC,id DESC LIMIT ?2
+               )
+             )
              ORDER BY CASE status WHEN 'sending' THEN 0 WHEN 'scheduled' THEN 1 WHEN 'needsReview' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,
                       scheduled_at DESC,created_at DESC",
         )?;
         let rows = statement
-            .query_map([owner], outbox_row)?
+            .query_map(params![owner, TERMINAL_HISTORY_LIMIT], outbox_row)?
             .collect::<Result<Vec<_>, _>>()?;
         rows.into_iter().map(decode_outbox_row).collect()
     }
@@ -73,7 +122,8 @@ impl SqliteAuthStore {
         now: &str,
     ) -> Result<bool, AuthStoreError> {
         Ok(self.connection.execute(
-            "UPDATE outbox_items SET status='cancelled',updated_at=?1,lease_until=NULL
+            "UPDATE outbox_items SET status='cancelled',updated_at=?1,lease_until=NULL,
+             message_json=json_set(message_json,'$.text','','$.html',NULL,'$.attachments',NULL)
              WHERE user_id=?2 AND id=?3 AND status IN ('scheduled','failed')",
             params![now, owner, id],
         )? == 1)
@@ -106,7 +156,8 @@ impl SqliteAuthStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let updated = tx.execute(
             "UPDATE outbox_items SET status=?1,sent_at=?2,updated_at=?3,lease_until=NULL,
-             last_error_code=NULL,last_error_message=NULL
+             last_error_code=NULL,last_error_message=NULL,
+             message_json=json_set(message_json,'$.text','','$.html',NULL,'$.attachments',NULL)
              WHERE user_id=?4 AND id=?5 AND status='needsReview'",
             params![status, sent_at, now, owner, id],
         )? == 1;
@@ -137,12 +188,12 @@ impl SqliteAuthStore {
             [&now_text],
         )?;
         let raw = tx.query_row(
-            "SELECT id,user_id,message_json,draft_id FROM outbox_items
+            "SELECT id,user_id,message_json FROM outbox_items
              WHERE status='scheduled' AND scheduled_at<=?1 ORDER BY scheduled_at,created_at,id LIMIT 1",
             [&now_text],
-            |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?,row.get::<_,Option<String>>(3)?)),
+            |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?)),
         ).optional()?;
-        let Some((id, owner, message_json, draft_id)) = raw else {
+        let Some((id, owner, message_json)) = raw else {
             tx.commit()?;
             return Ok(None);
         };
@@ -157,7 +208,6 @@ impl SqliteAuthStore {
             id,
             owner_id: owner,
             message,
-            draft_id,
         }))
     }
 
@@ -167,11 +217,24 @@ impl SqliteAuthStore {
         message_id: &str,
         now: &str,
     ) -> Result<bool, AuthStoreError> {
-        Ok(self.connection.execute(
-            "UPDATE outbox_items SET status='sent',sent_message_id=?1,sent_at=?2,updated_at=?2,lease_until=NULL,last_error_code=NULL,last_error_message=NULL
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let updated = tx.execute(
+            "UPDATE outbox_items SET status='sent',sent_message_id=?1,sent_at=?2,updated_at=?2,
+             lease_until=NULL,last_error_code=NULL,last_error_message=NULL,
+             message_json=json_set(message_json,'$.text','','$.html',NULL,'$.attachments',NULL)
              WHERE id=?3 AND status='sending'",
-            params![message_id,now,id],
-        )? == 1)
+            params![message_id, now, id],
+        )? == 1;
+        if updated {
+            tx.execute(
+                "DELETE FROM drafts WHERE id=(SELECT draft_id FROM outbox_items WHERE id=?1)",
+                [id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(updated)
     }
 
     pub fn fail_outbox(
@@ -188,6 +251,13 @@ impl SqliteAuthStore {
              WHERE id=?5 AND status='sending'",
             params![status,code,message,now,id],
         )? == 1)
+    }
+
+    pub fn prune_outbox(&mut self, before: &str) -> Result<usize, AuthStoreError> {
+        Ok(self.connection.execute(
+            "DELETE FROM outbox_items WHERE status IN ('sent','cancelled') AND updated_at<?1",
+            [before],
+        )?)
     }
 }
 
@@ -276,6 +346,9 @@ mod tests {
         connection
             .execute_batch(include_str!("../sql/migration-v15-outbox.sql"))
             .unwrap();
+        connection
+            .execute_batch(include_str!("../sql/migration-v16-outbox-idempotency.sql"))
+            .unwrap();
         drop(connection);
         let store = SqliteAuthStore::open_database(&database).unwrap();
         (root, store)
@@ -299,20 +372,49 @@ mod tests {
         let (root, mut store) = database();
         let now = Utc.with_ymd_and_hms(2026, 9, 1, 8, 0, 0).unwrap();
         let now_text = now.to_rfc3339();
+        store
+            .connection
+            .execute("INSERT INTO drafts(id) VALUES('draft-1')", [])
+            .unwrap();
         let item = store
             .schedule_outbox(
                 "owner-1",
-                "item-1",
-                &message(),
-                Some("draft-1"),
-                &now_text,
-                &now_text,
+                OutboxSchedule {
+                    id: "item-1",
+                    message: &message(),
+                    draft_id: Some("draft-1"),
+                    idempotency_key: "request-1",
+                    scheduled_at: &now_text,
+                    now: &now_text,
+                },
             )
             .unwrap();
         assert_eq!(item.status, OutboxStatus::Scheduled);
         let work = store.claim_due_outbox(now).unwrap().unwrap();
         assert_eq!(work.message.subject, "Scheduled");
         assert!(!store.cancel_outbox("owner-1", "item-1", &now_text).unwrap());
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER reject_draft_delete BEFORE DELETE ON drafts
+                 BEGIN SELECT RAISE(ABORT,'simulated cleanup failure'); END;",
+            )
+            .unwrap();
+        assert!(store
+            .complete_outbox("item-1", "smtp-message-1", &now_text)
+            .is_err());
+        assert_eq!(
+            store
+                .outbox_item("owner-1", "item-1")
+                .unwrap()
+                .unwrap()
+                .status,
+            OutboxStatus::Sending
+        );
+        store
+            .connection
+            .execute_batch("DROP TRIGGER reject_draft_delete")
+            .unwrap();
         assert!(store
             .complete_outbox("item-1", "smtp-message-1", &now_text)
             .unwrap());
@@ -320,6 +422,103 @@ mod tests {
             store.list_outbox("owner-1").unwrap()[0].status,
             OutboxStatus::Sent
         );
+        let draft_count: u32 = store
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM drafts WHERE id='draft-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(draft_count, 0);
+        let repeated = store
+            .schedule_outbox(
+                "owner-1",
+                OutboxSchedule {
+                    id: "item-duplicate-after-send",
+                    message: &message(),
+                    draft_id: Some("draft-1"),
+                    idempotency_key: "request-1",
+                    scheduled_at: &now_text,
+                    now: &now_text,
+                },
+            )
+            .unwrap();
+        assert_eq!(repeated.id, "item-1");
+        assert_eq!(repeated.status, OutboxStatus::Sent);
+        let snapshot: String = store
+            .connection
+            .query_row(
+                "SELECT message_json FROM outbox_items WHERE id='item-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!snapshot.contains("Body"));
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn scheduling_is_idempotent_and_rejects_key_reuse_with_different_content() {
+        let (root, mut store) = database();
+        let now = Utc.with_ymd_and_hms(2026, 9, 1, 8, 0, 0).unwrap();
+        let send_at = (now + Duration::hours(1)).to_rfc3339();
+        let first = store
+            .schedule_outbox(
+                "owner-1",
+                OutboxSchedule {
+                    id: "item-idempotent-1",
+                    message: &message(),
+                    draft_id: None,
+                    idempotency_key: "request-idempotent",
+                    scheduled_at: &send_at,
+                    now: &now.to_rfc3339(),
+                },
+            )
+            .unwrap();
+        let repeated = store
+            .schedule_outbox(
+                "owner-1",
+                OutboxSchedule {
+                    id: "item-idempotent-2",
+                    message: &message(),
+                    draft_id: None,
+                    idempotency_key: "request-idempotent",
+                    scheduled_at: &send_at,
+                    now: &now.to_rfc3339(),
+                },
+            )
+            .unwrap();
+        assert_eq!(repeated.id, first.id);
+        let mut changed = message();
+        changed.subject = "Different".into();
+        assert!(matches!(
+            store.schedule_outbox(
+                "owner-1",
+                OutboxSchedule {
+                    id: "item-idempotent-3",
+                    message: &changed,
+                    draft_id: None,
+                    idempotency_key: "request-idempotent",
+                    scheduled_at: &send_at,
+                    now: &now.to_rfc3339(),
+                },
+            ),
+            Err(AuthStoreError::IdempotencyConflict)
+        ));
+        assert!(store
+            .cancel_outbox("owner-1", &first.id, &now.to_rfc3339())
+            .unwrap());
+        store
+            .connection
+            .execute(
+                "UPDATE outbox_items SET updated_at='2026-01-01T00:00:00Z' WHERE id=?1",
+                [&first.id],
+            )
+            .unwrap();
+        assert_eq!(store.prune_outbox("2026-06-01T00:00:00Z").unwrap(), 1);
+        assert!(store.outbox_item("owner-1", &first.id).unwrap().is_none());
         drop(store);
         fs::remove_dir_all(root).unwrap();
     }
@@ -335,11 +534,14 @@ mod tests {
         store
             .schedule_outbox(
                 "owner-1",
-                "item-2",
-                &message(),
-                Some("draft-return"),
-                &now.to_rfc3339(),
-                &now.to_rfc3339(),
+                OutboxSchedule {
+                    id: "item-2",
+                    message: &message(),
+                    draft_id: Some("draft-return"),
+                    idempotency_key: "request-2",
+                    scheduled_at: &now.to_rfc3339(),
+                    now: &now.to_rfc3339(),
+                },
             )
             .unwrap();
         assert!(store.claim_due_outbox(now).unwrap().is_some());
@@ -387,11 +589,14 @@ mod tests {
         store
             .schedule_outbox(
                 "owner-1",
-                "item-verified",
-                &message(),
-                Some("draft-sent"),
-                &now.to_rfc3339(),
-                &now.to_rfc3339(),
+                OutboxSchedule {
+                    id: "item-verified",
+                    message: &message(),
+                    draft_id: Some("draft-sent"),
+                    idempotency_key: "request-verified",
+                    scheduled_at: &now.to_rfc3339(),
+                    now: &now.to_rfc3339(),
+                },
             )
             .unwrap();
         assert!(store.claim_due_outbox(now).unwrap().is_some());
@@ -435,7 +640,7 @@ mod tests {
         connection.execute_batch("CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL) STRICT; INSERT INTO metadata VALUES('schema_version','14');").unwrap();
         drop(connection);
         let report = crate::migrate_database(&database).unwrap();
-        assert_eq!(report.applied_versions, [15]);
+        assert_eq!(report.applied_versions, [15, 16]);
         let connection = Connection::open(&database).unwrap();
         let table: String = connection
             .query_row(
@@ -445,6 +650,55 @@ mod tests {
             )
             .unwrap();
         assert_eq!(table, "outbox_items");
+        drop(connection);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn migration_from_v15_adds_idempotency_and_compacts_terminal_snapshots() {
+        let root = std::env::temp_dir().join(format!("imail-outbox-v16-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let database = root.join("imail.sqlite");
+        let connection = Connection::open(&database).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL) STRICT;
+                 INSERT INTO metadata VALUES('schema_version','15');
+                 CREATE TABLE accounts(id TEXT PRIMARY KEY,user_id TEXT NOT NULL) STRICT;
+                 INSERT INTO accounts VALUES('account-1','owner-1');",
+            )
+            .unwrap();
+        connection
+            .execute_batch(include_str!("../sql/migration-v15-outbox.sql"))
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO outbox_items(id,user_id,account_id,message_json,scheduled_at,status,created_at,updated_at)
+                 VALUES('terminal','owner-1','account-1',?1,'2026-01-01T00:00:00Z','sent','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+                [serde_json::to_string(&message()).unwrap()],
+            )
+            .unwrap();
+        drop(connection);
+        let report = crate::migrate_database(&database).unwrap();
+        assert_eq!(report.applied_versions, [16]);
+        let connection = Connection::open(&database).unwrap();
+        let snapshot: String = connection
+            .query_row(
+                "SELECT message_json FROM outbox_items WHERE id='terminal'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!snapshot.contains("Body"));
+        let columns = connection
+            .prepare("PRAGMA table_info(outbox_items)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(columns.contains(&"idempotency_key".to_string()));
+        assert!(columns.contains(&"request_fingerprint".to_string()));
         drop(connection);
         fs::remove_dir_all(root).unwrap();
     }

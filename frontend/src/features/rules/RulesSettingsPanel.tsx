@@ -60,7 +60,7 @@ export function RulesSettingsPanel({ accounts, onReload }: { accounts: Account[]
         </div>
         <div className="rule-list">{rules.map(rule => <div className="rule-list-item" key={rule.id}>
           <SettingsLinkRow icon={<SlidersHorizontal size={18} />} title={rule.name} value={`优先级 ${rule.priority}`} onClick={() => open({ kind: 'edit', saved: rule })} disabled={busy} />
-          <AppSwitch aria-label={`启用规则 ${rule.name}`} checked={rule.enabled} disabled={busy} onChange={(_, data) => void perform(async () => { await mailRulesService.save({ ...ruleInput(rule), enabled: data.checked }, rule.id); await refresh(); })} />
+          <AppSwitch aria-label={`启用规则 ${rule.name}`} checked={rule.enabled} disabled={busy} onChange={(_, data) => void perform(async () => { await mailRulesService.setEnabled(rule.id, data.checked); await refresh(); })} />
         </div>)}</div>
         {rules.length === 0 && <div className="rule-empty"><SlidersHorizontal size={28} /><h3>让重复整理自动完成</h3><p>新建规则，按发件人、主题或附件自动添加标签、静音或归档。</p></div>}
       </> : page.kind === 'runs' ? <>

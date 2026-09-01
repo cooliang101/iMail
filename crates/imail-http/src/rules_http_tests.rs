@@ -47,6 +47,52 @@ async fn rule_routes_validate_authority_preview_and_explicit_confirmation() {
     let path = format!("/api/mail-rules/{id}");
     let response = router
         .clone()
+        .oneshot(request(Method::GET, &path, &session, Value::Null))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json(response).await["rule"]["enabled"], false);
+    let enabled_path = format!("/api/mail-rules/{id}/enabled");
+    let response = router
+        .clone()
+        .oneshot(request(
+            Method::PATCH,
+            &enabled_path,
+            &session,
+            serde_json::json!({"enabled":true}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let enabled = json(response).await;
+    assert_eq!(enabled["rule"]["enabled"], true);
+    assert_eq!(enabled["rule"]["revision"], 2);
+    let response = router
+        .clone()
+        .oneshot(request(
+            Method::PATCH,
+            &enabled_path,
+            &session,
+            serde_json::json!({"enabled":true}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json(response).await["rule"]["revision"], 2);
+    let response = router
+        .clone()
+        .oneshot(request(
+            Method::PATCH,
+            &enabled_path,
+            &session,
+            serde_json::json!({"enabled":false}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json(response).await["rule"]["revision"], 3);
+    let response = router
+        .clone()
         .oneshot(request(Method::DELETE, &path, &foreign, Value::Null))
         .await
         .unwrap();

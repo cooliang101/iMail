@@ -257,10 +257,19 @@ pub enum EmbeddedDomainCall {
     PreferencesGet,
     SmartFoldersList,
     MailRulesList,
+    MailRuleGet {
+        #[serde(rename = "ruleId")]
+        rule_id: String,
+    },
     MailRuleCreate {
         input: serde_json::Value,
     },
     MailRuleUpdate {
+        #[serde(rename = "ruleId")]
+        rule_id: String,
+        input: serde_json::Value,
+    },
+    MailRuleSetEnabled {
         #[serde(rename = "ruleId")]
         rule_id: String,
         input: serde_json::Value,
@@ -620,10 +629,20 @@ impl EmbeddedDomainCall {
             Self::PreferencesGet => ("/api/preferences".into(), "GET", None),
             Self::SmartFoldersList => ("/api/smart-folders".into(), "GET", None),
             Self::MailRulesList => ("/api/mail-rules".into(), "GET", None),
+            Self::MailRuleGet { rule_id } => (
+                format!("/api/mail-rules/{}", path_segment(&rule_id)),
+                "GET",
+                None,
+            ),
             Self::MailRuleCreate { input } => json_request("/api/mail-rules", "POST", input),
             Self::MailRuleUpdate { rule_id, input } => json_request(
                 format!("/api/mail-rules/{}", path_segment(&rule_id)),
                 "PUT",
+                input,
+            ),
+            Self::MailRuleSetEnabled { rule_id, input } => json_request(
+                format!("/api/mail-rules/{}/enabled", path_segment(&rule_id)),
+                "PATCH",
                 input,
             ),
             Self::MailRuleDelete { rule_id } => (
@@ -1604,8 +1623,10 @@ impl EmbeddedMailServiceState {
                 )))
             }
             EmbeddedDomainCall::MailRulesList
+            | EmbeddedDomainCall::MailRuleGet { .. }
             | EmbeddedDomainCall::MailRuleCreate { .. }
             | EmbeddedDomainCall::MailRuleUpdate { .. }
+            | EmbeddedDomainCall::MailRuleSetEnabled { .. }
             | EmbeddedDomainCall::MailRuleDelete { .. }
             | EmbeddedDomainCall::MailRulePreview { .. }
             | EmbeddedDomainCall::MailRuleApply { .. }
@@ -1616,11 +1637,17 @@ impl EmbeddedMailServiceState {
                 };
                 let (operation, id, input) = match call {
                     EmbeddedDomainCall::MailRulesList => ("list", None, None),
+                    EmbeddedDomainCall::MailRuleGet { rule_id } => {
+                        ("get", Some(rule_id.clone()), None)
+                    }
                     EmbeddedDomainCall::MailRuleCreate { input } => {
                         ("create", None, Some(input.clone()))
                     }
                     EmbeddedDomainCall::MailRuleUpdate { rule_id, input } => {
                         ("update", Some(rule_id.clone()), Some(input.clone()))
+                    }
+                    EmbeddedDomainCall::MailRuleSetEnabled { rule_id, input } => {
+                        ("set_enabled", Some(rule_id.clone()), Some(input.clone()))
                     }
                     EmbeddedDomainCall::MailRuleDelete { rule_id } => {
                         ("delete", Some(rule_id.clone()), None)
@@ -3161,7 +3188,7 @@ mod tests {
                 )
                 .unwrap();
             connection
-                .execute_batch("DROP TRIGGER messages_body_insert; DROP TRIGGER messages_body_delete; DROP TRIGGER messages_body_update; DROP TABLE message_body_fts; DROP TABLE smart_folders; DROP TABLE apple_hme_sessions; ALTER TABLE messages DROP COLUMN mail_headers_json; ALTER TABLE drafts DROP COLUMN compose_json;")
+                .execute_batch("DROP TRIGGER messages_body_insert; DROP TRIGGER messages_body_delete; DROP TRIGGER messages_body_update; DROP TABLE message_body_fts; DROP TABLE smart_folders; DROP TABLE apple_hme_sessions; DROP TABLE outbox_items; ALTER TABLE messages DROP COLUMN mail_headers_json; ALTER TABLE drafts DROP COLUMN compose_json;")
                 .unwrap();
         }
         write_private_session(

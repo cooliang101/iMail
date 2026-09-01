@@ -34,12 +34,13 @@ use uuid::Uuid;
 
 use crate::AppState;
 
-const MANAGEMENT_TOOLS: [&str; 26] = [
+const MANAGEMENT_TOOLS: [&str; 27] = [
     "outbox_schedule",
     "outbox_cancel",
     "outbox_retry",
     "outbox_resolve",
     "mail_rule_save",
+    "mail_rule_set_enabled",
     "mail_rule_delete",
     "mail_rule_apply",
     "mail_rule_retry",
@@ -141,6 +142,7 @@ struct McpSendInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct McpScheduleInput {
+    request_id: String,
     send_at: String,
     #[serde(flatten)]
     message: McpSendInput,
@@ -881,10 +883,12 @@ async fn call_tool(
             "sync_policy_update" => sync_policy_update(store, &sync_database, &owner_id, arguments)?,
             "smart_folders_list" => crate::search::execute(store, &owner_id, "GET", None, None)?,
             "mail_rules_list" => crate::rules::execute(store,&owner_id,"list",None,None)?,
+            "mail_rule_get" => crate::rules::execute(store,&owner_id,"get",Some(required_string(&arguments,"ruleId")?),None)?,
             "mail_rule_save" => {
                 let id=optional_string(&arguments,"ruleId");
                 crate::rules::execute(store,&owner_id,if id.is_some(){"update"}else{"create"},id,arguments.get("input").cloned())?
             },
+            "mail_rule_set_enabled" => crate::rules::execute(store,&owner_id,"set_enabled",Some(required_string(&arguments,"ruleId")?),Some(json!({"enabled":arguments.get("enabled").cloned().ok_or(McpError::Invalid("缺少 enabled"))?})))?,
             "mail_rule_delete" => crate::rules::execute(store,&owner_id,"delete",Some(required_string(&arguments,"ruleId")?),None)?,
             "mail_rule_preview" => crate::rules::execute(store,&owner_id,"preview",None,Some(arguments))?,
             "mail_rule_apply" => crate::rules::execute(store,&owner_id,"apply",None,Some(arguments))?,
@@ -895,10 +899,14 @@ async fn call_tool(
             "outbox_schedule" => {
                 let input: McpScheduleInput = parse(arguments)?;
                 let account = account_by_email(store, &owner_id, &input.message.account_email)?;
-                let mut payload = serde_json::to_value(input.message.into_message(account.id))
-                    .map_err(|_| McpError::Invalid("待发送邮件参数无效"))?;
-                payload["sendAt"] = Value::String(input.send_at);
-                crate::outbox::execute(store, &owner_id, "schedule", None, Some(payload))
+                crate::outbox::schedule_message(
+                    store,
+                    &owner_id,
+                    &input.request_id,
+                    &input.send_at,
+                    input.message.into_message(account.id),
+                    None,
+                )
                     .map_err(|error| McpError::Application(error.message))?
             }
             "outbox_cancel" => crate::outbox::execute(
@@ -1420,8 +1428,15 @@ fn search_filters_schema() -> Value {
 fn tool_schema(name: &str) -> Value {
     let empty = || json!({"type":"object","properties":{},"additionalProperties":false});
     match name {
-        "mail_rules_list" | "mail_rule_save" | "mail_rule_delete" | "mail_rule_preview"
-        | "mail_rule_apply" | "mail_rule_runs" | "mail_rule_retry" => {
+        "mail_rules_list"
+        | "mail_rule_get"
+        | "mail_rule_save"
+        | "mail_rule_set_enabled"
+        | "mail_rule_delete"
+        | "mail_rule_preview"
+        | "mail_rule_apply"
+        | "mail_rule_runs"
+        | "mail_rule_retry" => {
             let contract: Value =
                 serde_json::from_str(include_str!("../../../contracts/mcp-tools.json"))
                     .expect("valid MCP contract");
@@ -1437,8 +1452,18 @@ fn tool_schema(name: &str) -> Value {
         "outbox_list" => empty(),
         "outbox_schedule" => {
             let mut schema = tool_schema("message_send");
+            schema["properties"]["requestId"] = json!({"type":"string","format":"uuid"});
             schema["properties"]["sendAt"] = json!({"type":"string","format":"date-time"});
-            schema["required"] = json!(["accountEmail", "to", "subject", "text", "sendAt"]);
+            schema["properties"]["attachments"]["items"]["properties"]["data"]["maxLength"] =
+                json!(7_000_000);
+            schema["required"] = json!([
+                "accountEmail",
+                "to",
+                "subject",
+                "text",
+                "requestId",
+                "sendAt"
+            ]);
             schema
         }
         "outbox_cancel" | "outbox_retry" => {

@@ -32,7 +32,7 @@
           "subject": { "type": "string", "minLength": 1, "maxLength": 500 },
           "text": { "type": "string", "minLength": 1, "maxLength": 2000000 },
           "html": { "type": "string", "maxLength": 8000000 },
-          "attachments": {
+            "attachments": {
             "type": "array",
             "maxItems": 10,
             "items": {
@@ -41,20 +41,21 @@
                 "id": { "type": "string", "minLength": 1, "maxLength": 100 },
                 "filename": { "type": "string", "minLength": 1, "maxLength": 255 },
                 "contentType": { "type": "string", "minLength": 1, "maxLength": 150 },
-                "data": { "type": "string", "maxLength": 21000000 }
+                "data": { "type": "string", "maxLength": 7000000 }
               },
               "required": ["filename", "contentType", "data"],
               "additionalProperties": false
-            }
+              }
+            },
+            "requestId": { "type": "string", "format": "uuid" },
+            "sendAt": { "type": "string", "format": "date-time" }
           },
-          "sendAt": { "type": "string", "format": "date-time" }
-        },
-        "required": ["accountEmail", "to", "subject", "text", "sendAt"],
+          "required": ["accountEmail", "to", "subject", "text", "requestId", "sendAt"],
         "additionalProperties": false
       },
       "annotations": {
         "destructiveHint": false,
-        "idempotentHint": false
+        "idempotentHint": true
       }
     },
     {
@@ -121,9 +122,30 @@
       }
     },
     {
+      "name": "mail_rule_get",
+      "title": "读取邮件规则",
+      "description": "按 ID 读取当前用户的一条完整邮件规则，用于安全地检查后再修改。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["ruleId"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
       "name": "mail_rule_save",
       "title": "保存邮件规则",
-      "description": "创建或完整更新确定性邮件规则；不执行历史邮件。",
+      "description": "创建或完整更新确定性邮件规则；不执行历史邮件。Agent 新建规则时应先保存 enabled:false 的草案，预览后再单独启用。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -477,6 +499,30 @@
       "annotations": {
         "readOnlyHint": false,
         "idempotentHint": false
+      }
+    },
+    {
+      "name": "mail_rule_set_enabled",
+      "title": "启用或停用邮件规则",
+      "description": "只修改规则启用状态。Agent 应先读取并预览草案，再显式启用；停用会取消尚未开始的旧版本任务。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": ["ruleId", "enabled"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true
       }
     },
     {

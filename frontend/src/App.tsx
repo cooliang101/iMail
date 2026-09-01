@@ -135,7 +135,20 @@ function App() {
     }
   }, [setMessageStats]);
 
+  const loadOutbox = useCallback(async () => {
+    const result = await api<{ items: OutboxItem[] }>('/api/outbox');
+    setOutbox(result.items);
+  }, []);
+
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => void api<{ items: OutboxItem[] }>('/api/outbox')
+      .then((result) => { if (active) setOutbox(result.items); })
+      .catch(() => undefined);
+    const timer = window.setInterval(refresh, 3_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
   useEffect(() => {
     if (!ready) return;
     return preloadDeferredFeaturesDuringIdle();
@@ -355,6 +368,7 @@ function App() {
       await load();
       setNotice({ kind: 'success', text: '定时任务已取消，邮件已返回草稿' });
     } catch (error) {
+      void loadOutbox();
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '定时任务取消失败' });
     }
   }
@@ -365,6 +379,7 @@ function App() {
       await load();
       setNotice({ kind: 'success', text: '邮件已重新加入发送队列' });
     } catch (error) {
+      void loadOutbox();
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件重新发送失败' });
     }
   }
@@ -375,6 +390,7 @@ function App() {
       await load();
       setNotice({ kind: 'success', text: resolution === 'sent' ? '邮件已标记为人工核对完成' : '邮件已返回草稿' });
     } catch (error) {
+      void loadOutbox();
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '人工核对结果保存失败' });
     }
   }

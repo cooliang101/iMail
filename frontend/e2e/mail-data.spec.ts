@@ -32,6 +32,7 @@ type FixtureState = {
   patchCalls: Array<{ id: string; body: Record<string, unknown> }>;
   drafts: Array<Record<string, unknown>>;
   outbox: Array<Record<string, unknown>>;
+  outboxListCalls: number;
   messagePageCalls: number;
   serviceInfoCalls: number;
   failNextPatch: boolean;
@@ -46,7 +47,7 @@ async function installMailFixture(page: Page) {
   // many fine-grained icon modules. Chromium's default buffer can evict the
   // first preload entries before the warmup assertion observes them.
   await page.addInitScript(() => performance.setResourceTimingBufferSize(2_000));
-  const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], outbox: [], messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
+  const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], outbox: [], outboxListCalls: 0, messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -65,11 +66,15 @@ async function installMailFixture(page: Page) {
       const draft = { id: path.split('/').at(-1) === 'drafts' ? request.headers()['x-draft-id'] : path.split('/').at(-1), createdAt: '2026-08-13T00:00:00Z', updatedAt: new Date().toISOString(), ...body };
       state.drafts = [draft]; return json(route, { draft });
     }
-    if (path === '/api/outbox' && method === 'GET') return json(route, { items: state.outbox });
+    if (path === '/api/outbox' && method === 'GET') { state.outboxListCalls += 1; return json(route, { items: state.outbox }); }
     if (path === '/api/outbox' && method === 'POST') {
       const body = request.postDataJSON() as Record<string, unknown>;
+      expect(body.requestId).toEqual(expect.stringMatching(/^[0-9a-f-]{36}$/));
+      const existing = state.outbox.find((item) => item.requestId === body.requestId);
+      if (existing) return json(route, { item: existing }, 201);
       const item = {
         id: `outbox-${state.outbox.length + 1}`,
+        requestId: body.requestId,
         accountId: body.accountId,
         to: body.to,
         cc: body.cc ?? [],
@@ -365,6 +370,22 @@ test('scheduled send persists in the outbox and can be cancelled before delivery
   expect(state.outbox[0].status).toBe('cancelled');
 });
 
+test('outbox refreshes when the background scheduler changes task status', async ({ page }) => {
+  const state = await installMailFixture(page);
+  state.outbox = [{
+    id: 'outbox-1', accountId: account.id, to: ['recipient@example.test'], cc: [], bcc: [],
+    subject: 'Background delivery fixture', scheduledAt: new Date().toISOString(), status: 'scheduled', attempts: 0,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  }];
+  await page.reload();
+  await page.getByRole('button', { name: '发件箱' }).click();
+  await expect(page.getByText('等待发送', { exact: true })).toBeVisible();
+  const callsBeforeDelivery = state.outboxListCalls;
+  state.outbox = state.outbox.map((item) => ({ ...item, status: 'sent', sentAt: new Date().toISOString() }));
+  await expect.poll(() => state.outboxListCalls).toBeGreaterThan(callsBeforeDelivery);
+  await expect(page.locator('.outbox-pane .outbox-status').getByText('已发送', { exact: true })).toBeVisible({ timeout: 5_000 });
+});
+
 test('uncertain delivery requires an explicit manual resolution', async ({ page }) => {
   const state = await installMailFixture(page);
   state.outbox = [{
@@ -379,7 +400,7 @@ test('uncertain delivery requires an explicit manual resolution', async ({ page 
   await expect(page.getByRole('button', { name: '已在已发送中找到' })).toBeVisible();
   await expect(page.getByRole('button', { name: '确认未发送，返回草稿' })).toBeVisible();
   await page.getByRole('button', { name: '已在已发送中找到' }).click();
-  await expect(page.getByText('已发送', { exact: true })).toBeVisible();
+  await expect(page.locator('.outbox-pane .outbox-status').getByText('已发送', { exact: true })).toBeVisible();
   expect(state.outbox[0].status).toBe('sent');
 });
 

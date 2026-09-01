@@ -49,6 +49,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
   const [pendingSendAt, setPendingSendAt] = useState<string>();
   const [saveStatus, setSaveStatus] = useState<'saved' | 'pending' | 'saving' | 'error'>(draft ? 'saved' : 'pending');
   const draftIdRef = useRef(draft?.id ?? crypto.randomUUID());
+  const scheduleRequestIdRef = useRef(crypto.randomUUID());
   const draftCreatedRef = useRef(Boolean(draft));
   const revisionRef = useRef(mode === 'new' && !draft ? 0 : 1);
   const savedRevisionRef = useRef(draft ? revisionRef.current : 0);
@@ -127,7 +128,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
       if (!draftCreatedRef.current) throw new Error('草稿保存失败，请重试后发送');
       const payload = { accountId, to: resolvedTo.addresses, cc: resolvedCc.addresses, bcc: resolvedBcc.addresses, ...envelope, subject: subject.trim(), text: text.trim() || '邮件包含图片内容', html, attachments, draftId: draftIdRef.current };
       if (sendAt) {
-        await api('/api/outbox', { method: 'POST', body: JSON.stringify({ ...payload, sendAt }) });
+        await api('/api/outbox', { method: 'POST', body: JSON.stringify({ ...payload, requestId: scheduleRequestIdRef.current, sendAt }) });
         setScheduleOpen(false);
         await onScheduled();
       } else {

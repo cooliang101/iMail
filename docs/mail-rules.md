@@ -51,12 +51,16 @@ HTTP 使用当前用户会话，桌面本地桥接调用相同实现。账户、
 | HTTP | MCP 工具 |
 | --- | --- |
 | `GET /api/mail-rules` | `mail_rules_list` |
+| `GET /api/mail-rules/:id` | `mail_rule_get` |
 | `POST /api/mail-rules`、`PUT /api/mail-rules/:id` | `mail_rule_save` |
+| `PATCH /api/mail-rules/:id/enabled` | `mail_rule_set_enabled` |
 | `DELETE /api/mail-rules/:id` | `mail_rule_delete` |
 | `POST /api/mail-rules/preview` | `mail_rule_preview` |
 | `POST /api/mail-rules/apply` | `mail_rule_apply` |
 | `GET /api/mail-rule-runs` | `mail_rule_runs` |
 | `POST /api/mail-rule-runs/:id/retry` | `mail_rule_retry` |
+
+Agent 新建自动分类时应先通过 `mail_rule_save` 保存 `enabled: false` 的草案，再用 `mail_rule_preview` 向用户展示匹配总数、可执行数量及样本。确认规则定义后，使用 `mail_rule_set_enabled` 单独启用；这个接口只改变启用状态，重复设置同一状态不会增加修订版。修改已有规则前可用 `mail_rule_get` 读取完整当前版本，避免依据过期列表覆盖用户修改。历史邮件处理仍必须通过一次性预览令牌与 `confirmed: true` 单独确认，启用规则本身不会处理历史邮件。
 
 规则输入示例（MCP 保存时放在 `input` 中；更新另提供 `ruleId`）：
 
@@ -94,6 +98,6 @@ npm --prefix frontend run test:e2e
 
 前端复用设置中心二级导航、统一表单控件和语义主题令牌；详情页只有一个内容滚动区。浏览器验收使用独立临时数据库与合成邮件，覆盖保存、预览、单独确认、记录、五套内置主题及窄屏布局，不操作个人邮件。功能实现不等于已打包或发布。
 
-2026-08-31 本地验收：前端 234 项测试、生产构建及现有 13 项 E2E 通过。额外浏览器流程完成 75 封合成邮件的历史确认执行，重复预览可执行数为 0；新增、校验、停用、删除取消/确认及记录查看通过。五套主题、360/390/650/820/1050/1440px 布局、单滚动容器与键盘选择器通过；规则编辑页 WCAG 2 A/AA、2.1 AA 自动检查无违规。现有 E2E 不等同于规则专属覆盖，规则流程另由上述浏览器验收与后端测试验证。MCP 官方 SDK 同时验证七个规则工具及一次性令牌的错误响应。
+2026-08-31 本地验收：前端 234 项测试、生产构建及现有 13 项 E2E 通过。额外浏览器流程完成 75 封合成邮件的历史确认执行，重复预览可执行数为 0；新增、校验、停用、删除取消/确认及记录查看通过。五套主题、360/390/650/820/1050/1440px 布局、单滚动容器与键盘选择器通过；规则编辑页 WCAG 2 A/AA、2.1 AA 自动检查无违规。现有 E2E 不等同于规则专属覆盖，规则流程另由上述浏览器验收与后端测试验证。MCP 官方 SDK 验证规则工具及一次性令牌的错误响应。
 
 Rust 工作区测试、格式检查和 Clippy（`-D warnings`）通过；MCP 错误封装修正后再次通过 HTTP crate 测试与官方 SDK 互操作测试。需显式长时运行的 TLS soak 按既有配置忽略，不计为已验收。前端 lint 为 0 错误，保留 4 项既有 Hook 依赖警告。

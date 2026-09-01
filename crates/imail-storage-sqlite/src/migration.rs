@@ -152,6 +152,10 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
         transaction.execute_batch(include_str!("../sql/migration-v15-outbox.sql"))?;
         applied_versions.push(15);
     }
+    if from_version < 16 {
+        transaction.execute_batch(include_str!("../sql/migration-v16-outbox-idempotency.sql"))?;
+        applied_versions.push(16);
+    }
     ensure_message_query_indexes(&transaction)?;
     if from_version < CURRENT_SCHEMA_VERSION {
         transaction.execute(

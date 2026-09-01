@@ -56,8 +56,10 @@ export type EmbeddedDomainCall =
   | { operation: 'preferencesGet' }
   | { operation: 'smartFoldersList' }
   | { operation: 'mailRulesList' }
+  | { operation: 'mailRuleGet'; ruleId: string }
   | { operation: 'mailRuleCreate'; input: Record<string, unknown> }
   | { operation: 'mailRuleUpdate'; ruleId: string; input: Record<string, unknown> }
+  | { operation: 'mailRuleSetEnabled'; ruleId: string; input: Record<string, unknown> }
   | { operation: 'mailRuleDelete'; ruleId: string }
   | { operation: 'mailRulePreview'; input: Record<string, unknown> }
   | { operation: 'mailRuleApply'; input: Record<string, unknown> }
@@ -211,8 +213,11 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
     if (url.pathname === '/api/mail-rules/apply') return { operation: 'mailRuleApply', input: body };
   }
   const mailRule = url.pathname.match(/^\/api\/mail-rules\/([^/]+)$/);
+  if (mailRule && method === 'GET' && options.body === undefined) return { operation: 'mailRuleGet', ruleId: decodeURIComponent(mailRule[1]) };
   if (mailRule && method === 'PUT' && body) return { operation: 'mailRuleUpdate', ruleId: decodeURIComponent(mailRule[1]), input: body };
   if (mailRule && method === 'DELETE' && options.body === undefined) return { operation: 'mailRuleDelete', ruleId: decodeURIComponent(mailRule[1]) };
+  const mailRuleEnabled = url.pathname.match(/^\/api\/mail-rules\/([^/]+)\/enabled$/);
+  if (mailRuleEnabled && method === 'PATCH' && body) return { operation: 'mailRuleSetEnabled', ruleId: decodeURIComponent(mailRuleEnabled[1]), input: body };
   const ruleRetry = url.pathname.match(/^\/api\/mail-rule-runs\/([^/]+)\/retry$/);
   if (ruleRetry && method === 'POST') return { operation: 'mailRuleRetry', runId: decodeURIComponent(ruleRetry[1]) };
   const smartFolder = url.pathname.match(/^\/api\/smart-folders\/([^/]+)$/);

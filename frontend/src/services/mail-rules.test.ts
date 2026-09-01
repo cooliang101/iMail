@@ -4,8 +4,10 @@ import { embeddedDomainCall } from './mail/tauri';
 describe('mail rules desktop routing', () => {
   it.each([
     ['/api/mail-rules', 'GET', undefined, 'mailRulesList'],
+    ['/api/mail-rules/rule-1', 'GET', undefined, 'mailRuleGet'],
     ['/api/mail-rules', 'POST', {}, 'mailRuleCreate'],
     ['/api/mail-rules/rule-1', 'PUT', {}, 'mailRuleUpdate'],
+    ['/api/mail-rules/rule-1/enabled', 'PATCH', { enabled: true }, 'mailRuleSetEnabled'],
     ['/api/mail-rules/rule-1', 'DELETE', undefined, 'mailRuleDelete'],
     ['/api/mail-rules/preview', 'POST', {}, 'mailRulePreview'],
     ['/api/mail-rules/apply', 'POST', { token: 'preview', confirmed: true }, 'mailRuleApply'],

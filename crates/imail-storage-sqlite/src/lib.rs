@@ -44,7 +44,7 @@ pub use backup::{
 pub use credential_codec::MasterKeyCredentialCodec;
 pub use export_encryption::PortableAuthorizationExportEncryptor;
 pub use migration::{migrate_database, MigrationError, MigrationReport};
-pub use outbox::OutboxWorkItem;
+pub use outbox::{OutboxSchedule, OutboxWorkItem};
 pub use sync_runtime::{
     SyncCompletion, SyncEnqueue, SyncFailure, SyncPolicySettings, SyncRuntimeError,
     SyncRuntimeStore,

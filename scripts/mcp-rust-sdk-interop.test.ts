@@ -79,7 +79,7 @@ describe('official TypeScript SDK against the Rust MCP transport', () => {
       expect(client.getServerVersion()).toMatchObject({ name: 'imail', version: '1.0.0' });
       expect(client.getServerCapabilities()).toMatchObject({ tools: { listChanged: true } });
       const listed = await client.listTools();
-      expect(listed.tools).toHaveLength(56);
+      expect(listed.tools).toHaveLength(58);
       expect(listed.tools.map((tool) => tool.name)).toContain('conversation_get');
       expect(listed.tools.map((tool) => tool.name)).toContain('imail_status');
       expect(listed.tools.map((tool) => tool.name)).toContain('outbox_schedule');
@@ -105,6 +105,12 @@ describe('official TypeScript SDK against the Rust MCP transport', () => {
       const rule = (ruleSaved.structuredContent as { rule: { id: string } }).rule;
       const rules = await client.callTool({ name: 'mail_rules_list', arguments: {} });
       expect(rules.structuredContent).toMatchObject({ rules: [{ id: rule.id, enabled: false }] });
+      const fetchedRule = await client.callTool({ name: 'mail_rule_get', arguments: { ruleId: rule.id } });
+      expect(fetchedRule.structuredContent).toMatchObject({ rule: { id: rule.id, enabled: false } });
+      const enabledRule = await client.callTool({ name: 'mail_rule_set_enabled', arguments: { ruleId: rule.id, enabled: true } });
+      expect(enabledRule.structuredContent).toMatchObject({ rule: { id: rule.id, enabled: true } });
+      const disabledRule = await client.callTool({ name: 'mail_rule_set_enabled', arguments: { ruleId: rule.id, enabled: false } });
+      expect(disabledRule.structuredContent).toMatchObject({ rule: { id: rule.id, enabled: false } });
       const preview = await client.callTool({ name: 'mail_rule_preview', arguments: { ruleId: rule.id, input: ruleInput } });
       expect(preview.isError).not.toBe(true);
       const token = (preview.structuredContent as { token: string }).token;

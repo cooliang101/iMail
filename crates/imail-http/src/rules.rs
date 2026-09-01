@@ -18,7 +18,11 @@ pub(crate) fn routes() -> Router<Arc<AppState>> {
         .route("/api/mail-rules", get(list).post(create))
         .route(
             "/api/mail-rules/:id",
-            axum::routing::put(update).delete(remove),
+            get(get_one).put(update).delete(remove),
+        )
+        .route(
+            "/api/mail-rules/:id/enabled",
+            axum::routing::patch(set_enabled),
         )
         .route("/api/mail-rules/preview", post(preview))
         .route("/api/mail-rules/apply", post(apply))
@@ -63,6 +67,12 @@ struct ApplyInput {
     confirmed: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EnabledInput {
+    enabled: bool,
+}
+
 pub fn execute(
     store: &mut SqliteAuthStore,
     owner: &str,
@@ -72,6 +82,15 @@ pub fn execute(
 ) -> Result<Value, ApplicationError<AuthStoreError>> {
     match operation {
         "list" => Ok(json!({"rules":store.list_mail_rules(owner).map_err(storage)?})),
+        "get" => {
+            let rule = store
+                .list_mail_rules(owner)
+                .map_err(storage)?
+                .into_iter()
+                .find(|rule| Some(rule.id.as_str()) == id)
+                .ok_or_else(missing)?;
+            Ok(json!({"rule":rule}))
+        }
         "create" | "update" => {
             let input: MailRuleInput =
                 serde_json::from_value(input.ok_or_else(|| invalid("缺少规则参数"))?)
@@ -82,6 +101,24 @@ pub fn execute(
             }
             Ok(
                 json!({"rule":store.save_mail_rule(owner,id,&input).map_err(storage)?.ok_or_else(missing)?}),
+            )
+        }
+        "set_enabled" => {
+            let change: EnabledInput =
+                serde_json::from_value(input.ok_or_else(|| invalid("缺少启用状态"))?)
+                    .map_err(|_| invalid("启用状态无效"))?;
+            let mut rule = store
+                .list_mail_rules(owner)
+                .map_err(storage)?
+                .into_iter()
+                .find(|rule| Some(rule.id.as_str()) == id)
+                .ok_or_else(missing)?;
+            if rule.input.enabled == change.enabled {
+                return Ok(json!({"rule":rule}));
+            }
+            rule.input.enabled = change.enabled;
+            Ok(
+                json!({"rule":store.save_mail_rule(owner,id,&rule.input).map_err(storage)?.ok_or_else(missing)?}),
             )
         }
         "delete" => {
@@ -162,6 +199,13 @@ async fn list(
 ) -> Response {
     run(s, u.user_id, "list", None, None).await
 }
+async fn get_one(
+    State(s): State<Arc<AppState>>,
+    Extension(u): Extension<AuthenticatedUser>,
+    Path(id): Path<String>,
+) -> Response {
+    run(s, u.user_id, "get", Some(id), None).await
+}
 async fn runs(
     State(s): State<Arc<AppState>>,
     Extension(u): Extension<AuthenticatedUser>,
@@ -182,6 +226,14 @@ async fn update(
     Json(v): Json<Value>,
 ) -> Response {
     run(s, u.user_id, "update", Some(id), Some(v)).await
+}
+async fn set_enabled(
+    State(s): State<Arc<AppState>>,
+    Extension(u): Extension<AuthenticatedUser>,
+    Path(id): Path<String>,
+    Json(v): Json<Value>,
+) -> Response {
+    run(s, u.user_id, "set_enabled", Some(id), Some(v)).await
 }
 async fn remove(
     State(s): State<Arc<AppState>>,

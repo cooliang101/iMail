@@ -1,5 +1,9 @@
 use std::sync::Arc;
-use std::{sync::mpsc, thread, time::Duration as StdDuration};
+use std::{
+    sync::mpsc,
+    thread,
+    time::{Duration as StdDuration, Instant},
+};
 
 use axum::{
     extract::{Path, State},
@@ -10,14 +14,14 @@ use axum::{
 };
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use imail_core::mail_operations::MailApplicationError;
-use imail_storage_sqlite::{AuthStoreError, SqliteAuthStore};
+use imail_storage_sqlite::{AuthStoreError, OutboxSchedule, SqliteAuthStore};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::{
     auth::AuthenticatedUser,
-    messages::{validate_send, SendInput},
+    messages::{validate_send, validate_send_message, SendInput},
     AppState, EmbeddedOperationError,
 };
 
@@ -35,6 +39,7 @@ impl OutboxRuntime {
             .name("imail-outbox".into())
             .spawn(move || {
                 let mut store = None;
+                let mut last_prune = None;
                 loop {
                     match receiver.recv_timeout(StdDuration::from_millis(500)) {
                         Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -45,6 +50,20 @@ impl OutboxRuntime {
                             state.config.data_dir.join("imail.sqlite"),
                         )
                         .ok();
+                    }
+                    if last_prune.map_or(true, |value: Instant| {
+                        value.elapsed() >= StdDuration::from_secs(60 * 60)
+                    }) {
+                        let before = (Utc::now() - Duration::days(90))
+                            .to_rfc3339_opts(SecondsFormat::Millis, true);
+                        match store.as_mut().map(|store| store.prune_outbox(&before)) {
+                            Some(Ok(_)) => last_prune = Some(Instant::now()),
+                            Some(Err(_)) => {
+                                store = None;
+                                continue;
+                            }
+                            None => continue,
+                        }
                     }
                     let work = match store
                         .as_mut()
@@ -62,13 +81,24 @@ impl OutboxRuntime {
                             &state,
                             work.owner_id,
                             work.message,
-                            work.draft_id,
+                            None,
                         );
                         let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
                         if let Some(store) = store.as_mut() {
                             match result {
                                 Ok(sent) => {
-                                    let _ = store.complete_outbox(&work.id, &sent.message_id, &now);
+                                    if !matches!(
+                                        store.complete_outbox(&work.id, &sent.message_id, &now),
+                                        Ok(true)
+                                    ) {
+                                        let _ = store.fail_outbox(
+                                            &work.id,
+                                            "OUTBOX_LOCAL_COMMIT_FAILED",
+                                            "SMTP 已接受邮件，但本地状态提交失败，请核对已发送邮件后人工处理。",
+                                            true,
+                                            &now,
+                                        );
+                                    }
                                 }
                                 Err(error) => {
                                     let uncertain =
@@ -120,6 +150,7 @@ pub(crate) fn routes() -> Router<Arc<AppState>> {
 #[serde(rename_all = "camelCase")]
 struct ScheduleInput {
     send_at: String,
+    request_id: String,
     #[serde(flatten)]
     message: SendInput,
 }
@@ -147,6 +178,10 @@ fn safe_error(error: AuthStoreError) -> EmbeddedOperationError {
             status: 400,
             message: "待发送邮件内容无效".into(),
         },
+        AuthStoreError::IdempotencyConflict => EmbeddedOperationError {
+            status: 409,
+            message: "该请求 ID 已用于另一封定时邮件".into(),
+        },
         _ => EmbeddedOperationError {
             status: 500,
             message: "发件箱暂时不可用".into(),
@@ -170,6 +205,39 @@ fn schedule_time(value: &str, now: DateTime<Utc>) -> Result<String, EmbeddedOper
     Ok(parsed.to_rfc3339_opts(SecondsFormat::Millis, true))
 }
 
+pub(crate) fn schedule_message(
+    store: &mut SqliteAuthStore,
+    owner: &str,
+    request_id: &str,
+    send_at: &str,
+    message: imail_protocol::SendMessageInput,
+    draft_id: Option<&str>,
+) -> Result<Value, EmbeddedOperationError> {
+    if Uuid::parse_str(request_id).is_err() || !validate_send_message(&message) {
+        return Err(EmbeddedOperationError {
+            status: 400,
+            message: "待发送邮件参数无效".into(),
+        });
+    }
+    let now = Utc::now();
+    let now_text = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let send_at = schedule_time(send_at, now)?;
+    let item = store
+        .schedule_outbox(
+            owner,
+            OutboxSchedule {
+                id: &Uuid::new_v4().to_string(),
+                message: &message,
+                draft_id,
+                idempotency_key: request_id,
+                scheduled_at: &send_at,
+                now: &now_text,
+            },
+        )
+        .map_err(safe_error)?;
+    Ok(json!({"item":item}))
+}
+
 pub(crate) fn execute(
     store: &mut SqliteAuthStore,
     owner: &str,
@@ -191,22 +259,18 @@ pub(crate) fn execute(
                     status: 400,
                     message: "待发送邮件参数无效".into(),
                 })?;
-            let send_at = schedule_time(&input.send_at, now)?;
             let validated = validate_send(input.message).map_err(|_| EmbeddedOperationError {
                 status: 400,
                 message: "待发送邮件参数无效".into(),
             })?;
-            let item = store
-                .schedule_outbox(
-                    owner,
-                    &Uuid::new_v4().to_string(),
-                    &validated.message,
-                    validated.draft_id.as_deref(),
-                    &send_at,
-                    &now_text,
-                )
-                .map_err(safe_error)?;
-            Ok(json!({"item":item}))
+            schedule_message(
+                store,
+                owner,
+                &input.request_id,
+                &input.send_at,
+                validated.message,
+                validated.draft_id.as_deref(),
+            )
         }
         "cancel" => {
             if !store

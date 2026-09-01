@@ -1592,12 +1592,8 @@ pub(crate) fn validate_send(input: SendInput) -> Result<ValidatedSend, ()> {
     }
     let attachments = input.attachments.unwrap_or_default();
     if attachments.len() > 10
-        || attachments
-            .iter()
-            .map(|attachment| attachment.size)
-            .sum::<usize>()
-            > 15 * 1024 * 1024
         || attachments.iter().any(|attachment| {
+            let decoded_size = STANDARD.decode(&attachment.data).map(|value| value.len());
             attachment.id.is_empty()
                 || utf16(&attachment.id) > 100
                 || attachment.filename.is_empty()
@@ -1606,32 +1602,82 @@ pub(crate) fn validate_send(input: SendInput) -> Result<ValidatedSend, ()> {
                 || utf16(&attachment.content_type) > 150
                 || attachment.size > 5 * 1024 * 1024
                 || utf16(&attachment.data) > 7_000_000
+                || decoded_size != Ok(attachment.size)
         })
+        || attachments
+            .iter()
+            .map(|attachment| attachment.size)
+            .sum::<usize>()
+            > 15 * 1024 * 1024
     {
         return Err(());
     }
+    let message = SendMessageInput {
+        envelope: input.envelope,
+        account_id: input.account_id,
+        to: input.to,
+        cc: input.cc,
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+        attachments: (!attachments.is_empty()).then(|| {
+            attachments
+                .into_iter()
+                .map(|attachment| SendAttachmentInput {
+                    filename: attachment.filename,
+                    content_type: attachment.content_type,
+                    data: attachment.data,
+                })
+                .collect()
+        }),
+    };
+    if !validate_send_message(&message) {
+        return Err(());
+    }
     Ok(ValidatedSend {
-        message: SendMessageInput {
-            envelope: input.envelope,
-            account_id: input.account_id,
-            to: input.to,
-            cc: input.cc,
-            subject: input.subject,
-            text: input.text,
-            html: input.html,
-            attachments: (!attachments.is_empty()).then(|| {
-                attachments
-                    .into_iter()
-                    .map(|attachment| SendAttachmentInput {
-                        filename: attachment.filename,
-                        content_type: attachment.content_type,
-                        data: attachment.data,
-                    })
-                    .collect()
-            }),
-        },
+        message,
         draft_id: input.draft_id,
     })
+}
+
+pub(crate) fn validate_send_message(message: &SendMessageInput) -> bool {
+    let recipients = message
+        .to
+        .iter()
+        .chain(message.cc.iter().flatten())
+        .chain(&message.envelope.bcc)
+        .collect::<Vec<_>>();
+    let attachments = message.attachments.as_deref().unwrap_or_default();
+    uuid::Uuid::parse_str(&message.account_id).is_ok()
+        && message.envelope.is_valid()
+        && !recipients.is_empty()
+        && recipients.len() <= 300
+        && recipients.iter().all(|address| valid_email(address))
+        && !message.subject.is_empty()
+        && utf16(&message.subject) <= 500
+        && !message.text.is_empty()
+        && utf16(&message.text) <= 2_000_000
+        && message
+            .html
+            .as_ref()
+            .map_or(true, |html| utf16(html) <= 8_000_000)
+        && attachments.len() <= 10
+        && attachments.iter().all(|attachment| {
+            !attachment.filename.is_empty()
+                && utf16(&attachment.filename) <= 255
+                && !attachment.content_type.is_empty()
+                && utf16(&attachment.content_type) <= 150
+                && utf16(&attachment.data) <= 7_000_000
+                && STANDARD
+                    .decode(&attachment.data)
+                    .is_ok_and(|value| value.len() <= 5 * 1024 * 1024)
+        })
+        && attachments
+            .iter()
+            .filter_map(|attachment| STANDARD.decode(&attachment.data).ok())
+            .map(|value| value.len())
+            .sum::<usize>()
+            <= 15 * 1024 * 1024
 }
 
 fn valid_email(value: &str) -> bool {
