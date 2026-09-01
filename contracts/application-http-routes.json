@@ -85,6 +85,7 @@
   "POST /api/oauth/start",
   "POST /api/oauth/status",
   "POST /api/outbox",
+  "POST /api/outbox/:id/resolve",
   "POST /api/outbox/:id/retry",
   "POST /api/security/clear-user-data",
   "POST /api/security/mail-authorization-exports",

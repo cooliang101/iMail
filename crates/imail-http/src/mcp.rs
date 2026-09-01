@@ -34,7 +34,11 @@ use uuid::Uuid;
 
 use crate::AppState;
 
-const MANAGEMENT_TOOLS: [&str; 22] = [
+const MANAGEMENT_TOOLS: [&str; 26] = [
+    "outbox_schedule",
+    "outbox_cancel",
+    "outbox_retry",
+    "outbox_resolve",
     "mail_rule_save",
     "mail_rule_delete",
     "mail_rule_apply",
@@ -134,6 +138,14 @@ struct McpSendInput {
     attachments: Option<Vec<SendAttachmentInput>>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpScheduleInput {
+    send_at: String,
+    #[serde(flatten)]
+    message: McpSendInput,
+}
+
 impl McpSendInput {
     fn envelope(&self) -> imail_protocol::ComposeEnvelope {
         imail_protocol::ComposeEnvelope {
@@ -142,6 +154,20 @@ impl McpSendInput {
                 in_reply_to: self.in_reply_to.clone(),
                 references: self.references.clone(),
             },
+        }
+    }
+
+    fn into_message(self, account_id: String) -> SendMessageInput {
+        let envelope = self.envelope();
+        SendMessageInput {
+            envelope,
+            account_id,
+            to: self.to,
+            cc: self.cc,
+            subject: self.subject,
+            text: self.text,
+            html: self.html,
+            attachments: self.attachments,
         }
     }
 }
@@ -799,22 +825,9 @@ async fn call_tool(
             Ok(account_by_email(store, &lookup_owner, &email)?.id)
         })
         .await?;
-        let result = crate::messages::send_for(
-            state,
-            owner_id,
-            SendMessageInput {
-                envelope: input.envelope(),
-                account_id,
-                to: input.to,
-                cc: input.cc,
-                subject: input.subject,
-                text: input.text,
-                html: input.html,
-                attachments: input.attachments,
-            },
-            None,
-        )
-        .await?;
+        let result =
+            crate::messages::send_for(state, owner_id, input.into_message(account_id), None)
+                .await?;
         return Ok(tool_output(json!({"delivery":result})));
     }
     let name = name.to_string();
@@ -877,6 +890,41 @@ async fn call_tool(
             "mail_rule_apply" => crate::rules::execute(store,&owner_id,"apply",None,Some(arguments))?,
             "mail_rule_runs" => crate::rules::execute(store,&owner_id,"runs",None,None)?,
             "mail_rule_retry" => crate::rules::execute(store,&owner_id,"retry",Some(required_string(&arguments,"runId")?),None)?,
+            "outbox_list" => crate::outbox::execute(store, &owner_id, "list", None, None)
+                .map_err(|error| McpError::Application(error.message))?,
+            "outbox_schedule" => {
+                let input: McpScheduleInput = parse(arguments)?;
+                let account = account_by_email(store, &owner_id, &input.message.account_email)?;
+                let mut payload = serde_json::to_value(input.message.into_message(account.id))
+                    .map_err(|_| McpError::Invalid("待发送邮件参数无效"))?;
+                payload["sendAt"] = Value::String(input.send_at);
+                crate::outbox::execute(store, &owner_id, "schedule", None, Some(payload))
+                    .map_err(|error| McpError::Application(error.message))?
+            }
+            "outbox_cancel" => crate::outbox::execute(
+                store,
+                &owner_id,
+                "cancel",
+                Some(required_string(&arguments, "outboxId")?),
+                None,
+            )
+            .map_err(|error| McpError::Application(error.message))?,
+            "outbox_retry" => crate::outbox::execute(
+                store,
+                &owner_id,
+                "retry",
+                Some(required_string(&arguments, "outboxId")?),
+                None,
+            )
+            .map_err(|error| McpError::Application(error.message))?,
+            "outbox_resolve" => crate::outbox::execute(
+                store,
+                &owner_id,
+                "resolve",
+                Some(required_string(&arguments, "outboxId")?),
+                Some(json!({"resolution":required_string(&arguments, "resolution")?})),
+            )
+            .map_err(|error| McpError::Application(error.message))?,
             "smart_folder_save" => {
                 let id = optional_string(&arguments, "folderId");
                 crate::search::execute(store, &owner_id, if id.is_some() { "PUT" } else { "POST" }, id, Some(json!({"name":arguments.get("name"),"filters":arguments.get("filters")})))?
@@ -1386,6 +1434,19 @@ fn tool_schema(name: &str) -> Value {
                 .clone()
         }
         "smart_folders_list" => empty(),
+        "outbox_list" => empty(),
+        "outbox_schedule" => {
+            let mut schema = tool_schema("message_send");
+            schema["properties"]["sendAt"] = json!({"type":"string","format":"date-time"});
+            schema["required"] = json!(["accountEmail", "to", "subject", "text", "sendAt"]);
+            schema
+        }
+        "outbox_cancel" | "outbox_retry" => {
+            json!({"type":"object","properties":{"outboxId":{"type":"string","format":"uuid"}},"required":["outboxId"],"additionalProperties":false})
+        }
+        "outbox_resolve" => {
+            json!({"type":"object","properties":{"outboxId":{"type":"string","format":"uuid"},"resolution":{"type":"string","enum":["sent","notSent"]}},"required":["outboxId","resolution"],"additionalProperties":false})
+        }
         "smart_folder_save" => {
             json!({"type":"object","properties":{"folderId":{"type":"string","format":"uuid"},"name":{"type":"string","minLength":1,"maxLength":80},"filters":search_filters_schema()},"required":["name","filters"],"additionalProperties":false})
         }

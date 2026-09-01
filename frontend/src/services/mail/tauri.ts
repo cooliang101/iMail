@@ -48,6 +48,7 @@ export type EmbeddedDomainCall =
   | { operation: 'outboxSchedule'; input: Record<string, unknown> }
   | { operation: 'outboxCancel'; itemId: string }
   | { operation: 'outboxRetry'; itemId: string }
+  | { operation: 'outboxResolve'; itemId: string; input: Record<string, unknown> }
   | { operation: 'draftsList' }
   | { operation: 'draftCreate'; draftId?: string; input: Record<string, unknown> }
   | { operation: 'draftUpdate'; draftId: string; input: Record<string, unknown> }
@@ -191,6 +192,8 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   if (method === 'POST' && url.pathname === '/api/outbox' && body) return { operation: 'outboxSchedule', input: body };
   const outboxRetry = url.pathname.match(/^\/api\/outbox\/([^/]+)\/retry$/);
   if (outboxRetry && method === 'POST' && options.body === undefined) return { operation: 'outboxRetry', itemId: decodeURIComponent(outboxRetry[1]) };
+  const outboxResolve = url.pathname.match(/^\/api\/outbox\/([^/]+)\/resolve$/);
+  if (outboxResolve && method === 'POST' && body) return { operation: 'outboxResolve', itemId: decodeURIComponent(outboxResolve[1]), input: body };
   const outboxItem = url.pathname.match(/^\/api\/outbox\/([^/]+)$/);
   if (outboxItem && method === 'DELETE' && options.body === undefined) return { operation: 'outboxCancel', itemId: decodeURIComponent(outboxItem[1]) };
   if (method === 'POST' && url.pathname === '/api/drafts' && body) {

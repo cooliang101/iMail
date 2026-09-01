@@ -8,7 +8,33 @@ const DESKTOP_OAUTH_VARIABLES: [&str; 3] = [
 
 fn main() {
     inject_desktop_oauth_environment();
+    configure_windows_test_manifest();
     tauri_build::build()
+}
+
+fn configure_windows_test_manifest() {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
+        || env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc")
+    {
+        return;
+    }
+    let manifest = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is available"))
+        .join("imail-common-controls.manifest");
+    fs::write(
+        &manifest,
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*" />
+    </dependentAssembly>
+  </dependency>
+</assembly>
+"#,
+    )
+    .expect("write Windows test manifest");
+    println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+    println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
 }
 
 fn inject_desktop_oauth_environment() {

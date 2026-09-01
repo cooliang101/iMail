@@ -31,6 +31,7 @@ type FixtureState = {
   moveCalls: string[];
   patchCalls: Array<{ id: string; body: Record<string, unknown> }>;
   drafts: Array<Record<string, unknown>>;
+  outbox: Array<Record<string, unknown>>;
   messagePageCalls: number;
   serviceInfoCalls: number;
   failNextPatch: boolean;
@@ -45,7 +46,7 @@ async function installMailFixture(page: Page) {
   // many fine-grained icon modules. Chromium's default buffer can evict the
   // first preload entries before the warmup assertion observes them.
   await page.addInitScript(() => performance.setResourceTimingBufferSize(2_000));
-  const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
+  const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], outbox: [], messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -63,6 +64,44 @@ async function installMailFixture(page: Page) {
       const body = request.postDataJSON() as Record<string, unknown>;
       const draft = { id: path.split('/').at(-1) === 'drafts' ? request.headers()['x-draft-id'] : path.split('/').at(-1), createdAt: '2026-08-13T00:00:00Z', updatedAt: new Date().toISOString(), ...body };
       state.drafts = [draft]; return json(route, { draft });
+    }
+    if (path === '/api/outbox' && method === 'GET') return json(route, { items: state.outbox });
+    if (path === '/api/outbox' && method === 'POST') {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      const item = {
+        id: `outbox-${state.outbox.length + 1}`,
+        accountId: body.accountId,
+        to: body.to,
+        cc: body.cc ?? [],
+        bcc: body.bcc ?? [],
+        subject: body.subject,
+        scheduledAt: body.sendAt,
+        status: 'scheduled',
+        attempts: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      state.outbox = [item, ...state.outbox];
+      state.drafts = state.drafts.filter((draft) => draft.id !== body.draftId);
+      return json(route, { item }, 201);
+    }
+    const outboxRetry = path.match(/^\/api\/outbox\/(outbox-\d+)\/retry$/);
+    if (outboxRetry && method === 'POST') {
+      state.outbox = state.outbox.map((item) => item.id === outboxRetry[1] ? { ...item, status: 'scheduled', lastError: undefined } : item);
+      return json(route, { queued: true });
+    }
+    const outboxResolve = path.match(/^\/api\/outbox\/(outbox-\d+)\/resolve$/);
+    if (outboxResolve && method === 'POST') {
+      const resolution = (request.postDataJSON() as { resolution: 'sent' | 'notSent' }).resolution;
+      state.outbox = state.outbox.map((item) => item.id === outboxResolve[1]
+        ? { ...item, status: resolution === 'sent' ? 'sent' : 'cancelled', lastError: undefined }
+        : item);
+      return json(route, { resolved: true, status: resolution === 'sent' ? 'sent' : 'cancelled' });
+    }
+    const outboxItem = path.match(/^\/api\/outbox\/(outbox-\d+)$/);
+    if (outboxItem && method === 'DELETE') {
+      state.outbox = state.outbox.map((item) => item.id === outboxItem[1] ? { ...item, status: 'cancelled', updatedAt: new Date().toISOString() } : item);
+      return json(route, { cancelled: true });
     }
     if (path === '/api/labels') return json(route, { labels: ['重要', '待办'] });
     if (path === '/api/contacts') return json(route, { contacts: [
@@ -299,6 +338,49 @@ test('compose autosaves recipients, body and uploaded attachments', async ({ pag
   expect(state.drafts).toHaveLength(1);
   expect(state.drafts[0].subject).toBe('Autosaved fixture draft');
   expect(state.drafts[0].attachments).toEqual(expect.arrayContaining([expect.objectContaining({ filename: 'upload.txt' })]));
+});
+
+test('scheduled send persists in the outbox and can be cancelled before delivery', async ({ page }) => {
+  const state = await installMailFixture(page);
+  await page.getByRole('button', { name: '写邮件' }).click();
+  await page.getByPlaceholder('输入姓名或邮箱').first().fill('recipient@example.test');
+  await page.getByPlaceholder('邮件主题').fill('Scheduled fixture message');
+  await page.getByLabel('邮件正文').fill('Send this later');
+  await page.getByRole('button', { name: '定时发送' }).click();
+  const picker = page.getByRole('dialog', { name: '选择发送时间' });
+  await expect(picker).toBeVisible();
+  const geometry = await picker.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { width: bounds.width, right: bounds.right, viewport: window.innerWidth };
+  });
+  expect(geometry.width).toBeLessThanOrEqual(305);
+  expect(geometry.right).toBeLessThanOrEqual(geometry.viewport);
+  await picker.getByRole('button', { name: '1 小时后' }).click();
+  await expect(page.locator('.outbox-pane .draft-pane-header').getByText('发件箱', { exact: true })).toBeVisible();
+  await expect(page.getByText('Scheduled fixture message', { exact: true })).toBeVisible();
+  await expect.poll(() => state.outbox.length).toBe(1);
+  expect(state.outbox[0].status).toBe('scheduled');
+  await page.getByRole('button', { name: '取消并返回草稿' }).click();
+  await expect(page.getByText('已取消', { exact: true })).toBeVisible();
+  expect(state.outbox[0].status).toBe('cancelled');
+});
+
+test('uncertain delivery requires an explicit manual resolution', async ({ page }) => {
+  const state = await installMailFixture(page);
+  state.outbox = [{
+    id: 'outbox-1', accountId: account.id, to: ['recipient@example.test'], cc: [], bcc: [],
+    subject: 'Needs review fixture', scheduledAt: new Date().toISOString(), status: 'needsReview', attempts: 1,
+    lastError: 'SMTP 发送结果不确定，请核对已发送邮件后人工处理。',
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  }];
+  await page.reload();
+  await page.getByRole('button', { name: '发件箱' }).click();
+  await expect(page.getByText('Needs review fixture', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '已在已发送中找到' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '确认未发送，返回草稿' })).toBeVisible();
+  await page.getByRole('button', { name: '已在已发送中找到' }).click();
+  await expect(page.getByText('已发送', { exact: true })).toBeVisible();
+  expect(state.outbox[0].status).toBe('sent');
 });
 
 test('idle warmup preloads deferred interaction bundles without a loading flash', async ({ page }) => {

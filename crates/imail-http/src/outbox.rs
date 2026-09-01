@@ -34,15 +34,30 @@ impl OutboxRuntime {
         let thread = thread::Builder::new()
             .name("imail-outbox".into())
             .spawn(move || {
+                let mut store = None;
                 loop {
                     match receiver.recv_timeout(StdDuration::from_millis(500)) {
                         Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
-                    let work =
-                        SqliteAuthStore::open_database(state.config.data_dir.join("imail.sqlite"))
-                            .and_then(|mut store| store.claim_due_outbox(Utc::now()));
-                    if let Ok(Some(work)) = work {
+                    if store.is_none() {
+                        store = SqliteAuthStore::open_database(
+                            state.config.data_dir.join("imail.sqlite"),
+                        )
+                        .ok();
+                    }
+                    let work = match store
+                        .as_mut()
+                        .map(|store| store.claim_due_outbox(Utc::now()))
+                    {
+                        Some(Ok(work)) => work,
+                        Some(Err(_)) => {
+                            store = None;
+                            continue;
+                        }
+                        None => continue,
+                    };
+                    if let Some(work) = work {
                         let result = crate::messages::send_for_blocking(
                             &state,
                             work.owner_id,
@@ -50,9 +65,7 @@ impl OutboxRuntime {
                             work.draft_id,
                         );
                         let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-                        if let Ok(mut store) = SqliteAuthStore::open_database(
-                            state.config.data_dir.join("imail.sqlite"),
-                        ) {
+                        if let Some(store) = store.as_mut() {
                             match result {
                                 Ok(sent) => {
                                     let _ = store.complete_outbox(&work.id, &sent.message_id, &now);
@@ -100,6 +113,7 @@ pub(crate) fn routes() -> Router<Arc<AppState>> {
         .route("/api/outbox", get(list).post(schedule))
         .route("/api/outbox/:id", axum::routing::delete(cancel))
         .route("/api/outbox/:id/retry", post(retry))
+        .route("/api/outbox/:id/resolve", post(resolve))
 }
 
 #[derive(Deserialize)]
@@ -108,6 +122,19 @@ struct ScheduleInput {
     send_at: String,
     #[serde(flatten)]
     message: SendInput,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum OutboxResolution {
+    Sent,
+    NotSent,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ResolveInput {
+    resolution: OutboxResolution,
 }
 
 fn safe_error(error: AuthStoreError) -> EmbeddedOperationError {
@@ -205,6 +232,28 @@ pub(crate) fn execute(
             }
             Ok(json!({"queued":true}))
         }
+        "resolve" => {
+            let input: ResolveInput =
+                serde_json::from_value(input.ok_or_else(|| EmbeddedOperationError {
+                    status: 400,
+                    message: "缺少人工核对结果".into(),
+                })?)
+                .map_err(|_| EmbeddedOperationError {
+                    status: 400,
+                    message: "人工核对结果无效".into(),
+                })?;
+            let was_sent = matches!(input.resolution, OutboxResolution::Sent);
+            if !store
+                .resolve_outbox(owner, id.unwrap_or_default(), was_sent, &now_text)
+                .map_err(safe_error)?
+            {
+                return Err(EmbeddedOperationError {
+                    status: 409,
+                    message: "只有待人工核对的邮件可以处置".into(),
+                });
+            }
+            Ok(json!({"resolved":true,"status":if was_sent { "sent" } else { "cancelled" }}))
+        }
         _ => Err(EmbeddedOperationError {
             status: 404,
             message: "发件箱操作不存在".into(),
@@ -277,4 +326,13 @@ async fn retry(
     Path(id): Path<String>,
 ) -> Response {
     run(state, user.user_id, "retry", Some(id), None).await
+}
+
+async fn resolve(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(id): Path<String>,
+    Json(input): Json<Value>,
+) -> Response {
+    run(state, user.user_id, "resolve", Some(id), Some(input)).await
 }

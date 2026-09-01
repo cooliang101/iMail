@@ -14,11 +14,12 @@ function scheduleLabel(value: string) {
   }).format(new Date(value));
 }
 
-export function OutboxWorkspace({ items, accounts, onCancel, onRetry }: {
+export function OutboxWorkspace({ items, accounts, onCancel, onRetry, onResolve }: {
   items: OutboxItem[];
   accounts: Account[];
   onCancel: (id: string) => void | Promise<void>;
   onRetry: (id: string) => void | Promise<void>;
+  onResolve: (id: string, resolution: 'sent' | 'notSent') => void | Promise<void>;
 }) {
   const pending = items.filter((item) => ['scheduled', 'sending', 'failed', 'needsReview'].includes(item.status));
   return <section className="message-pane outbox-pane">
@@ -37,6 +38,10 @@ export function OutboxWorkspace({ items, accounts, onCancel, onRetry }: {
             {item.status === 'failed' && <AppButton appearance="subtle" onClick={() => void onRetry(item.id)}>重新发送</AppButton>}
             <AppButton appearance="subtle" onClick={() => void onCancel(item.id)}>取消并返回草稿</AppButton>
           </footer>}
+          {item.status === 'needsReview' && <footer className="outbox-review-actions">
+            <AppButton appearance="subtle" onClick={() => void onResolve(item.id, 'sent')}>已在已发送中找到</AppButton>
+            <AppButton appearance="subtle" onClick={() => void onResolve(item.id, 'notSent')}>确认未发送，返回草稿</AppButton>
+          </footer>}
         </article>;
       })}
     </div>}
@@ -44,5 +49,5 @@ export function OutboxWorkspace({ items, accounts, onCancel, onRetry }: {
 }
 
 export function OutboxWelcome() {
-  return <section className="composer-pane composer-welcome"><Clock size={48} weight="duotone" /><h2>定时发送由 iMail 服务执行</h2><p>服务离线期间任务不会发送；恢复运行后会处理到期任务。进入发送阶段后不能撤回。</p></section>;
+  return <section className="composer-pane composer-welcome"><Clock size={48} weight="duotone" /><h2>定时发送由 iMail 服务执行</h2><p>服务离线期间任务不会发送；恢复运行后会处理到期任务。结果不确定时，请先核对服务商的已发送文件夹再处置。</p></section>;
 }

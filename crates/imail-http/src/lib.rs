@@ -2210,7 +2210,7 @@ mod tests {
             source: b"From: sender@example.org\r\nTo: future@example.net\r\nSubject: MCP attachment\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=part\r\n\r\n--part\r\nContent-Type: text/plain\r\n\r\nBody\r\n--part\r\nContent-Type: text/plain; name=report.txt\r\nContent-Disposition: attachment; filename=report.txt\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8=\r\n--part--\r\n".to_vec(),
         });
         let router = build_router(config).unwrap();
-        let rpc = |body: &'static str, raw: &str| {
+        let rpc = |body: &str, raw: &str| {
             Request::builder()
                 .method(Method::POST)
                 .uri("/mcp")
@@ -2218,7 +2218,7 @@ mod tests {
                 .header(CONTENT_TYPE, "application/json")
                 .header("accept", "application/json, text/event-stream")
                 .header("authorization", format!("Bearer {raw}"))
-                .body(Body::from(body))
+                .body(Body::from(body.to_owned()))
                 .unwrap()
         };
         let hostile = router
@@ -2475,7 +2475,7 @@ mod tests {
                 .unwrap(),
         )
         .await;
-        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 51);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 56);
         assert!(listed.to_string().contains("accounts_list"));
         let tools = listed["result"]["tools"].as_array().unwrap();
         let shared_contract: Value =
@@ -2635,6 +2635,42 @@ mod tests {
             sent["result"]["structuredContent"]["delivery"]["messageId"],
             "<sent@example.com>"
         );
+        let send_at = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+        let schedule_request = format!(
+            r#"{{"jsonrpc":"2.0","id":271,"method":"tools/call","params":{{"name":"outbox_schedule","arguments":{{"accountEmail":"future@example.net","to":["later@example.com"],"subject":"MCP scheduled","text":"Later","sendAt":"{send_at}"}}}}}}"#
+        );
+        let scheduled = json(
+            router
+                .clone()
+                .oneshot(rpc(&schedule_request, &token))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let outbox_id = scheduled["result"]["structuredContent"]["item"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let outbox = json(router.clone().oneshot(rpc(
+            r#"{"jsonrpc":"2.0","id":272,"method":"tools/call","params":{"name":"outbox_list","arguments":{}}}"#,
+            &token,
+        )).await.unwrap()).await;
+        assert_eq!(
+            outbox["result"]["structuredContent"]["items"][0]["subject"],
+            "MCP scheduled"
+        );
+        let cancel_request = format!(
+            r#"{{"jsonrpc":"2.0","id":273,"method":"tools/call","params":{{"name":"outbox_cancel","arguments":{{"outboxId":"{outbox_id}"}}}}}}"#
+        );
+        let cancelled = json(
+            router
+                .clone()
+                .oneshot(rpc(&cancel_request, &token))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(cancelled["result"]["structuredContent"]["cancelled"], true);
         {
             let mail = mail_state.lock().unwrap();
             assert_eq!(mail.flag_updates, 2);

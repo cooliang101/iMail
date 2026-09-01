@@ -234,6 +234,11 @@ pub enum EmbeddedDomainCall {
         #[serde(rename = "itemId")]
         item_id: String,
     },
+    OutboxResolve {
+        #[serde(rename = "itemId")]
+        item_id: String,
+        input: serde_json::Value,
+    },
     DraftsList,
     DraftCreate {
         #[serde(rename = "draftId")]
@@ -588,6 +593,11 @@ impl EmbeddedDomainCall {
                 format!("/api/outbox/{}/retry", path_segment(&item_id)),
                 "POST",
                 None,
+            ),
+            Self::OutboxResolve { item_id, input } => json_request(
+                format!("/api/outbox/{}/resolve", path_segment(&item_id)),
+                "POST",
+                input,
             ),
             Self::DraftsList => ("/api/drafts".into(), "GET", None),
             Self::DraftCreate {
@@ -1170,7 +1180,8 @@ impl EmbeddedMailServiceState {
             EmbeddedDomainCall::OutboxList
             | EmbeddedDomainCall::OutboxSchedule { .. }
             | EmbeddedDomainCall::OutboxCancel { .. }
-            | EmbeddedDomainCall::OutboxRetry { .. } => {
+            | EmbeddedDomainCall::OutboxRetry { .. }
+            | EmbeddedDomainCall::OutboxResolve { .. } => {
                 let Some(user_id) = self.current_user_id()? else {
                     return Ok(Some(unauthorized_response()));
                 };
@@ -1188,6 +1199,9 @@ impl EmbeddedMailServiceState {
                     }
                     EmbeddedDomainCall::OutboxRetry { item_id } => {
                         ("retry", Some(item_id.clone()), None, 200)
+                    }
+                    EmbeddedDomainCall::OutboxResolve { item_id, input } => {
+                        ("resolve", Some(item_id.clone()), Some(input.clone()), 200)
                     }
                     _ => unreachable!(),
                 };

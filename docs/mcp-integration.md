@@ -86,6 +86,9 @@ Authorization: Bearer imail_mcp_xxx
 | 规则 | `mail_rules_list`、`mail_rule_save`、`mail_rule_delete` | 列出、创建/更新、删除当前用户的邮件规则 |
 | 规则 | `mail_rule_preview`、`mail_rule_apply` | 只读预览；使用一次性令牌和 `confirmed: true` 单独确认处理历史邮件 |
 | 规则 | `mail_rule_runs`、`mail_rule_retry` | 最近 200 条执行记录；重试失败的未完成动作，不重放结果不确定的归档；详见[邮件规则引擎](mail-rules.md) |
+| 发件箱 | `outbox_list`、`outbox_schedule` | 列出持久化任务；按 RFC 3339 `sendAt` 安排不可变邮件快照 |
+| 发件箱 | `outbox_cancel`、`outbox_retry` | 取消发送前任务；仅重试结果明确失败的任务 |
+| 发件箱 | `outbox_resolve` | 核对服务商已发送文件夹后处置 `needsReview`；详见[发件箱与定时发送](outbox-and-scheduled-send.md) |
 | 邮件 | `message_get` | 完整正文、HTML、标签与附件元数据 |
 | 邮件 | `conversation_get` | 按明确回复头读取本地会话摘要；保留账户/文件夹副本，不修改已读状态 |
 | 邮件 | `message_update` | 已读、星标、标签和稍后处理 |

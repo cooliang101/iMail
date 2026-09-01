@@ -92,6 +92,34 @@ impl SqliteAuthStore {
         )? == 1)
     }
 
+    pub fn resolve_outbox(
+        &mut self,
+        owner: &str,
+        id: &str,
+        was_sent: bool,
+        now: &str,
+    ) -> Result<bool, AuthStoreError> {
+        let status = if was_sent { "sent" } else { "cancelled" };
+        let sent_at = was_sent.then_some(now);
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let updated = tx.execute(
+            "UPDATE outbox_items SET status=?1,sent_at=?2,updated_at=?3,lease_until=NULL,
+             last_error_code=NULL,last_error_message=NULL
+             WHERE user_id=?4 AND id=?5 AND status='needsReview'",
+            params![status, sent_at, now, owner, id],
+        )? == 1;
+        if updated && was_sent {
+            tx.execute(
+                "DELETE FROM drafts WHERE id=(SELECT draft_id FROM outbox_items WHERE user_id=?1 AND id=?2)",
+                params![owner, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(updated)
+    }
+
     pub fn claim_due_outbox(
         &mut self,
         now: DateTime<Utc>,
@@ -240,7 +268,8 @@ mod tests {
                 "CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL) STRICT;
              INSERT INTO metadata VALUES('schema_version','{}');
              CREATE TABLE accounts(id TEXT PRIMARY KEY,user_id TEXT NOT NULL) STRICT;
-             INSERT INTO accounts VALUES('account-1','owner-1');",
+             INSERT INTO accounts VALUES('account-1','owner-1');
+             CREATE TABLE drafts(id TEXT PRIMARY KEY) STRICT;",
                 imail_protocol::CURRENT_SCHEMA_VERSION
             ))
             .unwrap();
@@ -300,11 +329,15 @@ mod tests {
         let (root, mut store) = database();
         let now = Utc.with_ymd_and_hms(2026, 9, 1, 8, 0, 0).unwrap();
         store
+            .connection
+            .execute("INSERT INTO drafts(id) VALUES('draft-return')", [])
+            .unwrap();
+        store
             .schedule_outbox(
                 "owner-1",
                 "item-2",
                 &message(),
-                None,
+                Some("draft-return"),
                 &now.to_rfc3339(),
                 &now.to_rfc3339(),
             )
@@ -319,6 +352,76 @@ mod tests {
         assert!(!store
             .retry_outbox("owner-1", "item-2", &now.to_rfc3339())
             .unwrap());
+        assert!(store
+            .resolve_outbox("owner-1", "item-2", false, &now.to_rfc3339())
+            .unwrap());
+        assert_eq!(
+            store
+                .outbox_item("owner-1", "item-2")
+                .unwrap()
+                .unwrap()
+                .status,
+            OutboxStatus::Cancelled
+        );
+        let draft_count: u32 = store
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM drafts WHERE id='draft-return'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(draft_count, 1);
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn uncertain_delivery_can_be_marked_as_manually_verified_sent() {
+        let (root, mut store) = database();
+        let now = Utc.with_ymd_and_hms(2026, 9, 1, 8, 0, 0).unwrap();
+        store
+            .connection
+            .execute("INSERT INTO drafts(id) VALUES('draft-sent')", [])
+            .unwrap();
+        store
+            .schedule_outbox(
+                "owner-1",
+                "item-verified",
+                &message(),
+                Some("draft-sent"),
+                &now.to_rfc3339(),
+                &now.to_rfc3339(),
+            )
+            .unwrap();
+        assert!(store.claim_due_outbox(now).unwrap().is_some());
+        assert!(store
+            .fail_outbox(
+                "item-verified",
+                "MAIL_PROTOCOL_ERROR",
+                "uncertain",
+                true,
+                &now.to_rfc3339(),
+            )
+            .unwrap());
+        assert!(store
+            .resolve_outbox("owner-1", "item-verified", true, &now.to_rfc3339(),)
+            .unwrap());
+        let item = store
+            .outbox_item("owner-1", "item-verified")
+            .unwrap()
+            .unwrap();
+        assert_eq!(item.status, OutboxStatus::Sent);
+        assert_eq!(item.sent_at.as_deref(), Some(now.to_rfc3339().as_str()));
+        let draft_count: u32 = store
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM drafts WHERE id='draft-sent'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(draft_count, 0);
         drop(store);
         fs::remove_dir_all(root).unwrap();
     }

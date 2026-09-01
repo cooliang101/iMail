@@ -11,6 +11,7 @@ import { RichTextEditor, type RichTextEditorHandle } from './RichTextEditor';
 import { AddressField, type AddressFieldHandle } from './AddressField';
 import { SenderField } from './SenderField';
 import { fileAsAttachment, formatAttachmentSize, subjectWithPrefix, textToHtml } from './compose-utils';
+import { dateTimeLocalValue, nextHourLocalValue } from './schedule-send';
 
 export type ComposePaneHandle = { close: () => Promise<boolean> };
 
@@ -44,10 +45,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [customSendAt, setCustomSendAt] = useState(() => {
-    const value = new Date(Date.now() + 60 * 60 * 1000); value.setSeconds(0, 0);
-    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}T${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
-  });
+  const [customSendAt, setCustomSendAt] = useState(() => nextHourLocalValue());
   const [pendingSendAt, setPendingSendAt] = useState<string>();
   const [saveStatus, setSaveStatus] = useState<'saved' | 'pending' | 'saving' | 'error'>(draft ? 'saved' : 'pending');
   const draftIdRef = useRef(draft?.id ?? crypto.randomUUID());
@@ -126,7 +124,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
     try {
       if (savingPromiseRef.current) await savingPromiseRef.current;
       await persistDraft({ to: resolvedTo.addresses, cc: resolvedCc.addresses, bcc: resolvedBcc.addresses });
-      if (revisionRef.current !== savedRevisionRef.current) throw new Error('草稿保存失败，请重试后发送');
+      if (!draftCreatedRef.current) throw new Error('草稿保存失败，请重试后发送');
       const payload = { accountId, to: resolvedTo.addresses, cc: resolvedCc.addresses, bcc: resolvedBcc.addresses, ...envelope, subject: subject.trim(), text: text.trim() || '邮件包含图片内容', html, attachments, draftId: draftIdRef.current };
       if (sendAt) {
         await api('/api/outbox', { method: 'POST', body: JSON.stringify({ ...payload, sendAt }) });
@@ -158,7 +156,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
     <header className="composer-header">
       <button className="composer-close" type="button" title="关闭写信" aria-label="关闭写信" onClick={() => void close()}><ArrowLeft size={19} /></button>
       <div className="composer-heading"><span>{mode === 'new' ? '新邮件' : '邮件操作'}</span><strong>{heading}</strong></div>
-      <div className="composer-header-actions"><small className={`compose-save-status is-${saveStatus}`}>{statusLabel}</small>{accounts.length > 0 && <><div className="compose-schedule-anchor"><AppButton className="compose-header-schedule" appearance="subtle" icon={<Clock size={16} />} type="button" aria-label="定时发送" aria-expanded={scheduleOpen} onClick={() => setScheduleOpen((value) => !value)} disabled={sending}>定时</AppButton>{scheduleOpen && <section className="compose-schedule-popover" role="dialog" aria-label="选择发送时间"><header><strong>定时发送</strong><small>按当前设备时区选择</small></header><div className="compose-schedule-quick"><button type="button" onClick={() => void submit(undefined, false, new Date(Date.now() + 10 * 60 * 1000).toISOString())}>10 分钟后</button><button type="button" onClick={() => void submit(undefined, false, new Date(Date.now() + 60 * 60 * 1000).toISOString())}>1 小时后</button><button type="button" onClick={() => { const value = new Date(); value.setDate(value.getDate() + 1); value.setHours(9, 0, 0, 0); void submit(undefined, false, value.toISOString()); }}>明天 09:00</button></div><label><span>自定义时间</span><AppInput type="datetime-local" value={customSendAt} min={new Date().toISOString().slice(0, 16)} onChange={(event) => setCustomSendAt(event.currentTarget.value)} /></label><AppButton appearance="primary" type="button" disabled={!customSendAt} onClick={() => { const value = new Date(customSendAt); if (Number.isNaN(value.getTime())) { setError('请选择有效的发送时间'); return; } void submit(undefined, false, value.toISOString()); }}>加入发件箱</AppButton><p>任务依赖当前 iMail 服务保持运行。</p></section>}</div><AppButton className="compose-header-send" appearance="primary" icon={<PaperPlaneTilt size={16} />} type="submit" form="compose-message-form" disabled={sending}>{sending ? '处理中…' : '发送'}</AppButton></>}</div>
+      <div className="composer-header-actions"><small className={`compose-save-status is-${saveStatus}`}>{statusLabel}</small>{accounts.length > 0 && <><div className="compose-schedule-anchor"><AppButton className="compose-header-schedule" appearance="subtle" icon={<Clock size={16} />} type="button" aria-label="定时发送" aria-expanded={scheduleOpen} onClick={() => setScheduleOpen((value) => !value)} disabled={sending}>定时</AppButton>{scheduleOpen && <section className="compose-schedule-popover" role="dialog" aria-label="选择发送时间"><header><strong>定时发送</strong><small>按当前设备时区选择</small></header><div className="compose-schedule-quick"><button type="button" onClick={() => void submit(undefined, false, new Date(Date.now() + 10 * 60 * 1000).toISOString())}>10 分钟后</button><button type="button" onClick={() => void submit(undefined, false, new Date(Date.now() + 60 * 60 * 1000).toISOString())}>1 小时后</button><button type="button" onClick={() => { const value = new Date(); value.setDate(value.getDate() + 1); value.setHours(9, 0, 0, 0); void submit(undefined, false, value.toISOString()); }}>明天 09:00</button></div><label><span>自定义时间</span><AppInput type="datetime-local" value={customSendAt} min={dateTimeLocalValue(new Date())} onChange={(event) => setCustomSendAt(event.currentTarget.value)} /></label><AppButton appearance="primary" type="button" disabled={!customSendAt} onClick={() => { const value = new Date(customSendAt); if (Number.isNaN(value.getTime())) { setError('请选择有效的发送时间'); return; } void submit(undefined, false, value.toISOString()); }}>加入发件箱</AppButton><p>任务依赖当前 iMail 服务保持运行。</p></section>}</div><AppButton className="compose-header-send" appearance="primary" icon={<PaperPlaneTilt size={16} />} type="submit" form="compose-message-form" disabled={sending}>{sending ? '处理中…' : '发送'}</AppButton></>}</div>
     </header>
     {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={34} /><h3>先接入一个真实邮箱</h3><p>接入邮箱后即可发送邮件。</p></div> : <form id="compose-message-form" className="composer-form" inert={sending} aria-busy={sending} onSubmit={submit}>
       <div className="composer-fields">

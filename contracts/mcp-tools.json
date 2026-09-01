@@ -2,6 +2,110 @@
   "protocolVersion": "2026-07-28",
   "tools": [
     {
+      "name": "outbox_list",
+      "title": "列出发件箱任务",
+      "description": "列出当前用户的定时发送任务及状态，不返回正文或附件内容。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      }
+    },
+    {
+      "name": "outbox_schedule",
+      "title": "安排定时发送",
+      "description": "将邮件内容快照保存到持久化发件箱，并按 RFC 3339 时间发送。执行前应向用户确认邮箱、收件人和时间。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accountEmail": { "type": "string", "format": "email" },
+          "to": { "type": "array", "items": { "type": "string", "format": "email" }, "maxItems": 100 },
+          "cc": { "type": "array", "items": { "type": "string", "format": "email" }, "maxItems": 100 },
+          "bcc": { "type": "array", "items": { "type": "string", "format": "email" }, "maxItems": 100 },
+          "inReplyTo": { "type": "array", "items": { "type": "string", "minLength": 3, "maxLength": 998 }, "maxItems": 100 },
+          "references": { "type": "array", "items": { "type": "string", "minLength": 3, "maxLength": 998 }, "maxItems": 100 },
+          "subject": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "text": { "type": "string", "minLength": 1, "maxLength": 2000000 },
+          "html": { "type": "string", "maxLength": 8000000 },
+          "attachments": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "minLength": 1, "maxLength": 100 },
+                "filename": { "type": "string", "minLength": 1, "maxLength": 255 },
+                "contentType": { "type": "string", "minLength": 1, "maxLength": 150 },
+                "data": { "type": "string", "maxLength": 21000000 }
+              },
+              "required": ["filename", "contentType", "data"],
+              "additionalProperties": false
+            }
+          },
+          "sendAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["accountEmail", "to", "subject", "text", "sendAt"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "outbox_cancel",
+      "title": "取消发件箱任务",
+      "description": "取消尚未进入发送阶段的任务；关联草稿会重新出现在草稿箱。",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "outboxId": { "type": "string", "format": "uuid" } },
+        "required": ["outboxId"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "outbox_retry",
+      "title": "重试失败的发件任务",
+      "description": "仅重试结果明确为失败的任务；不会重试需要人工核对的发送结果。",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "outboxId": { "type": "string", "format": "uuid" } },
+        "required": ["outboxId"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false
+      }
+    },
+    {
+      "name": "outbox_resolve",
+      "title": "处置待核对的发件任务",
+      "description": "人工核对服务商的已发送文件夹后，将不确定任务标记为已发送，或确认未发送并返回草稿。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "outboxId": { "type": "string", "format": "uuid" },
+          "resolution": { "type": "string", "enum": ["sent", "notSent"] }
+        },
+        "required": ["outboxId", "resolution"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false
+      }
+    },
+    {
       "name": "mail_rules_list",
       "title": "列出邮件规则",
       "description": "读取当前用户的规则，按优先级排序。",
