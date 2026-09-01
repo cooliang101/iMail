@@ -640,7 +640,7 @@ mod tests {
         connection.execute_batch("CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL) STRICT; INSERT INTO metadata VALUES('schema_version','14');").unwrap();
         drop(connection);
         let report = crate::migrate_database(&database).unwrap();
-        assert_eq!(report.applied_versions, [15, 16]);
+        assert_eq!(report.applied_versions, [15, 16, 17]);
         let connection = Connection::open(&database).unwrap();
         let table: String = connection
             .query_row(
@@ -680,7 +680,7 @@ mod tests {
             .unwrap();
         drop(connection);
         let report = crate::migrate_database(&database).unwrap();
-        assert_eq!(report.applied_versions, [16]);
+        assert_eq!(report.applied_versions, [16, 17]);
         let connection = Connection::open(&database).unwrap();
         let snapshot: String = connection
             .query_row(

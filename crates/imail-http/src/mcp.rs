@@ -34,7 +34,11 @@ use uuid::Uuid;
 
 use crate::AppState;
 
-const MANAGEMENT_TOOLS: [&str; 27] = [
+const MANAGEMENT_TOOLS: [&str; 31] = [
+    "mail_work_item_set",
+    "mail_work_item_complete",
+    "mail_reply_draft_create",
+    "mail_draft_schedule",
     "outbox_schedule",
     "outbox_cancel",
     "outbox_retry",
@@ -896,6 +900,53 @@ async fn call_tool(
             "mail_rule_retry" => crate::rules::execute(store,&owner_id,"retry",Some(required_string(&arguments,"runId")?),None)?,
             "outbox_list" => crate::outbox::execute(store, &owner_id, "list", None, None)
                 .map_err(|error| McpError::Application(error.message))?,
+            "mail_work_items_list" => crate::work_queue::execute(
+                store,
+                &owner_id,
+                "list",
+                None,
+                Some(arguments),
+            ).map_err(|error| McpError::Application(error.message))?,
+            "mail_work_item_set" => crate::work_queue::execute(
+                store,
+                &owner_id,
+                "set",
+                Some(required_string(&arguments, "messageId")?),
+                Some(json!({
+                    "status":arguments.get("status"),
+                    "dueAt":arguments.get("dueAt"),
+                    "note":arguments.get("note").cloned().unwrap_or_else(|| json!("")),
+                })),
+            ).map_err(|error| McpError::Application(error.message))?,
+            "mail_work_item_complete" => crate::work_queue::execute(
+                store,
+                &owner_id,
+                "complete",
+                Some(required_string(&arguments, "messageId")?),
+                None,
+            ).map_err(|error| McpError::Application(error.message))?,
+            "mail_reply_draft_create" => crate::work_queue::create_reply_draft(
+                store,
+                &owner_id,
+                required_string(&arguments, "messageId")?,
+                json!({
+                    "mode":arguments.get("mode"),
+                    "text":arguments.get("text"),
+                    "html":arguments.get("html"),
+                    "subject":arguments.get("subject"),
+                    "bcc":arguments.get("bcc").cloned().unwrap_or_else(|| json!([])),
+                }),
+            ).map_err(|error| McpError::Application(error.message))?,
+            "mail_draft_schedule" => crate::work_queue::schedule_draft(
+                store,
+                &owner_id,
+                required_string(&arguments, "draftId")?,
+                json!({
+                    "requestId":arguments.get("requestId"),
+                    "sendAt":arguments.get("sendAt"),
+                    "confirmed":arguments.get("confirmed"),
+                }),
+            ).map_err(|error| McpError::Application(error.message))?,
             "outbox_schedule" => {
                 let input: McpScheduleInput = parse(arguments)?;
                 let account = account_by_email(store, &owner_id, &input.message.account_email)?;
@@ -1449,6 +1500,19 @@ fn tool_schema(name: &str) -> Value {
                 .clone()
         }
         "smart_folders_list" => empty(),
+        "mail_work_items_list" => {
+            json!({"type":"object","properties":{"status":{"type":"string","enum":["needsReply","needsReview","followUp","waiting"]}},"additionalProperties":false})
+        }
+        "mail_work_item_set" => {
+            json!({"type":"object","properties":{"messageId":{"type":"string","minLength":1},"status":{"type":"string","enum":["needsReply","needsReview","followUp","waiting"]},"dueAt":{"type":["string","null"],"format":"date-time"},"note":{"type":"string","maxLength":4000}},"required":["messageId","status"],"additionalProperties":false})
+        }
+        "mail_work_item_complete" => message_id_schema(),
+        "mail_reply_draft_create" => {
+            json!({"type":"object","properties":{"messageId":{"type":"string","minLength":1},"mode":{"type":"string","enum":["reply","replyAll"]},"text":{"type":"string","minLength":1,"maxLength":2000000},"html":{"type":"string","maxLength":8000000},"subject":{"type":"string","maxLength":500},"bcc":email_array(0)},"required":["messageId","mode","text"],"additionalProperties":false})
+        }
+        "mail_draft_schedule" => {
+            json!({"type":"object","properties":{"draftId":{"type":"string","format":"uuid"},"requestId":{"type":"string","format":"uuid"},"sendAt":{"type":"string","format":"date-time"},"confirmed":{"const":true}},"required":["draftId","requestId","sendAt","confirmed"],"additionalProperties":false})
+        }
         "outbox_list" => empty(),
         "outbox_schedule" => {
             let mut schema = tool_schema("message_send");

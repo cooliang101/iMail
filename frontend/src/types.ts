@@ -138,6 +138,22 @@ export type OutboxItem = {
   sentAt?: string;
 };
 
+export type MailWorkStatus = 'needsReply' | 'needsReview' | 'followUp' | 'waiting';
+
+export type MailWorkItem = {
+  id: string;
+  messageId: string;
+  accountId: string;
+  status: MailWorkStatus;
+  dueAt?: string;
+  note: string;
+  draftId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MailWorkItemView = { item: MailWorkItem; message: Message };
+
 export type DeveloperToken = {
   id: string;
   name: string;

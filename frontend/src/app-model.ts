@@ -1,7 +1,7 @@
 import type { DeveloperToken } from './types';
 
 export type Notice = { kind: 'success' | 'error'; text: string } | null;
-export type AppView = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'trash' | 'junk' | 'folder' | 'drafts' | 'outbox' | 'contacts' | 'tokens' | 'search';
+export type AppView = 'inbox' | 'starred' | 'sent' | 'snoozed' | 'archive' | 'trash' | 'junk' | 'folder' | 'drafts' | 'outbox' | 'workQueue' | 'contacts' | 'tokens' | 'search';
 
 export type SearchFilters = {
   accountIds?: string[]; group?: string | null; q?: string | null; subject?: string | null;

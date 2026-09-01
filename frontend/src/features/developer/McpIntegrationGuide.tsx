@@ -6,6 +6,7 @@ import mcpGuideMarkdown from '../../../../docs/mcp-integration.md?raw';
 const toolGroups = [
   { name: '状态与账户', tools: 'imail_status · accounts_list · account_add_with_code · account_start_oauth · account_reconnect_oauth · account_update · account_update_authorization_code · account_test_connection · account_remove' },
   { name: '同步与邮件', tools: 'mailbox_sync · sync_policy_get · sync_policy_update · messages_list · message_get · message_update · message_move · message_send · outbox_list · outbox_schedule · outbox_cancel · outbox_retry · outbox_resolve' },
+  { name: '处理与回复', tools: 'mail_work_items_list · mail_work_item_set · mail_work_item_complete · mail_reply_draft_create · mail_draft_schedule' },
   { name: '附件与草稿', tools: 'attachment_download · drafts_list · draft_get · draft_save · draft_delete' },
   { name: '整理', tools: 'labels_list · notifications_list' },
 ];

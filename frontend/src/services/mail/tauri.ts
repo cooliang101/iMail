@@ -49,6 +49,11 @@ export type EmbeddedDomainCall =
   | { operation: 'outboxCancel'; itemId: string }
   | { operation: 'outboxRetry'; itemId: string }
   | { operation: 'outboxResolve'; itemId: string; input: Record<string, unknown> }
+  | { operation: 'mailWorkItemsList' }
+  | { operation: 'mailWorkItemSet'; messageId: string; input: Record<string, unknown> }
+  | { operation: 'mailWorkItemComplete'; messageId: string }
+  | { operation: 'mailReplyDraftCreate'; messageId: string; input: Record<string, unknown> }
+  | { operation: 'mailDraftSchedule'; draftId: string; input: Record<string, unknown> }
   | { operation: 'draftsList' }
   | { operation: 'draftCreate'; draftId?: string; input: Record<string, unknown> }
   | { operation: 'draftUpdate'; draftId: string; input: Record<string, unknown> }
@@ -115,6 +120,7 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
       '/api/notifications': { operation: 'notificationsList' },
       '/api/drafts': { operation: 'draftsList' },
       '/api/outbox': { operation: 'outboxList' },
+      '/api/mail-work-items': { operation: 'mailWorkItemsList' },
       '/api/preferences': { operation: 'preferencesGet' },
       '/api/smart-folders': { operation: 'smartFoldersList' },
       '/api/mail-rules': { operation: 'mailRulesList' },
@@ -198,6 +204,13 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   if (outboxResolve && method === 'POST' && body) return { operation: 'outboxResolve', itemId: decodeURIComponent(outboxResolve[1]), input: body };
   const outboxItem = url.pathname.match(/^\/api\/outbox\/([^/]+)$/);
   if (outboxItem && method === 'DELETE' && options.body === undefined) return { operation: 'outboxCancel', itemId: decodeURIComponent(outboxItem[1]) };
+  const workItem = url.pathname.match(/^\/api\/messages\/([^/]+)\/work-item$/);
+  if (workItem && method === 'PUT' && body) return { operation: 'mailWorkItemSet', messageId: decodeURIComponent(workItem[1]), input: body };
+  if (workItem && method === 'DELETE' && options.body === undefined) return { operation: 'mailWorkItemComplete', messageId: decodeURIComponent(workItem[1]) };
+  const replyDraft = url.pathname.match(/^\/api\/messages\/([^/]+)\/reply-draft$/);
+  if (replyDraft && method === 'POST' && body) return { operation: 'mailReplyDraftCreate', messageId: decodeURIComponent(replyDraft[1]), input: body };
+  const draftSchedule = url.pathname.match(/^\/api\/drafts\/([^/]+)\/schedule$/);
+  if (draftSchedule && method === 'POST' && body) return { operation: 'mailDraftSchedule', draftId: decodeURIComponent(draftSchedule[1]), input: body };
   if (method === 'POST' && url.pathname === '/api/drafts' && body) {
     const draftId = new Headers(options.headers).get('X-Draft-Id') ?? undefined;
     return { operation: 'draftCreate', ...(draftId ? { draftId } : {}), input: body };

@@ -22,7 +22,7 @@ function renderReader(currentMessage: Message) {
     defaultBodyView="source" onComposeConversationMessage={vi.fn()}
     onReply={vi.fn()} onReplyAll={vi.fn()} onForward={vi.fn()} onComposeSender={vi.fn()}
     onFilterParticipant={vi.fn()} onCloseMobile={vi.fn()} onToggleFlag={vi.fn()}
-    onArchive={vi.fn()} onDelete={vi.fn()} onSnooze={vi.fn()} onManageLabels={vi.fn()}
+    onArchive={vi.fn()} onDelete={vi.fn()} onSnooze={vi.fn()} onAddToWorkQueue={vi.fn()} onManageLabels={vi.fn()}
     onMarkUnread={vi.fn()} onPrevious={vi.fn()} onNext={vi.fn()}
     hasPrevious={false} hasNext={false} actionBusy={false}
   />)).document;

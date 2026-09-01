@@ -9,7 +9,7 @@ mod translation;
 pub use composition::*;
 pub use translation::*;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 16;
+pub const CURRENT_SCHEMA_VERSION: u32 = 17;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -531,6 +531,40 @@ pub struct OutboxItemReadModel {
     pub created_at: String,
     pub updated_at: String,
     pub sent_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MailWorkStatus {
+    NeedsReply,
+    NeedsReview,
+    FollowUp,
+    Waiting,
+}
+
+impl MailWorkStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NeedsReply => "needsReply",
+            Self::NeedsReview => "needsReview",
+            Self::FollowUp => "followUp",
+            Self::Waiting => "waiting",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailWorkItemReadModel {
+    pub id: String,
+    pub message_id: String,
+    pub account_id: String,
+    pub status: MailWorkStatus,
+    pub due_at: Option<String>,
+    pub note: String,
+    pub draft_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

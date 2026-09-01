@@ -239,6 +239,26 @@ pub enum EmbeddedDomainCall {
         item_id: String,
         input: serde_json::Value,
     },
+    MailWorkItemsList,
+    MailWorkItemSet {
+        #[serde(rename = "messageId")]
+        message_id: String,
+        input: serde_json::Value,
+    },
+    MailWorkItemComplete {
+        #[serde(rename = "messageId")]
+        message_id: String,
+    },
+    MailReplyDraftCreate {
+        #[serde(rename = "messageId")]
+        message_id: String,
+        input: serde_json::Value,
+    },
+    MailDraftSchedule {
+        #[serde(rename = "draftId")]
+        draft_id: String,
+        input: serde_json::Value,
+    },
     DraftsList,
     DraftCreate {
         #[serde(rename = "draftId")]
@@ -605,6 +625,27 @@ impl EmbeddedDomainCall {
             ),
             Self::OutboxResolve { item_id, input } => json_request(
                 format!("/api/outbox/{}/resolve", path_segment(&item_id)),
+                "POST",
+                input,
+            ),
+            Self::MailWorkItemsList => ("/api/mail-work-items".into(), "GET", None),
+            Self::MailWorkItemSet { message_id, input } => json_request(
+                format!("/api/messages/{}/work-item", path_segment(&message_id)),
+                "PUT",
+                input,
+            ),
+            Self::MailWorkItemComplete { message_id } => (
+                format!("/api/messages/{}/work-item", path_segment(&message_id)),
+                "DELETE",
+                None,
+            ),
+            Self::MailReplyDraftCreate { message_id, input } => json_request(
+                format!("/api/messages/{}/reply-draft", path_segment(&message_id)),
+                "POST",
+                input,
+            ),
+            Self::MailDraftSchedule { draft_id, input } => json_request(
+                format!("/api/drafts/{}/schedule", path_segment(&draft_id)),
                 "POST",
                 input,
             ),
@@ -1225,6 +1266,51 @@ impl EmbeddedMailServiceState {
                     _ => unreachable!(),
                 };
                 let response = match host.outbox_operation(user_id, operation, id, input).await {
+                    Ok(value) => json_response(success_status, value),
+                    Err(error) => {
+                        json_response(error.status, serde_json::json!({"error":error.message}))
+                    }
+                };
+                Ok(Some(response))
+            }
+            EmbeddedDomainCall::MailWorkItemsList
+            | EmbeddedDomainCall::MailWorkItemSet { .. }
+            | EmbeddedDomainCall::MailWorkItemComplete { .. }
+            | EmbeddedDomainCall::MailReplyDraftCreate { .. }
+            | EmbeddedDomainCall::MailDraftSchedule { .. } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "嵌入式服务尚未初始化".to_string())?;
+                let (operation, id, input, success_status) = match call {
+                    EmbeddedDomainCall::MailWorkItemsList => ("list", None, None, 200),
+                    EmbeddedDomainCall::MailWorkItemSet { message_id, input } => {
+                        ("set", Some(message_id.clone()), Some(input.clone()), 200)
+                    }
+                    EmbeddedDomainCall::MailWorkItemComplete { message_id } => {
+                        ("complete", Some(message_id.clone()), None, 200)
+                    }
+                    EmbeddedDomainCall::MailReplyDraftCreate { message_id, input } => (
+                        "replyDraft",
+                        Some(message_id.clone()),
+                        Some(input.clone()),
+                        201,
+                    ),
+                    EmbeddedDomainCall::MailDraftSchedule { draft_id, input } => (
+                        "scheduleDraft",
+                        Some(draft_id.clone()),
+                        Some(input.clone()),
+                        201,
+                    ),
+                    _ => unreachable!(),
+                };
+                let response = match host
+                    .work_queue_operation(user_id, operation, id, input)
+                    .await
+                {
                     Ok(value) => json_response(success_status, value),
                     Err(error) => {
                         json_response(error.status, serde_json::json!({"error":error.message}))
@@ -3188,7 +3274,7 @@ mod tests {
                 )
                 .unwrap();
             connection
-                .execute_batch("DROP TRIGGER messages_body_insert; DROP TRIGGER messages_body_delete; DROP TRIGGER messages_body_update; DROP TABLE message_body_fts; DROP TABLE smart_folders; DROP TABLE apple_hme_sessions; DROP TABLE outbox_items; ALTER TABLE messages DROP COLUMN mail_headers_json; ALTER TABLE drafts DROP COLUMN compose_json;")
+                .execute_batch("DROP TABLE mail_work_items; DROP TRIGGER messages_body_insert; DROP TRIGGER messages_body_delete; DROP TRIGGER messages_body_update; DROP TABLE message_body_fts; DROP TABLE smart_folders; DROP TABLE apple_hme_sessions; DROP TABLE outbox_items; ALTER TABLE messages DROP COLUMN mail_headers_json; ALTER TABLE drafts DROP COLUMN compose_json;")
                 .unwrap();
         }
         write_private_session(

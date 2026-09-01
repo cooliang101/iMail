@@ -90,6 +90,9 @@ Authorization: Bearer imail_mcp_xxx
 | 发件箱 | `outbox_list`、`outbox_schedule` | 列出持久化任务；使用 UUID `requestId` 幂等地按 RFC 3339 `sendAt` 安排不可变邮件快照 |
 | 发件箱 | `outbox_cancel`、`outbox_retry` | 取消发送前任务；仅重试结果明确失败的任务 |
 | 发件箱 | `outbox_resolve` | 核对服务商已发送文件夹后处置 `needsReview`；详见[发件箱与定时发送](outbox-and-scheduled-send.md) |
+| 处理队列 | `mail_work_items_list`、`mail_work_item_set`、`mail_work_item_complete` | 查询或维护 `needsReply`、`needsReview`、`followUp`、`waiting`；可附 RFC 3339 期限和备注 |
+| 回复自动化 | `mail_reply_draft_create` | 从原邮件安全派生发件账户、Reply-To/回复全部收件人与线程头，保存草稿并进入 `needsReview`，不会直接发送 |
+| 回复自动化 | `mail_draft_schedule` | 对现有草稿显式传入 `confirmed: true`，用 UUID `requestId` 幂等地加入持久化发件箱 |
 | 邮件 | `message_get` | 完整正文、HTML、标签与附件元数据 |
 | 邮件 | `conversation_get` | 按明确回复头读取本地会话摘要；保留账户/文件夹副本，不修改已读状态 |
 | 邮件 | `message_update` | 已读、星标、标签和稍后处理 |
@@ -118,6 +121,7 @@ Authorization: Bearer imail_mcp_xxx
 - `sync_policy_update` 只接受 `enabled`、`folderMode`、`selectedMailboxes` 和 `notifyOnError`。IMAP 推送负责变化唤醒，启动、重连与低频一致性校准由服务自动执行，不提供按账户分钟频率或恢复重试开关。
 - `mailbox_sync` 和 `messages_list` 的 `mailboxRole` 支持 `inbox`、`sent`、`archive`、`drafts`、`trash`、`junk` 与 `custom`；常见的 Drafts、Deleted Items/Message(s)、Junk/Spam 等无 Special-Use 标记文件夹也会归入对应标准角色。
 - 发送邮件前确认 `accountEmail`、收件人、主题和正文；发送不是幂等操作。
+- 推荐自动回复流程为：`message_get` → `mail_reply_draft_create` → 用户/Agent 检查草稿 → `mail_draft_schedule(confirmed: true)`。回复草稿固定使用原邮件所属账户，不允许调用方跨账户替换发件身份；安排发送后队列状态变为 `waiting`，实际投递结果仍以发件箱为准。完整语义见[邮件处理队列与回复自动化](mail-work-queue.md)。
 - 调用 `message_translate` 前先用 `translation_profiles_list` 选择状态可用、执行位置为本机或远程服务的 Profile。云端与 Bing Web Profile 只有在应用内完成对应隐私披露同意后才能执行；Edge 本地模型只存在于 WebView，MCP 不会静默换用其他服务。
 - `account_remove`、`message_move` 和 `draft_delete` 带 destructive annotation，执行前应获得用户确认。
 - 使用 Gmail、Outlook、Hotmail、QQ、Yahoo 或 iCloud 的应用专用密码/授权码时，把服务商生成的凭据传给 `account_add_with_code.authorizationCode`；Microsoft 账户还必须允许 IMAP/SMTP 密码验证。不要把 iMail 的 `imail_mcp_` 授权码误当成邮箱凭据。

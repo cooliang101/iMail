@@ -1,9 +1,9 @@
 {
   "name": "imail",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "license": "MIT",
   "imail": {
-    "schemaVersion": 16
+    "schemaVersion": 17
   },
   "private": true,
   "type": "module",

@@ -2,7 +2,7 @@ import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { ArrowCounterClockwise, Check, WarningCircle } from './components/icons';
 import { api, desktopLog, describeDesktopLogValue } from './services';
 import { buildMessageQuery, buildWorkspaceFolders } from './app/selectors';
-import type { Account, Contact, DeveloperToken, Draft, Message, OutboxItem, ProviderId } from './types';
+import type { Account, Contact, DeveloperToken, Draft, MailWorkItemView, MailWorkStatus, Message, OutboxItem, ProviderId } from './types';
 import type { ApiGatewayCredential, AppView, ContextTarget, MailNotification, MailParticipant, MessageStats, Notice, ParticipantRole, SearchFilters, SmartFolder, WorkspaceFolder } from './app-model';
 import { AppAccountRail, AppSidebar, AppTopbar, useWorkspaceNavigation } from './features/navigation';
 import { applyOptimisticMessageMutation, clearParticipantFilter, EMPTY_PARTICIPANT_FILTERS, MessageActionCoordinator, MessagePane, MessageReader, rollbackOptimisticMessageMutation, setParticipantFilter, type MailListFilter, useMessageCollection } from './features/mail';
@@ -14,6 +14,7 @@ import { ContactsWorkspace } from './features/contacts/ContactsWorkspace';
 import { DraftWelcome } from './features/compose/DraftWelcome';
 import { DraftWorkspace } from './features/compose/DraftWorkspace';
 import { OutboxWelcome, OutboxWorkspace } from './features/compose/OutboxWorkspace';
+import { WorkQueueWorkspace } from './features/work-queue/WorkQueueWorkspace';
 import { TokenWorkspace } from './features/developer/TokenWorkspace';
 import type { ComposePaneHandle } from './features/compose/ComposePane';
 import { isEditableShortcutTarget, shortcutDefinitions, shortcutLabel, shortcutMatches } from './features/shortcuts';
@@ -43,6 +44,7 @@ function App() {
   const [tokens, setTokens] = useState<DeveloperToken[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [outbox, setOutbox] = useState<OutboxItem[]>([]);
+  const [workItems, setWorkItems] = useState<MailWorkItemView[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [labels, setLabels] = useState<string[]>([]);
   const [notice, setNotice] = useState<Notice>(null);
@@ -96,6 +98,12 @@ function App() {
     setNotice,
     isMessageActionActive: (messageId) => messageActionsRef.current.isActive(messageId),
   });
+  useEffect(() => {
+    if (view !== 'workQueue') return;
+    setRealMessages(workItems.map(({ message }) => message));
+    setMessageTotal(workItems.length);
+    setSelectedId((current) => current && workItems.some(({ item }) => item.messageId === current) ? current : null);
+  }, [setMessageTotal, setRealMessages, view, workItems]);
   const openNotificationMessage = useCallback((messageId: string, accountEmail?: string) => {
     const account = realAccountsRef.current.find((item) => item.email === accountEmail);
     selectNavigationScope('inbox', account?.id ?? 'all', null);
@@ -116,8 +124,9 @@ function App() {
       api<{ labels: string[] }>('/api/labels'),
       api<{ contacts: Contact[] }>('/api/contacts'),
       api<{ items: OutboxItem[] }>('/api/outbox'),
+      api<{ items: MailWorkItemView[] }>('/api/mail-work-items'),
     ] as const);
-    const [accountResult, tokenResult, statsResult, draftResult, labelResult, contactResult, outboxResult] = results;
+    const [accountResult, tokenResult, statsResult, draftResult, labelResult, contactResult, outboxResult, workItemsResult] = results;
     if (accountResult.status === 'rejected') {
       setNotice({ kind: 'error', text: accountResult.reason instanceof Error ? accountResult.reason.message : '邮箱账户加载失败' });
       return;
@@ -129,6 +138,7 @@ function App() {
     if (labelResult.status === 'fulfilled') setLabels(labelResult.value.labels);
     if (contactResult.status === 'fulfilled') setContacts(contactResult.value.contacts);
     if (outboxResult.status === 'fulfilled') setOutbox(outboxResult.value.items);
+    if (workItemsResult.status === 'fulfilled') setWorkItems(workItemsResult.value.items);
     const optionalFailure = results.slice(1).find((result) => result.status === 'rejected');
     if (optionalFailure?.status === 'rejected') {
       setNotice({ kind: 'error', text: optionalFailure.reason instanceof Error ? optionalFailure.reason.message : '部分邮箱数据加载失败，已保留现有内容' });
@@ -395,6 +405,36 @@ function App() {
     }
   }
 
+  async function refreshWorkQueue() {
+    const result = await api<{ items: MailWorkItemView[] }>('/api/mail-work-items');
+    setWorkItems(result.items);
+  }
+
+  async function setWorkItem(messageId: string, status: MailWorkStatus = 'needsReply') {
+    const existing = workItems.find(({ item }) => item.messageId === messageId)?.item;
+    try {
+      await api(`/api/messages/${encodeURIComponent(messageId)}/work-item`, {
+        method: 'PUT',
+        body: JSON.stringify({ status, dueAt: existing?.dueAt, note: existing?.note ?? '' }),
+      });
+      await refreshWorkQueue();
+      setNotice({ kind: 'success', text: existing ? '处理状态已更新' : '邮件已加入处理队列' });
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '处理队列更新失败' });
+    }
+  }
+
+  async function completeWorkItem(messageId: string) {
+    try {
+      await api(`/api/messages/${encodeURIComponent(messageId)}/work-item`, { method: 'DELETE' });
+      await refreshWorkQueue();
+      if (selectedId === messageId) setSelectedId(null);
+      setNotice({ kind: 'success', text: '处理项目已完成' });
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '处理项目完成失败' });
+    }
+  }
+
   async function selectMailbox(folder: WorkspaceFolder) {
     if (composePaneRef.current && !await composePaneRef.current.close()) return;
     selectNavigationMailbox(folder); setSelectedId(null);
@@ -494,7 +534,7 @@ function App() {
 
     {searchEditor && <AdvancedSearchPanel initial={searchEditor.filters} folder={searchEditor.folder} accounts={accounts} labels={labels} onClose={() => setSearchEditor(null)} onApply={applySearch} onSave={smartFolders.save} onDelete={deleteSmartFolder} />}
     <AppAccountRail user={user} accounts={accounts} accountFilter={accountFilter} onSelect={(accountId) => selectScope('inbox', accountId)} onAdd={() => setAddAccountIntent({})} onSettings={() => setSettingsTab('general')} onSwitchAccount={() => void logout()} onContextMenu={(event, accountId) => { event.preventDefault(); setContextTarget(accountId ? { kind: 'account', accountId, x: event.clientX, y: event.clientY } : { kind: 'background', x: event.clientX, y: event.clientY }); }} />
-    <AppSidebar smartFolders={<SmartFoldersNav folders={smartFolders.folders} activeId={view === 'search' ? smartFolderId : null} loading={smartFolders.loading} error={smartFolders.error} onRetry={() => void smartFolders.reload()} onSelect={(folder) => void applySearch(folder.filters, folder.id)} onEdit={(folder) => setSearchEditor({ filters: folder.filters, folder })} onCreate={() => setSearchEditor({ filters: {} })} />} user={user} accounts={accounts} groups={groups} workspaceFolders={workspaceFolders} labels={labels} messageStats={messageStats} draftsCount={drafts.length} outboxCount={outbox.filter((item) => ['scheduled', 'sending', 'failed', 'needsReview'].includes(item.status)).length} contactsCount={contacts.length} view={view} accountFilter={accountFilter} groupFilter={groupFilter} activeLabel={activeLabel} activeMailbox={activeMailbox} expandedWorkspaces={expandedWorkspaces} sidebarOpen={sidebarOpen}
+    <AppSidebar smartFolders={<SmartFoldersNav folders={smartFolders.folders} activeId={view === 'search' ? smartFolderId : null} loading={smartFolders.loading} error={smartFolders.error} onRetry={() => void smartFolders.reload()} onSelect={(folder) => void applySearch(folder.filters, folder.id)} onEdit={(folder) => setSearchEditor({ filters: folder.filters, folder })} onCreate={() => setSearchEditor({ filters: {} })} />} user={user} accounts={accounts} groups={groups} workspaceFolders={workspaceFolders} labels={labels} messageStats={messageStats} draftsCount={drafts.length} outboxCount={outbox.filter((item) => ['scheduled', 'sending', 'failed', 'needsReview'].includes(item.status)).length} workQueueCount={workItems.length} contactsCount={contacts.length} view={view} accountFilter={accountFilter} groupFilter={groupFilter} activeLabel={activeLabel} activeMailbox={activeMailbox} expandedWorkspaces={expandedWorkspaces} sidebarOpen={sidebarOpen}
       onClose={() => setSidebarOpen(false)} onCompose={openCompose} onAddAccount={() => { setAddAccountIntent({}); setSidebarOpen(false); }} onSettings={() => { setSettingsTab('general'); setSidebarOpen(false); }} onSelectScope={selectScope} onSelectMailbox={selectMailbox} onSelectLabel={selectLabel} onEditWorkspace={setWorkspaceOpen}
       onToggleWorkspace={(group) => setExpandedWorkspaces((current) => { const next = new Set(current); if (next.has(group)) next.delete(group); else next.add(group); return next; })} onContextTarget={setContextTarget} onLogout={() => void logout()} />
 
@@ -504,10 +544,10 @@ function App() {
       <WorkspaceErrorBoundary label={view === 'tokens' ? '外部接入' : view === 'contacts' ? '联系人' : composeMode ? '写信编辑器' : '邮件工作区'} resetKey={`${view}:${selected?.id ?? ''}:${composeMode ?? ''}`}>
       {view === 'contacts' ? <Suspense fallback={<FeatureFallback label="联系人" />}><ContactsWorkspace contacts={contacts} search={search} onCompose={(contact) => openCompose(activeAccount?.id, [contact.address])} /></Suspense> : view === 'tokens' ? <Suspense fallback={<FeatureFallback label="外部接入" />}><TokenWorkspace accounts={realAccounts} tokens={tokens} latestApiCredential={latestApiCredential} onCreateApi={() => setTokenOpen('api')} onCreateMcp={() => setTokenOpen('mcp')} onReload={load} setNotice={setNotice} /></Suspense> :
         <div className={`mail-layout ${selectedId || composeMode ? 'mobile-reader-open' : ''}`}>
-          {view === 'outbox' ? <OutboxWorkspace items={outbox} accounts={accounts} onCancel={cancelOutboxItem} onRetry={retryOutboxItem} onResolve={resolveOutboxItem} /> : view === 'drafts' ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => void openDraft(draft)} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => void openDraft()} /></Suspense> : <MessagePane title={view === 'search' ? smartFolders.folders.find((folder) => folder.id === smartFolderId)?.name ?? '高级搜索' : groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} participantFilters={participantFilters} hasOtherFilters={Boolean(search.trim()) || mailFilter !== 'all' || (view === 'search' && Object.keys(searchFilters ?? {}).length > 0)} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onClearParticipantFilter={removeParticipantFilter} onClearParticipantFilters={clearParticipantFilters} onKeepOnlyParticipantFilters={keepOnlyParticipantFilters} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddAccountIntent({})} />}
+          {view === 'outbox' ? <OutboxWorkspace items={outbox} accounts={accounts} onCancel={cancelOutboxItem} onRetry={retryOutboxItem} onResolve={resolveOutboxItem} /> : view === 'workQueue' ? <WorkQueueWorkspace items={workItems} accounts={accounts} selectedId={selected?.id} onSelect={(id) => void selectMessage(id)} onUpdate={setWorkItem} onComplete={completeWorkItem} onOpenDraft={(id) => void openDraft(drafts.find((draft) => draft.id === id))} /> : view === 'drafts' ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWorkspace drafts={drafts} remoteDrafts={messages} accounts={accounts} selectedRemoteId={selected?.id} onOpen={(draft) => void openDraft(draft)} onOpenRemote={(draft) => void selectMessage(draft.id)} onDelete={async (id) => { try { await api(`/api/drafts/${id}`, { method: 'DELETE' }); setDrafts((current) => current.filter((draft) => draft.id !== id)); if (activeDraft?.id === id) { setActiveDraft(undefined); setComposeMode(null); } setNotice({ kind: 'success', text: '草稿已删除' }); } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '草稿删除失败' }); } }} onCreate={() => void openDraft()} /></Suspense> : <MessagePane title={view === 'search' ? smartFolders.folders.find((folder) => folder.id === smartFolderId)?.name ?? '高级搜索' : groupFilter ?? (accountFilter === 'all' ? scopeTitle : activeAccount?.displayName ?? '')} messageTotal={messageTotal} account={activeAccount} filter={mailFilter} participantFilters={participantFilters} hasOtherFilters={Boolean(search.trim()) || mailFilter !== 'all' || (view === 'search' && Object.keys(searchFilters ?? {}).length > 0)} messages={visibleMessages} accounts={accounts} selectedId={selected?.id} ready={ready} loading={messagesLoading} hasMore={messagesHasMore} onFilterChange={setMailFilter} onClearParticipantFilter={removeParticipantFilter} onClearParticipantFilters={clearParticipantFilters} onKeepOnlyParticipantFilters={keepOnlyParticipantFilters} onManageLabels={() => setLabelOpen(true)} onSelect={selectMessage} onContextMenu={(message, point) => void openMessageContext(message, point)} onBackgroundContextMenu={(point) => setContextTarget({ kind: 'background', ...point })} onLoadMore={() => void loadMoreMessages()} onAddAccount={() => setAddAccountIntent({})} />}
           {composeMode ? <Suspense fallback={<FeatureFallback label="写信编辑器" />}><ComposePane ref={composePaneRef} key={`${composeMode}-${(activeDraft?.id ?? (composeMode === 'new' ? composeAccountId ?? composeInitialTo.join(',') : conversationComposeSource?.id ?? selected?.id)) || 'new'}`} accounts={realAccounts} contacts={contacts} composition={preferences.composition} mode={composeMode} initialAccountId={composeAccountId} initialTo={composeInitialTo} original={composeMode === 'new' ? undefined : conversationComposeSource ?? selected} draft={activeDraft} onClose={() => { setComposeMode(null); setConversationComposeSource(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); }} onDraftSaved={(saved) => { setDrafts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]); }} onScheduled={async () => { setComposeMode(null); setConversationComposeSource(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); await load(); selectNavigationScope('outbox'); setSelectedId(null); setNotice({ kind: 'success', text: '邮件已加入发件箱' }); }} onSent={async () => { setComposeMode(null); setConversationComposeSource(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); await load(); setNotice({ kind: 'success', text: '邮件已发送' }); }} /></Suspense> : view === 'outbox' ? <OutboxWelcome /> : view === 'drafts' && !selected ? <Suspense fallback={<FeatureFallback label="草稿" />}><DraftWelcome onCreate={() => openCompose(activeAccount?.id)} /></Suspense> : <MessageReader message={selected} accounts={accounts} onComposeConversationMessage={(message, mode) => { setConversationComposeSource(message); setActiveDraft(undefined); setComposeAccountId(undefined); setComposeInitialTo([]); setComposeMode(mode); }} account={selected ? accounts.find((item) => item.id === selected.accountId) : undefined} contacts={contacts} defaultBodyView={preferences.defaultMessageView} onReplyAll={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('replyAll'); }} onReply={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('reply'); }} onForward={() => { setConversationComposeSource(selected); setComposeAccountId(undefined); setComposeInitialTo([]); setActiveDraft(undefined); setComposeMode('forward'); }} onComposeSender={(address) => openCompose(selected?.accountId, [address])} onFilterParticipant={filterParticipant} onCloseMobile={() => setSelectedId(null)} onContextMenu={(message, point) => void openMessageContext(message, point)}
             onToggleFlag={() => void toggleSelectedFlag()}
-            onSnooze={() => setSnoozeOpen(true)} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
+            onSnooze={() => setSnoozeOpen(true)} onAddToWorkQueue={() => { if (selected) void setWorkItem(selected.id); }} onManageLabels={() => setLabelOpen(true)} onMarkUnread={() => void markSelectedUnread()}
             onArchive={() => void moveSelected('archive')} onDelete={() => void moveSelected('trash')} actionBusy={messageActionBusy}
             onPrevious={() => { if (selectedIndex > 0) selectMessage(messages[selectedIndex - 1].id); }}
             onNext={() => { if (selectedIndex >= 0 && selectedIndex < messages.length - 1) selectMessage(messages[selectedIndex + 1].id); }}

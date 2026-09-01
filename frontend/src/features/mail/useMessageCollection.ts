@@ -77,7 +77,7 @@ export function useMessageCollection(options: Options) {
   }), [setContacts]);
 
   useEffect(() => {
-    if (view === 'contacts' || view === 'tokens') { setLoading(false); setReady(true); return; }
+    if (view === 'contacts' || view === 'tokens' || view === 'workQueue') { setLoading(false); setReady(true); return; }
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setLoading(true);

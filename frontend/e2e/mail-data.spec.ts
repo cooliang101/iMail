@@ -32,6 +32,7 @@ type FixtureState = {
   patchCalls: Array<{ id: string; body: Record<string, unknown> }>;
   drafts: Array<Record<string, unknown>>;
   outbox: Array<Record<string, unknown>>;
+  workItems: Array<Record<string, unknown>>;
   outboxListCalls: number;
   messagePageCalls: number;
   serviceInfoCalls: number;
@@ -47,7 +48,7 @@ async function installMailFixture(page: Page) {
   // many fine-grained icon modules. Chromium's default buffer can evict the
   // first preload entries before the warmup assertion observes them.
   await page.addInitScript(() => performance.setResourceTimingBufferSize(2_000));
-  const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], outbox: [], outboxListCalls: 0, messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
+  const state: FixtureState = { moveCalls: [], patchCalls: [], drafts: [], outbox: [], workItems: [], outboxListCalls: 0, messagePageCalls: 0, serviceInfoCalls: 0, failNextPatch: false };
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -67,6 +68,7 @@ async function installMailFixture(page: Page) {
       state.drafts = [draft]; return json(route, { draft });
     }
     if (path === '/api/outbox' && method === 'GET') { state.outboxListCalls += 1; return json(route, { items: state.outbox }); }
+    if (path === '/api/mail-work-items' && method === 'GET') return json(route, { items: state.workItems });
     if (path === '/api/outbox' && method === 'POST') {
       const body = request.postDataJSON() as Record<string, unknown>;
       expect(body.requestId).toEqual(expect.stringMatching(/^[0-9a-f-]{36}$/));
@@ -131,6 +133,19 @@ async function installMailFixture(page: Page) {
       if (state.failNextPatch) { state.failNextPatch = false; await new Promise((resolve) => setTimeout(resolve, 250)); return json(route, { error: 'fixture offline failure' }, 503); }
       return json(route, { message: { ...messages.find((item) => item.id === detail[1]), ...body } });
     }
+    const workItem = path.match(/^\/api\/messages\/(message-\d{3})\/work-item$/);
+    if (workItem && method === 'PUT') {
+      const body = request.postDataJSON() as { status: string; dueAt?: string; note?: string };
+      const message = messages.find((item) => item.id === workItem[1])!;
+      const existing = state.workItems.find((entry) => (entry.item as { messageId: string }).messageId === workItem[1]);
+      const item = { id: existing ? (existing.item as { id: string }).id : `work-${state.workItems.length + 1}`, messageId: workItem[1], accountId: account.id, status: body.status, dueAt: body.dueAt, note: body.note ?? '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      state.workItems = [{ item, message }, ...state.workItems.filter((entry) => (entry.item as { messageId: string }).messageId !== workItem[1])];
+      return json(route, { item });
+    }
+    if (workItem && method === 'DELETE') {
+      state.workItems = state.workItems.filter((entry) => (entry.item as { messageId: string }).messageId !== workItem[1]);
+      return json(route, { completed: true, messageId: workItem[1] });
+    }
     const move = path.match(/^\/api\/messages\/(message-\d{3})\/move$/);
     if (move) { state.moveCalls.push(move[1]); return json(route, { ok: true }); }
     if (path === '/api/messages/message-001/attachments/0/preview' && method === 'POST') return json(route, { previewId: 'preview-1', descriptor: { kind: 'text', filename: 'fixture.txt', contentType: 'text/plain', size: 18, archiveEntries: [] }, expiresInSeconds: 300 });
@@ -169,6 +184,19 @@ test('mail pagination loads stable fixture pages and reads full bodies', async (
   await expect.poll(() => state.messagePageCalls).toBeGreaterThanOrEqual(2);
   await page.locator('.message-list').evaluate((element) => element.scrollTo(0, element.scrollHeight));
   await expect(page.locator('.message-row').filter({ hasText: 'Fixture subject 70' })).toBeVisible();
+});
+
+test('mail work queue adds, displays and completes a message', async ({ page }) => {
+  const state = await installMailFixture(page);
+  await page.getByRole('button', { name: '加入邮件处理队列' }).click();
+  await expect.poll(() => state.workItems.length).toBe(1);
+  await expect(page.getByText('邮件已加入处理队列', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '邮件处理队列', exact: true }).click();
+  await expect(page.locator('.work-queue-header strong')).toHaveText('邮件处理队列');
+  await expect(page.locator('.work-queue-item').filter({ hasText: 'Fixture subject 1' })).toBeVisible();
+  await page.locator('.work-queue-item').getByRole('button', { name: '完成' }).click();
+  await expect.poll(() => state.workItems.length).toBe(0);
+  await expect(page.getByText('当前没有处理项目', { exact: true })).toBeVisible();
 });
 
 test('narrow desktop keeps the reader inside the viewport', async ({ page }) => {
