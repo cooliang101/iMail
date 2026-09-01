@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
-import { SettingsLinkRow, SettingsPanelHeading } from '../../components/settings-navigation';
+import { SettingsLinkRow } from '../../components/settings-navigation';
 import { CheckCircle, Cloud, FolderOpen, HardDrives, SpinnerGap, WarningCircle } from '../../components/icons';
 import type { ServiceInfo } from '../../types';
 import {
@@ -15,7 +15,6 @@ import {
   type ServiceMode,
 } from '../../services';
 import { isTauriRuntime } from '../../platform/tauri-runtime';
-import { ServiceAddressEditor } from './ServiceAddressEditor';
 import { serviceErrorMessage, testServiceConnection } from './service-connection';
 import { switchToLocalService, type ServiceTransitionDependencies } from './service-transition';
 
@@ -29,14 +28,13 @@ function localServiceNote(mode: ServiceMode) {
     : '本地 Rust 服务及数据保留在此设备；当前客户端已选择远程服务。';
 }
 
-export function ServicePanel() {
+export function ServicePanel({ onEditRemote }: { onEditRemote: () => void }) {
   const desktop = isTauriRuntime();
   const embeddedLocal = desktop && embeddedTauriServiceEnabled();
   const [mode, setMode] = useState<ServiceMode>(configuredServiceMode);
   const [info, setInfo] = useState<ServiceInfo>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [remoteEditorOpen, setRemoteEditorOpen] = useState(!desktop);
 
   function transitionDependencies(): ServiceTransitionDependencies {
     return {
@@ -59,7 +57,6 @@ export function ServicePanel() {
   useEffect(() => { void inspect(); }, [inspect]);
 
   async function activateLocal() {
-    setRemoteEditorOpen(false);
     setBusy(true);
     setError('');
     try {
@@ -76,22 +73,13 @@ export function ServicePanel() {
   }
 
   const address = configuredServiceUrl();
-  if (remoteEditorOpen) return <section className="settings-feature-panel">
-    <SettingsPanelHeading title="远程服务" ancestors={['iMail 服务']} onBack={() => setRemoteEditorOpen(false)} />
-    <div className="settings-panel-body service-settings-panel settings-detail-body">
-      <ServiceAddressEditor onCancel={() => setRemoteEditorOpen(false)} onSaved={() => { setMode('remote'); setRemoteEditorOpen(false); void inspect(); }} />
-    </div>
-  </section>;
-
-  return <section className="settings-feature-panel">
-    <SettingsPanelHeading title="iMail 服务" />
-    <div className="settings-panel-body service-settings-panel">
+  return <section className="settings-section service-settings-panel" aria-label="服务连接">
 
     {desktop && <section className="service-mode-grid" aria-label="服务模式">
       <button type="button" className={mode === 'local' ? 'is-selected' : ''} onClick={() => void activateLocal()} disabled={busy}>
         <HardDrives size={28} weight="duotone" /><span><small>此设备</small><strong>本地服务</strong><p>iMail 服务直接运行于应用内，不开放本地 HTTP 端口。</p></span>{mode === 'local' && <CheckCircle size={20} weight="fill" />}
       </button>
-      <button type="button" className={mode === 'remote' ? 'is-selected' : ''} onClick={() => setRemoteEditorOpen(true)} disabled={busy}>
+      <button type="button" className={mode === 'remote' ? 'is-selected' : ''} onClick={onEditRemote} disabled={busy}>
         <Cloud size={28} weight="duotone" /><span><small>多设备共享</small><strong>远程服务</strong><p>连接你部署的服务实例，多台设备使用同一份数据。</p></span>{mode === 'remote' && <CheckCircle size={20} weight="fill" />}
       </button>
     </section>}
@@ -104,13 +92,12 @@ export function ServicePanel() {
       <AppButton appearance="subtle" type="button" onClick={() => void inspect()} disabled={busy}>重新检查</AppButton>
     </section>
 
-    {!desktop && <div className="settings-link-list"><SettingsLinkRow icon={<Cloud size={20} />} title="远程服务" detail="修改并验证当前 iMail 服务地址。" value={address} onClick={() => setRemoteEditorOpen(true)} /></div>}
+    {!desktop && <div className="settings-link-list"><SettingsLinkRow icon={<Cloud size={20} />} title="远程服务" detail="修改并验证当前 iMail 服务地址。" value={address} onClick={onEditRemote} /></div>}
 
     {desktop && <div className="service-local-lifecycle"><p className="service-rollout-note">{localServiceNote(mode)}</p>
       <div className="service-lifecycle-actions">
         <AppButton appearance="subtle" icon={<FolderOpen size={16} />} onClick={() => void desktopOpenAppLogs().catch((reason) => setError(serviceErrorMessage(reason, '打开应用日志失败')))} disabled={busy}>应用日志</AppButton>
       </div>
     </div>}
-    </div>
   </section>;
 }

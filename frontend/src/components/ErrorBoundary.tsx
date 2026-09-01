@@ -43,7 +43,7 @@ export function AppErrorBoundary({ children }: { children: ReactNode }) {
       <WarningCircle size={42} weight="duotone" />
       <span>界面保护已启动</span>
       <h1>应用界面遇到错误</h1>
-      <p>异常区域已被安全卸载，避免继续破坏页面布局。你可以重新挂载界面；若问题重复出现，请从服务连接页检查后台状态。</p>
+      <p>异常区域已被安全卸载，避免继续破坏页面布局。你可以重新挂载界面；若问题重复出现，请从设置的通用页检查服务状态。</p>
       <button type="button" onClick={reset}><ArrowCounterClockwise size={17} />重新挂载界面</button>
     </section>
   </main>}>{children}</ErrorBoundary>;

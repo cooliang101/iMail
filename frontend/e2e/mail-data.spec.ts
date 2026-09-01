@@ -368,11 +368,58 @@ test('search, labels and snooze update the selected message', async ({ page }) =
   expect(state.patchCalls.some(({ body }) => typeof body.snoozedUntil === 'string')).toBe(true);
 });
 
+test('general settings include message display and persist changes without nested scrolling', async ({ page }) => {
+  await installMailFixture(page);
+  await page.getByRole('button', { name: '打开设置' }).click();
+  const navigation = page.getByRole('navigation', { name: '设置分类' });
+  await expect(navigation.getByRole('button', { name: /邮件展示|服务连接/ })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '通用', exact: true })).toBeVisible();
+  const renderSwitch = page.getByRole('switch', { name: '渲染邮件' });
+  const renderSwitchControl = renderSwitch.locator('..');
+  await expect(renderSwitch).not.toBeChecked();
+  const save = page.waitForResponse((response) => response.url().endsWith('/api/preferences') && response.request().method() === 'PATCH');
+  await renderSwitchControl.click();
+  const response = await save;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON().defaultMessageView).toBe('rendered');
+  await expect(renderSwitch).toBeChecked();
+  await page.getByRole('button', { name: '关闭设置' }).click();
+  await page.getByRole('button', { name: '打开设置' }).click();
+  await expect(renderSwitch).toBeChecked();
+  for (const width of [1280, 820, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect(page.locator('.settings-content .settings-panel-body')).toHaveCount(1);
+    const geometry = await page.locator('.settings-content').evaluate((content) => {
+      const scrollOwners = [...content.querySelectorAll<HTMLElement>('*')].filter((element) => /auto|scroll/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight + 1);
+      const body = content.querySelector<HTMLElement>('.settings-panel-body')!;
+      return { scrollOwners: scrollOwners.length, themed: scrollOwners.every((element) => element.classList.contains('app-scrollbar')), width: body.clientWidth, scrollWidth: body.scrollWidth };
+    });
+    expect(geometry.scrollOwners).toBeLessThanOrEqual(1);
+    expect(geometry.themed).toBe(true);
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width + 1);
+    await page.getByRole('button', { name: /^远程服务/ }).click();
+    await page.getByRole('button', { name: '返回通用' }).click();
+    await expect(renderSwitch).toBeChecked();
+  }
+  const restore = page.waitForResponse((response) => response.url().endsWith('/api/preferences') && response.request().method() === 'PATCH');
+  await renderSwitchControl.click();
+  expect((await restore).request().postDataJSON().defaultMessageView).toBe('source');
+  await expect(renderSwitch).not.toBeChecked();
+});
+
 test('remote service selection verifies the endpoint before switching', async ({ page }) => {
   const state = await installMailFixture(page);
   await page.getByRole('button', { name: '打开设置' }).click();
-  await page.getByRole('button', { name: /服务连接/ }).click();
+  await expect(page.getByRole('heading', { name: '通用', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: /服务连接/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /^远程服务/ }).click();
   await expect(page.getByRole('heading', { name: '远程服务' })).toBeVisible();
+  await page.getByRole('button', { name: '返回通用' }).click();
+  await expect(page.getByRole('heading', { name: '通用', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^远程服务/ }).click();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '通用', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^远程服务/ }).click();
   await page.getByLabel('服务地址').fill('http://127.0.0.1:18787');
   await page.getByRole('button', { name: '连接远程服务' }).click();
   await expect.poll(() => state.serviceInfoCalls).toBeGreaterThanOrEqual(2);

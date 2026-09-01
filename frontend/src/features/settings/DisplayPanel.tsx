@@ -1,12 +1,8 @@
-import { Check, Database, Eye } from '../../components/icons';
 import type { AppPreferences } from '../../app-model';
-import { SettingsPanelHeading } from '../../components/settings-navigation';
+import { AppSwitch } from '../../components/form-controls';
 
 export function DisplayPanel({ preferences, onChange }: { preferences: AppPreferences; onChange: (value: AppPreferences) => void }) {
-  return <section className="settings-feature-panel"><SettingsPanelHeading title="邮件展示" />
-    <div className="settings-panel-body"><div className="display-choice-grid" role="radiogroup" aria-label="默认邮件正文视图">
-      <button type="button" role="radio" aria-checked={preferences.defaultMessageView === 'source'} className={preferences.defaultMessageView === 'source' ? 'is-selected' : ''} onClick={() => onChange({ ...preferences, defaultMessageView: 'source' })}><Database size={22} /><span><strong>原始内容</strong><small>移除 HTML 节点、样式、脚本和远程资源，只显示纯文本内容，防止通过邮件嗅探器追踪阅读行为。</small></span><i>{preferences.defaultMessageView === 'source' && <Check size={14} />}</i></button>
-      <button type="button" role="radio" aria-checked={preferences.defaultMessageView === 'rendered'} className={preferences.defaultMessageView === 'rendered' ? 'is-selected' : ''} onClick={() => onChange({ ...preferences, defaultMessageView: 'rendered' })}><Eye size={22} /><span><strong>渲染邮件</strong><small>提取并安全清洗邮件正文，在阅读页内保留内联样式排版。</small></span><i>{preferences.defaultMessageView === 'rendered' && <Check size={14} />}</i></button>
-    </div></div>
+  return <section className="settings-section" aria-label="邮件展示">
+    <div className="settings-row"><span><strong>渲染邮件</strong><small>开启后安全清洗并保留正文排版；关闭后仅显示纯文本，并阻止远程资源跟踪。</small></span><AppSwitch aria-label="渲染邮件" checked={preferences.defaultMessageView === 'rendered'} onChange={(_, data) => onChange({ ...preferences, defaultMessageView: data.checked ? 'rendered' : 'source' })} /></div>
   </section>;
 }

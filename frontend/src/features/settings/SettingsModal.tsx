@@ -2,19 +2,17 @@ import { useState } from 'preact/compat';
 import '../../styles/dialogs.css';
 import '../../styles/settings.css';
 import '../../styles/settings-responsive.css';
-import { ArrowCounterClockwise, Bell, Cloud, Envelope, Eye, Gear, Globe, HardDrives, Info, Keyboard, LockKey, Palette, X } from '../../components/icons';
+import { ArrowCounterClockwise, Bell, Cloud, Envelope, Gear, Globe, Info, Keyboard, LockKey, Palette, X } from '../../components/icons';
 import type { Account, ProviderId } from '../../types';
 import type { AppPreferences, Notice, ShortcutBindings } from '../../app-model';
 import { Overlay } from '../../components/shared';
 import { AccountSettingsPanel } from '../accounts';
 import { defaultShortcutBindings } from '../shortcuts';
-import { DisplayPanel } from './DisplayPanel';
 import { AppearancePanel } from './AppearancePanel';
 import { GeneralPanel } from './GeneralPanel';
 import { NotificationPanel } from './NotificationPanel';
 import { PrivacyPanel } from './PrivacyPanel';
 import { ShortcutPanel } from './ShortcutPanel';
-import { ServicePanel } from '../service';
 import { AppleHmeSettingsPanel } from './AppleHmeSettingsPanel';
 import { AboutPanel } from './AboutPanel';
 import { TranslationSettingsPanel } from '../translation';
@@ -22,11 +20,10 @@ import { useI18n } from '../i18n';
 import { CompositionSettingsPanel } from '../compose/CompositionSettingsPanel';
 import { RulesSettingsPanel } from '../rules/RulesSettingsPanel';
 
-export type SettingsTab = 'general' | 'service' | 'appearance' | 'accounts' | 'apple-hme' | 'translation' | 'shortcuts' | 'notifications' | 'display' | 'privacy' | 'about' | 'composition' | 'rules';
+export type SettingsTab = 'general' | 'appearance' | 'accounts' | 'apple-hme' | 'translation' | 'shortcuts' | 'notifications' | 'privacy' | 'about' | 'composition' | 'rules';
 
 const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof Gear }> = [
   { id: 'general', label: '通用', detail: '启动与阅读行为', icon: Gear },
-  { id: 'service', label: '服务连接', detail: '本地或远程服务', icon: HardDrives },
   { id: 'appearance', label: '主题', detail: '界面风格与色彩', icon: Palette },
   { id: 'accounts', label: '邮箱管理', detail: '授权、代理与工作空间', icon: Envelope },
   { id: 'composition', label: '写信', detail: '账户签名与模板', icon: Envelope },
@@ -35,7 +32,6 @@ const tabs: Array<{ id: SettingsTab; label: string; detail: string; icon: typeof
   { id: 'translation', label: '翻译服务', detail: '翻译服务与语言', icon: Globe },
   { id: 'shortcuts', label: '快捷键', detail: '键盘操作与绑定', icon: Keyboard },
   { id: 'notifications', label: '通知', detail: '选择需要关注的动态', icon: Bell },
-  { id: 'display', label: '邮件展示', detail: '正文默认查看方式', icon: Eye },
   { id: 'privacy', label: '隐私与数据', detail: '本地优先与安全边界', icon: LockKey },
   { id: 'about', label: '关于 iMail', detail: '版本与项目主页', icon: Info },
 ];
@@ -68,14 +64,12 @@ export function SettingsModal({ initialTab, accounts, preferences, bindings, onP
         {activeTab === 'general' && <GeneralPanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'composition' && <CompositionSettingsPanel accounts={accounts} preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'rules' && <RulesSettingsPanel accounts={accounts} onReload={onReload} />}
-        {activeTab === 'service' && <ServicePanel />}
         {activeTab === 'appearance' && <AppearancePanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'accounts' && <AccountSettingsPanel accounts={accounts} onAddAccount={() => onAddAccount(undefined, 'accounts')} onReload={onReload} setNotice={setNotice} />}
         {activeTab === 'apple-hme' && <AppleHmeSettingsPanel accounts={accounts} onAddAccount={() => onAddAccount('icloud', 'apple-hme')} setNotice={setNotice} />}
         {activeTab === 'translation' && <TranslationSettingsPanel setNotice={setNotice} />}
         {activeTab === 'shortcuts' && <ShortcutPanel bindings={bindings} onChange={onBindingsChange} />}
         {activeTab === 'notifications' && <NotificationPanel preferences={preferences} onChange={onPreferencesChange} />}
-        {activeTab === 'display' && <DisplayPanel preferences={preferences} onChange={onPreferencesChange} />}
         {activeTab === 'privacy' && <PrivacyPanel accountCount={accounts.length} onReload={onReload} setNotice={setNotice} />}
         {activeTab === 'about' && <AboutPanel />}
       </main>
