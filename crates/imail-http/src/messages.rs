@@ -245,7 +245,7 @@ struct MoveInput {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SendInput {
+pub(crate) struct SendInput {
     #[serde(default, flatten)]
     envelope: imail_protocol::ComposeEnvelope,
     account_id: String,
@@ -268,9 +268,9 @@ struct HttpSendAttachment {
     data: String,
 }
 
-struct ValidatedSend {
-    message: SendMessageInput,
-    draft_id: Option<String>,
+pub(crate) struct ValidatedSend {
+    pub(crate) message: SendMessageInput,
+    pub(crate) draft_id: Option<String>,
 }
 
 struct ValidatedPatch {
@@ -597,35 +597,55 @@ pub(crate) async fn send_for(
     message: SendMessageInput,
     draft_id: Option<String>,
 ) -> Result<imail_protocol::SendMessageResult, MailApplicationError<AuthStoreError>> {
-    let data_dir = state.config.data_dir.clone();
+    tokio::task::spawn_blocking(move || send_for_blocking(&state, owner, message, draft_id))
+        .await
+        .unwrap_or(Err(MailApplicationError::Domain {
+            code: "MAIL_WORKER_STOPPED",
+            status: 500,
+            message: "服务暂时无法完成请求",
+        }))
+}
+
+pub(crate) fn send_for_blocking(
+    state: &AppState,
+    owner: String,
+    message: SendMessageInput,
+    draft_id: Option<String>,
+) -> Result<imail_protocol::SendMessageResult, MailApplicationError<AuthStoreError>> {
+    let key = MasterKey::from_file(state.config.data_dir.join("master.key")).map_err(|_| {
+        MailApplicationError::Domain {
+            code: "MASTER_KEY_UNAVAILABLE",
+            status: 500,
+            message: "服务暂时无法完成请求",
+        }
+    })?;
+    let mut store = SqliteAuthStore::open_database(state.config.data_dir.join("imail.sqlite"))
+        .map_err(MailApplicationError::Repository)?;
     let environment = state.config.oauth_environment.clone();
     let coordinator = Arc::clone(&state.refresh_coordinator);
     let oauth_factory = Arc::clone(&state.config.oauth_provider_factory);
     let oauth_resolver = Arc::clone(&state.config.oauth_config_resolver);
     let transport = Arc::clone(&state.config.mail_transport_factory);
-    run_mail(data_dir, move |store, key| {
-        let codec = MasterKeyCredentialCodec::new(key);
-        refresh_account(
-            store,
-            &codec,
-            &owner,
-            &message.account_id,
-            coordinator.as_ref(),
-            &environment,
-            (oauth_factory.as_ref(), oauth_resolver.as_ref()),
-        )?;
-        let mut unused_imap = UnusedImap;
-        let mut smtp = transport.create_smtp().map_err(mail_unavailable)?;
-        let sent = MailApplicationService::new(&*store, &codec, &mut unused_imap, smtp.as_mut())
-            .send_message(&owner, &message)?;
-        if let Some(draft_id) = draft_id {
-            let _ = store
-                .delete_draft(&owner, &draft_id)
-                .map_err(MailApplicationError::Repository)?;
-        }
-        Ok(sent)
-    })
-    .await
+    let codec = MasterKeyCredentialCodec::new(&key);
+    refresh_account(
+        &mut store,
+        &codec,
+        &owner,
+        &message.account_id,
+        coordinator.as_ref(),
+        &environment,
+        (oauth_factory.as_ref(), oauth_resolver.as_ref()),
+    )?;
+    let mut unused_imap = UnusedImap;
+    let mut smtp = transport.create_smtp().map_err(mail_unavailable)?;
+    let sent = MailApplicationService::new(&store, &codec, &mut unused_imap, smtp.as_mut())
+        .send_message(&owner, &message)?;
+    if let Some(draft_id) = draft_id {
+        let _ = store
+            .delete_draft(&owner, &draft_id)
+            .map_err(MailApplicationError::Repository)?;
+    }
+    Ok(sent)
 }
 
 pub(crate) async fn embedded_send(
@@ -1550,7 +1570,7 @@ fn empty(status: StatusCode, cache: &'static str) -> Response {
     (status, [(header::CACHE_CONTROL, cache)]).into_response()
 }
 
-fn validate_send(input: SendInput) -> Result<ValidatedSend, ()> {
+pub(crate) fn validate_send(input: SendInput) -> Result<ValidatedSend, ()> {
     if uuid::Uuid::parse_str(&input.account_id).is_err()
         || (input.to.is_empty()
             && input.cc.as_ref().map_or(true, Vec::is_empty)

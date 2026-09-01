@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
-import { ArrowLeft, File, PaperPlaneTilt, Trash, WarningCircle } from '../../components/icons';
+import { ArrowLeft, Clock, File, PaperPlaneTilt, Trash, WarningCircle } from '../../components/icons';
 import { api } from '../../services';
 import type { Account, Contact, Draft, DraftAttachment, Message } from '../../types';
 import type { CompositionPreferences, ComposeMode } from '../../app-model';
@@ -16,8 +16,8 @@ export type ComposePaneHandle = { close: () => Promise<boolean> };
 
 export const ComposePane = forwardRef<ComposePaneHandle, {
   accounts: Account[]; contacts: Contact[]; mode: ComposeMode; composition?: CompositionPreferences; initialAccountId?: string; initialTo?: string[]; original?: Message; draft?: Draft;
-  onClose: () => void | Promise<void>; onSent: () => void | Promise<void>; onDraftSaved: (draft: Draft) => void;
-}>(function ComposePane({ accounts, contacts, mode, composition, initialAccountId, initialTo, original, draft, onClose, onSent, onDraftSaved }, ref) {
+  onClose: () => void | Promise<void>; onSent: () => void | Promise<void>; onScheduled: () => void | Promise<void>; onDraftSaved: (draft: Draft) => void;
+}>(function ComposePane({ accounts, contacts, mode, composition, initialAccountId, initialTo, original, draft, onClose, onSent, onScheduled, onDraftSaved }, ref) {
   const isReply = mode === 'reply' || mode === 'replyAll'; const isForward = mode === 'forward';
   const initialSubject = draft?.subject ?? (original ? subjectWithPrefix(original.subject, isReply ? 'Re' : 'Fwd') : '');
   const quoteText = original ? `\n\n----- ${isForward ? '转发邮件' : '原邮件'} -----\n发件人：${original.from.name || original.from.address} <${original.from.address}>\n${original.text ?? ''}` : '';
@@ -43,6 +43,12 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
   const [attachments, setAttachments] = useState<DraftAttachment[]>(draft?.attachments ?? []);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [customSendAt, setCustomSendAt] = useState(() => {
+    const value = new Date(Date.now() + 60 * 60 * 1000); value.setSeconds(0, 0);
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}T${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
+  });
+  const [pendingSendAt, setPendingSendAt] = useState<string>();
   const [saveStatus, setSaveStatus] = useState<'saved' | 'pending' | 'saving' | 'error'>(draft ? 'saved' : 'pending');
   const draftIdRef = useRef(draft?.id ?? crypto.randomUUID());
   const draftCreatedRef = useRef(Boolean(draft));
@@ -103,7 +109,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
     catch (value) { setError(value instanceof Error ? value.message : '附件读取失败'); }
   }
 
-  async function submit(event?: FormEvent<HTMLFormElement>, confirmMissingAttachment = false) {
+  async function submit(event?: FormEvent<HTMLFormElement>, confirmMissingAttachment = false, sendAt?: string) {
     event?.preventDefault();
     if (sendingRef.current) return;
     setError('');
@@ -115,13 +121,21 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
     if (resolvedTo.addresses.length + resolvedCc.addresses.length + resolvedBcc.addresses.length === 0) { setError('请填写至少一个收件人'); return; }
     if (!subject.trim()) { setError('请填写邮件主题'); return; }
     if (!text.trim() && !/<img\b/i.test(html)) { setError('请填写邮件正文'); return; }
-    if (!confirmMissingAttachment && needsAttachmentReminder(html, attachments.length)) { setAttachmentWarning(true); return; }
-    setAttachmentWarning(false); sendingRef.current = true; setSending(true);
+    if (!confirmMissingAttachment && needsAttachmentReminder(html, attachments.length)) { setPendingSendAt(sendAt); setAttachmentWarning(true); return; }
+    setPendingSendAt(undefined); setAttachmentWarning(false); sendingRef.current = true; setSending(true);
     try {
       if (savingPromiseRef.current) await savingPromiseRef.current;
       await persistDraft({ to: resolvedTo.addresses, cc: resolvedCc.addresses, bcc: resolvedBcc.addresses });
       if (revisionRef.current !== savedRevisionRef.current) throw new Error('草稿保存失败，请重试后发送');
-      await api('/api/send', { method: 'POST', body: JSON.stringify({ accountId, to: resolvedTo.addresses, cc: resolvedCc.addresses, bcc: resolvedBcc.addresses, ...envelope, subject: subject.trim(), text: text.trim() || '邮件包含图片内容', html, attachments, draftId: draftIdRef.current }) }); await onSent(); }
+      const payload = { accountId, to: resolvedTo.addresses, cc: resolvedCc.addresses, bcc: resolvedBcc.addresses, ...envelope, subject: subject.trim(), text: text.trim() || '邮件包含图片内容', html, attachments, draftId: draftIdRef.current };
+      if (sendAt) {
+        await api('/api/outbox', { method: 'POST', body: JSON.stringify({ ...payload, sendAt }) });
+        setScheduleOpen(false);
+        await onScheduled();
+      } else {
+        await api('/api/send', { method: 'POST', body: JSON.stringify(payload) });
+        await onSent();
+      } }
     catch (value) { setError(value instanceof Error ? value.message : '发送失败'); } finally { sendingRef.current = false; setSending(false); }
   }
 
@@ -144,7 +158,7 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
     <header className="composer-header">
       <button className="composer-close" type="button" title="关闭写信" aria-label="关闭写信" onClick={() => void close()}><ArrowLeft size={19} /></button>
       <div className="composer-heading"><span>{mode === 'new' ? '新邮件' : '邮件操作'}</span><strong>{heading}</strong></div>
-      <div className="composer-header-actions"><small className={`compose-save-status is-${saveStatus}`}>{statusLabel}</small>{accounts.length > 0 && <AppButton className="compose-header-send" appearance="primary" icon={<PaperPlaneTilt size={16} />} type="submit" form="compose-message-form" disabled={sending}>{sending ? '发送中…' : '发送'}</AppButton>}</div>
+      <div className="composer-header-actions"><small className={`compose-save-status is-${saveStatus}`}>{statusLabel}</small>{accounts.length > 0 && <><div className="compose-schedule-anchor"><AppButton className="compose-header-schedule" appearance="subtle" icon={<Clock size={16} />} type="button" aria-label="定时发送" aria-expanded={scheduleOpen} onClick={() => setScheduleOpen((value) => !value)} disabled={sending}>定时</AppButton>{scheduleOpen && <section className="compose-schedule-popover" role="dialog" aria-label="选择发送时间"><header><strong>定时发送</strong><small>按当前设备时区选择</small></header><div className="compose-schedule-quick"><button type="button" onClick={() => void submit(undefined, false, new Date(Date.now() + 10 * 60 * 1000).toISOString())}>10 分钟后</button><button type="button" onClick={() => void submit(undefined, false, new Date(Date.now() + 60 * 60 * 1000).toISOString())}>1 小时后</button><button type="button" onClick={() => { const value = new Date(); value.setDate(value.getDate() + 1); value.setHours(9, 0, 0, 0); void submit(undefined, false, value.toISOString()); }}>明天 09:00</button></div><label><span>自定义时间</span><AppInput type="datetime-local" value={customSendAt} min={new Date().toISOString().slice(0, 16)} onChange={(event) => setCustomSendAt(event.currentTarget.value)} /></label><AppButton appearance="primary" type="button" disabled={!customSendAt} onClick={() => { const value = new Date(customSendAt); if (Number.isNaN(value.getTime())) { setError('请选择有效的发送时间'); return; } void submit(undefined, false, value.toISOString()); }}>加入发件箱</AppButton><p>任务依赖当前 iMail 服务保持运行。</p></section>}</div><AppButton className="compose-header-send" appearance="primary" icon={<PaperPlaneTilt size={16} />} type="submit" form="compose-message-form" disabled={sending}>{sending ? '处理中…' : '发送'}</AppButton></>}</div>
     </header>
     {accounts.length === 0 ? <div className="compose-empty"><WarningCircle size={34} /><h3>先接入一个真实邮箱</h3><p>接入邮箱后即可发送邮件。</p></div> : <form id="compose-message-form" className="composer-form" inert={sending} aria-busy={sending} onSubmit={submit}>
       <div className="composer-fields">
@@ -158,9 +172,9 @@ export const ComposePane = forwardRef<ComposePaneHandle, {
       </div>
       <RichTextEditor ref={editorRef} manageSignature={!draft} initialHtml={initialHtml} onChange={(nextHtml, nextText) => { setHtml(nextHtml); setText(nextText); markDirty(); }} onAddAttachments={(files) => void addAttachments(files)} onError={setError} />
       {attachments.length > 0 && <div className="composer-attachments">{attachments.map((attachment) => <span key={attachment.id}><File size={18} weight="duotone" /><span><strong>{attachment.filename}</strong><small>{formatAttachmentSize(attachment.size)}</small></span><button type="button" title={`移除 ${attachment.filename}`} aria-label={`移除附件 ${attachment.filename}`} onClick={() => { setAttachments((current) => current.filter((item) => item.id !== attachment.id)); markDirty(); }}><Trash size={15} /></button></span>)}</div>}
-      {attachmentWarning && <div className="composer-error" role="alert"><p>正文提到了附件，但尚未添加附件。</p><AppButton type="button" onClick={() => setAttachmentWarning(false)}>返回添加附件</AppButton><AppButton type="button" disabled={sending} onClick={() => void submit(undefined, true)}>仍然发送</AppButton></div>}
+      {attachmentWarning && <div className="composer-error" role="alert"><p>正文提到了附件，但尚未添加附件。</p><AppButton type="button" onClick={() => { setAttachmentWarning(false); setPendingSendAt(undefined); }}>返回添加附件</AppButton><AppButton type="button" disabled={sending} onClick={() => void submit(undefined, true, pendingSendAt)}>{pendingSendAt ? '仍然定时发送' : '仍然发送'}</AppButton></div>}
       {error && <div className="inline-error composer-error"><WarningCircle size={17} />{error}</div>}
-      <footer className="composer-footer"><span>关闭写信后仍会保留草稿</span></footer>
+      <footer className="composer-footer"><span>关闭写信后仍会保留草稿；定时任务需要 iMail 服务保持运行</span></footer>
     </form>}
   </article>;
 });

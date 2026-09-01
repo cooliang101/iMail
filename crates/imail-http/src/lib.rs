@@ -54,6 +54,7 @@ pub mod logo;
 mod mcp;
 pub mod messages;
 mod oauth;
+pub mod outbox;
 mod preferences;
 pub mod rules;
 pub mod search;
@@ -161,6 +162,10 @@ pub enum HttpAdapterError {
     AppleHmeKeepaliveStart(String),
     #[error("Apple HME 会话保活任务未能优雅关闭")]
     AppleHmeKeepaliveShutdown,
+    #[error("发件箱运行时启动失败：{0}")]
+    OutboxRuntimeStart(String),
+    #[error("发件箱运行时未能优雅关闭")]
+    OutboxRuntimeShutdown,
 }
 
 #[derive(Clone)]
@@ -510,16 +515,19 @@ fn build_router_with_shutdown(config: HttpAdapterConfig) -> Result<HostedRouter,
     };
     let data_dir = config.data_dir.clone();
     let apple_hme_keepalive_enabled = config.apple_hme_keepalive;
-    let (router, connections, _) = build_router_state(config, daemon_sender)?;
+    let (router, connections, state) = build_router_state(config, daemon_sender)?;
     let apple_hme_keepalive = apple_hme_keepalive_enabled
         .then(|| apple_hme::AppleHmeKeepaliveRuntime::start(data_dir))
         .transpose()
         .map_err(|error| HttpAdapterError::AppleHmeKeepaliveStart(error.to_string()))?;
+    let outbox_runtime = outbox::OutboxRuntime::start(state)
+        .map_err(|error| HttpAdapterError::OutboxRuntimeStart(error.to_string()))?;
     Ok(HostedRouter {
         router,
         connection_shutdown: connections,
         daemon_shutdown: daemon_receiver,
         apple_hme_keepalive,
+        outbox_runtime: Some(outbox_runtime),
     })
 }
 
@@ -528,6 +536,7 @@ struct HostedRouter {
     connection_shutdown: tokio::sync::broadcast::Sender<()>,
     daemon_shutdown: Option<tokio::sync::mpsc::Receiver<()>>,
     apple_hme_keepalive: Option<apple_hme::AppleHmeKeepaliveRuntime>,
+    outbox_runtime: Option<outbox::OutboxRuntime>,
 }
 
 /// In-process service host for desktop and other native callers.
@@ -540,6 +549,7 @@ pub struct EmbeddedServiceHost {
     connection_shutdown: tokio::sync::broadcast::Sender<()>,
     sync_runtime: std::sync::Mutex<Option<PersistentSyncRuntime>>,
     apple_hme_keepalive: std::sync::Mutex<Option<apple_hme::AppleHmeKeepaliveRuntime>>,
+    outbox_runtime: std::sync::Mutex<Option<outbox::OutboxRuntime>>,
     sync_event_signal: SyncEventSignal,
 }
 
@@ -553,12 +563,15 @@ impl EmbeddedServiceHost {
             .then(|| apple_hme::AppleHmeKeepaliveRuntime::start(config.data_dir.clone()))
             .transpose()
             .map_err(|error| HttpAdapterError::AppleHmeKeepaliveStart(error.to_string()))?;
+        let outbox_runtime = outbox::OutboxRuntime::start(Arc::clone(&state))
+            .map_err(|error| HttpAdapterError::OutboxRuntimeStart(error.to_string()))?;
         Ok(Self {
             router,
             state,
             connection_shutdown,
             sync_runtime: std::sync::Mutex::new(sync_runtime),
             apple_hme_keepalive: std::sync::Mutex::new(apple_hme_keepalive),
+            outbox_runtime: std::sync::Mutex::new(Some(outbox_runtime)),
             sync_event_signal,
         })
     }
@@ -790,6 +803,29 @@ impl EmbeddedServiceHost {
         messages::embedded_send(Arc::clone(&self.state), owner_id, input).await
     }
 
+    pub async fn outbox_operation(
+        &self,
+        owner_id: String,
+        operation: &'static str,
+        id: Option<String>,
+        input: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, EmbeddedOperationError> {
+        let database = self.state.config.data_dir.join("imail.sqlite");
+        tokio::task::spawn_blocking(move || {
+            let mut store = imail_storage_sqlite::SqliteAuthStore::open_database(database)
+                .map_err(|_| EmbeddedOperationError {
+                    status: 500,
+                    message: "发件箱暂时不可用".into(),
+                })?;
+            outbox::execute(&mut store, &owner_id, operation, id.as_deref(), input)
+        })
+        .await
+        .map_err(|_| EmbeddedOperationError {
+            status: 500,
+            message: "发件箱任务中断".into(),
+        })?
+    }
+
     pub async fn sync_account(
         &self,
         owner_id: String,
@@ -905,6 +941,17 @@ impl EmbeddedServiceHost {
 
     pub fn shutdown(&self, maximum_wait: Duration) -> Result<(), HttpAdapterError> {
         let _ = self.connection_shutdown.send(());
+        let mut outbox = self
+            .outbox_runtime
+            .lock()
+            .map_err(|_| HttpAdapterError::OutboxRuntimeShutdown)?;
+        let outbox_graceful = !outbox
+            .as_mut()
+            .is_some_and(|runtime| !runtime.shutdown(maximum_wait));
+        if outbox_graceful {
+            *outbox = None;
+        }
+        drop(outbox);
         let mut keepalive = self
             .apple_hme_keepalive
             .lock()
@@ -928,6 +975,9 @@ impl EmbeddedServiceHost {
         *runtime = None;
         if !keepalive_graceful {
             return Err(HttpAdapterError::AppleHmeKeepaliveShutdown);
+        }
+        if !outbox_graceful {
+            return Err(HttpAdapterError::OutboxRuntimeShutdown);
         }
         Ok(())
     }
@@ -979,6 +1029,7 @@ fn build_router_state(
         .merge(external_access::routes())
         .merge(messages::routes())
         .merge(oauth::protected_routes())
+        .merge(outbox::routes())
         .merge(preferences::routes())
         .merge(search::routes())
         .merge(rules::routes())
@@ -1043,6 +1094,7 @@ pub async fn serve_with_shutdown(
         connection_shutdown: shutdown_connections,
         mut daemon_shutdown,
         mut apple_hme_keepalive,
+        mut outbox_runtime,
     } = build_router_with_shutdown(config.clone())?;
     let mut sync_runtime = start_sync_runtime(&config, None)?;
     let notify_connections = shutdown_connections.clone();
@@ -1067,6 +1119,9 @@ pub async fn serve_with_shutdown(
     let keepalive_graceful = apple_hme_keepalive
         .as_mut()
         .map_or(true, |runtime| runtime.shutdown(Duration::from_secs(10)));
+    let outbox_graceful = outbox_runtime
+        .as_mut()
+        .map_or(true, |runtime| runtime.shutdown(Duration::from_secs(10)));
     if let Some(runtime) = &mut sync_runtime {
         let report = runtime.shutdown(Duration::from_secs(10));
         if !report.graceful() {
@@ -1075,6 +1130,9 @@ pub async fn serve_with_shutdown(
     }
     if !keepalive_graceful {
         return Err(HttpAdapterError::AppleHmeKeepaliveShutdown);
+    }
+    if !outbox_graceful {
+        return Err(HttpAdapterError::OutboxRuntimeShutdown);
     }
     result
 }

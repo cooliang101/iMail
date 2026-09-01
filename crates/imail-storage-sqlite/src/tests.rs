@@ -257,6 +257,11 @@ impl Fixture {
                 .execute_batch(include_str!("../sql/migration-v14-rules.sql"))
                 .unwrap();
         }
+        if (15..999).contains(&schema_version) {
+            connection
+                .execute_batch(include_str!("../sql/migration-v15-outbox.sql"))
+                .unwrap();
+        }
         drop(connection);
         Self { root }
     }
@@ -270,7 +275,7 @@ impl Drop for Fixture {
 
 #[test]
 fn translation_cache_is_user_scoped_and_requires_message_ownership() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
     let key = TranslationCacheKey {
@@ -319,7 +324,7 @@ fn translation_cache_is_user_scoped_and_requires_message_ownership() {
 
 #[test]
 fn raw_message_sources_are_exact_and_owner_scoped() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let store = SqliteAuthStore::open_database(fixture.root.join("imail.sqlite")).unwrap();
     assert_eq!(
         store.message_source("user-1", "m1").unwrap(),
@@ -331,7 +336,7 @@ fn raw_message_sources_are_exact_and_owner_scoped() {
 
 #[test]
 fn message_queries_filter_exact_participant_addresses_without_a_schema_change() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let mut store = SqliteAuthStore::open_database(fixture.root.join("imail.sqlite")).unwrap();
     let base =
         |id: &str, uid: i64, from: serde_json::Value, to: serde_json::Value| MessageReadModel {
@@ -430,13 +435,13 @@ fn message_queries_filter_exact_participant_addresses_without_a_schema_change() 
             .inventory()
             .unwrap()
             .schema_version,
-        14
+        15
     );
 }
 
 #[test]
 fn edge_client_completion_revalidates_segments_and_persists_owned_results() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
     let owner = store
@@ -518,7 +523,7 @@ fn edge_client_completion_revalidates_segments_and_persists_owned_results() {
 
 #[test]
 fn message_pagination_uses_stable_composite_indexes_at_scale() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     migrate_database(&database_path).unwrap();
     let mut connection = Connection::open(&database_path).unwrap();
@@ -633,13 +638,13 @@ fn message_pagination_uses_stable_composite_indexes_at_scale() {
 
 #[test]
 fn reads_public_models_without_exposing_encrypted_values_or_token_hashes() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let before = fs::read(&database_path).unwrap();
     let store = SqliteReadOnlyStore::open_data_dir(&fixture.root).unwrap();
     let inventory = store.inventory().unwrap();
     let snapshot = store.read_snapshot().unwrap();
-    assert_eq!(inventory.schema_version, 14);
+    assert_eq!(inventory.schema_version, 15);
     assert_eq!(inventory.table_counts["accounts"], 2);
     assert_eq!(
         snapshot
@@ -672,7 +677,7 @@ fn rejects_future_schema_without_writing_to_the_database() {
         error,
         StorageError::UnsupportedSchema {
             actual: 999,
-            supported: 14
+            supported: 15
         }
     ));
     assert_eq!(fs::read(database_path).unwrap(), before);
@@ -680,7 +685,7 @@ fn rejects_future_schema_without_writing_to_the_database() {
 
 #[test]
 fn requires_a_valid_master_key_for_data_directory_inspection() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     fs::remove_file(fixture.root.join("master.key")).unwrap();
     assert!(matches!(
         SqliteReadOnlyStore::open_data_dir(&fixture.root).err(),
@@ -715,7 +720,7 @@ fn rejects_corrupt_sqlite_without_replacing_or_truncating_it() {
 
 #[test]
 fn rejects_malformed_json_without_mutation() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -734,7 +739,7 @@ fn rejects_malformed_json_without_mutation() {
 
 #[test]
 fn rejects_non_boolean_integer_without_mutation() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -750,7 +755,7 @@ fn rejects_non_boolean_integer_without_mutation() {
 
 #[test]
 fn rust_auth_transactions_claim_legacy_rows_and_persist_only_session_hashes() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -834,7 +839,7 @@ fn rust_auth_transactions_claim_legacy_rows_and_persist_only_session_hashes() {
 
 #[test]
 fn rust_developer_tokens_enforce_owner_scope_and_hash_boundaries() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -932,7 +937,7 @@ fn rust_developer_tokens_enforce_owner_scope_and_hash_boundaries() {
 
 #[test]
 fn rust_account_and_metadata_writes_are_user_scoped_and_node_compatible() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
     let owner = store
@@ -1031,7 +1036,7 @@ fn rust_account_and_metadata_writes_are_user_scoped_and_node_compatible() {
 
 #[test]
 fn apple_hme_sessions_are_owner_scoped_encrypted_and_removed_with_the_account() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     migrate_database(&database_path).unwrap();
     let key = MasterKey::from_hex(&"42".repeat(32)).unwrap();
@@ -1078,7 +1083,7 @@ fn apple_hme_sessions_are_owner_scoped_encrypted_and_removed_with_the_account() 
 
 #[test]
 fn apple_hme_addresses_are_replaced_mutated_and_persisted_by_owner() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     migrate_database(&database_path).unwrap();
     let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
@@ -1139,7 +1144,7 @@ fn apple_hme_addresses_are_replaced_mutated_and_persisted_by_owner() {
 
 #[test]
 fn rust_write_transaction_rolls_back_parent_when_relation_insert_fails() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
     let user = store
@@ -1170,7 +1175,7 @@ fn rust_write_transaction_rolls_back_parent_when_relation_insert_fails() {
 
 #[test]
 fn rust_writer_waits_for_short_sqlite_lock_and_then_commits() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
     let user = store
@@ -1198,7 +1203,7 @@ fn rust_writer_waits_for_short_sqlite_lock_and_then_commits() {
 
 #[test]
 fn rust_preferences_service_matches_node_defaults_merging_and_validation() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
     let owner = store
@@ -1280,7 +1285,7 @@ fn rust_preferences_service_matches_node_defaults_merging_and_validation() {
 
 #[test]
 fn composition_preferences_are_persistent_validated_and_owner_scoped() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&database).unwrap();
     let owner = store
@@ -1343,7 +1348,7 @@ fn v12_backfills_headers_from_exact_source_and_preserves_draft_envelopes() {
         .unwrap();
     drop(connection);
     let report = migrate_database(&database).unwrap();
-    assert_eq!(report.applied_versions, [12, 13, 14]);
+    assert_eq!(report.applied_versions, [12, 13, 14, 15]);
     let mut store = SqliteAuthStore::open_database(&database).unwrap();
     let message = store.message("user-1", "m1").unwrap().unwrap();
     assert_eq!(message.headers.cc[0].address, "copy@example.com");
@@ -1387,7 +1392,7 @@ fn v12_backfills_headers_from_exact_source_and_preserves_draft_envelopes() {
 
 #[test]
 fn rust_draft_service_preserves_creation_time_and_enforces_ownership() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -1471,7 +1476,7 @@ fn rust_draft_service_preserves_creation_time_and_enforces_ownership() {
 
 #[test]
 fn rust_contacts_service_reconciles_and_reuses_root_logo_without_automatic_retry() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -1585,7 +1590,7 @@ fn rust_contacts_service_reconciles_and_reuses_root_logo_without_automatic_retry
 
 #[test]
 fn rust_account_service_updates_only_owned_metadata_and_returns_safe_views() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -1663,7 +1668,7 @@ fn rust_account_service_updates_only_owned_metadata_and_returns_safe_views() {
 
 #[test]
 fn rust_account_proxy_and_password_updates_validate_before_persisting_secrets() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -1828,7 +1833,7 @@ fn rust_account_proxy_and_password_updates_validate_before_persisting_secrets() 
 
 #[test]
 fn rust_account_removal_cascades_owned_content_without_revoking_the_whole_token() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -1908,7 +1913,7 @@ fn rust_account_removal_cascades_owned_content_without_revoking_the_whole_token(
 
 #[test]
 fn rust_authorization_export_is_node_compatible_and_whitelists_sensitive_fields() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -2052,7 +2057,7 @@ fn rust_authorization_export_is_node_compatible_and_whitelists_sensitive_fields(
 
 #[test]
 fn rust_backup_round_trips_and_is_accepted_by_the_node_restore_preflight() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     fs::write(
         fixture.root.join("instance-id"),
@@ -2080,7 +2085,7 @@ fn rust_backup_round_trips_and_is_accepted_by_the_node_restore_preflight() {
             "2026-08-10T06:00:00.000Z",
         )
         .unwrap();
-    assert_eq!(report.schema_version, 14);
+    assert_eq!(report.schema_version, 15);
     assert!(report.file_count >= 4);
     assert_eq!(fs::read(&database_path).unwrap(), active_before);
     let manifest: serde_json::Value =
@@ -2089,7 +2094,7 @@ fn rust_backup_round_trips_and_is_accepted_by_the_node_restore_preflight() {
     assert_eq!(manifest["formatVersion"], 2);
     assert_eq!(manifest["service"], "imail");
     assert_eq!(manifest["serviceVersion"], "0.0.1");
-    assert_eq!(manifest["schemaVersion"], 14);
+    assert_eq!(manifest["schemaVersion"], 15);
 
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -2139,7 +2144,7 @@ fn rust_backup_round_trips_and_is_accepted_by_the_node_restore_preflight() {
     );
     let node_report: serde_json::Value = serde_json::from_slice(&node.stdout).unwrap();
     assert_eq!(node_report["integrityManifestVerified"], true);
-    assert_eq!(node_report["schemaVersion"], 14);
+    assert_eq!(node_report["schemaVersion"], 15);
 
     fs::write(
         backup_root.join("sender-logos").join("logo.bin"),
@@ -2157,7 +2162,7 @@ fn rust_backup_round_trips_and_is_accepted_by_the_node_restore_preflight() {
 
 #[test]
 fn rust_privacy_clear_is_user_scoped_and_preserves_identity_and_preferences() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -2331,7 +2336,7 @@ fn rust_privacy_clear_is_user_scoped_and_preserves_identity_and_preferences() {
 
 #[test]
 fn rust_privacy_clear_rolls_back_the_whole_operation_on_failure() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -2360,7 +2365,7 @@ fn rust_privacy_clear_rolls_back_the_whole_operation_on_failure() {
 
 #[test]
 fn rust_mail_overview_matches_notification_and_label_rules() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -2408,7 +2413,7 @@ fn rust_mail_overview_matches_notification_and_label_rules() {
 
 #[test]
 fn rust_custom_theme_accepts_only_safe_user_scoped_tokens() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let mut store = SqliteAuthStore::open_database(&database_path).unwrap();
     let owner = store
@@ -2453,7 +2458,7 @@ fn rust_custom_theme_accepts_only_safe_user_scoped_tokens() {
 
 #[test]
 fn rust_content_writes_enforce_direct_and_account_derived_ownership() {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let database_path = fixture.root.join("imail.sqlite");
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -2612,8 +2617,8 @@ fn rust_migrates_v10_to_v11_with_exact_message_source_storage() {
 
     let report = migrate_database(fixture.root.join("imail.sqlite")).unwrap();
     assert_eq!(report.from_version, 10);
-    assert_eq!(report.to_version, 14);
-    assert_eq!(report.applied_versions, [11, 12, 13, 14]);
+    assert_eq!(report.to_version, 15);
+    assert_eq!(report.applied_versions, [11, 12, 13, 14, 15]);
     let connection = Connection::open(fixture.root.join("imail.sqlite")).unwrap();
     let exists: bool = connection
         .query_row(
@@ -2639,8 +2644,8 @@ fn rust_migrates_v8_to_v11_and_encrypts_translation_provider_credentials() {
 
     let report = migrate_database(fixture.root.join("imail.sqlite")).unwrap();
     assert_eq!(report.from_version, 8);
-    assert_eq!(report.to_version, 14);
-    assert_eq!(report.applied_versions, [9, 10, 11, 12, 13, 14]);
+    assert_eq!(report.to_version, 15);
+    assert_eq!(report.applied_versions, [9, 10, 11, 12, 13, 14, 15]);
 
     let mut store = SqliteAuthStore::open_database(fixture.root.join("imail.sqlite")).unwrap();
     let user = store
@@ -2765,8 +2770,8 @@ fn rust_migrates_v7_to_v11_with_local_hme_cache_tables() {
     );
     let report = migrate_database(fixture.root.join("imail.sqlite")).unwrap();
     assert_eq!(report.from_version, 7);
-    assert_eq!(report.to_version, 14);
-    assert_eq!(report.applied_versions, [8, 9, 10, 11, 12, 13, 14]);
+    assert_eq!(report.to_version, 15);
+    assert_eq!(report.applied_versions, [8, 9, 10, 11, 12, 13, 14, 15]);
     let connection = Connection::open(fixture.root.join("imail.sqlite")).unwrap();
     for table in ["apple_hme_addresses", "apple_hme_sync_state"] {
         let exists: bool = connection
@@ -2808,10 +2813,10 @@ fn rust_migrates_v2_sync_schema_to_v11_without_losing_valid_rows() {
     );
     let report = migrate_database(fixture.root.join("imail.sqlite")).unwrap();
     assert_eq!(report.from_version, 2);
-    assert_eq!(report.to_version, 14);
+    assert_eq!(report.to_version, 15);
     assert_eq!(
         report.applied_versions,
-        [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     );
     let connection = Connection::open(fixture.root.join("imail.sqlite")).unwrap();
     connection
@@ -2824,7 +2829,7 @@ fn rust_migrates_v2_sync_schema_to_v11_without_losing_valid_rows() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(version, "14");
+    assert_eq!(version, "15");
     let policy_columns = connection
         .prepare("SELECT name FROM pragma_table_info('sync_policies') ORDER BY cid")
         .unwrap()
@@ -2920,7 +2925,7 @@ fn rust_migrates_unversioned_legacy_columns_and_owner_data_to_v6() {
     assert_eq!(report.from_version, 0);
     assert_eq!(
         report.applied_versions,
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     );
     let connection = Connection::open(fixture.root.join("imail.sqlite")).unwrap();
     let account: (String, String, String, Option<String>) = connection
@@ -3037,6 +3042,6 @@ fn rust_migration_serializes_concurrent_openers_and_rechecks_version() {
     let right = std::thread::spawn(move || migrate_database(right_path).unwrap());
     let reports = [left.join().unwrap(), right.join().unwrap()];
     assert!(reports.iter().any(|report| report.from_version == 4));
-    assert!(reports.iter().any(|report| report.from_version == 14));
-    assert!(reports.iter().all(|report| report.to_version == 14));
+    assert!(reports.iter().any(|report| report.from_version == 15));
+    assert!(reports.iter().all(|report| report.to_version == 15));
 }

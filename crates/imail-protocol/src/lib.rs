@@ -9,7 +9,7 @@ mod translation;
 pub use composition::*;
 pub use translation::*;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 14;
+pub const CURRENT_SCHEMA_VERSION: u32 = 15;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -502,6 +502,35 @@ pub struct SendMessageInput {
 pub struct SendMessageResult {
     pub message_id: String,
     pub accepted: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OutboxStatus {
+    Scheduled,
+    Sending,
+    Sent,
+    Failed,
+    NeedsReview,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutboxItemReadModel {
+    pub id: String,
+    pub account_id: String,
+    pub to: Vec<String>,
+    pub cc: Vec<String>,
+    pub bcc: Vec<String>,
+    pub subject: String,
+    pub scheduled_at: String,
+    pub status: OutboxStatus,
+    pub attempts: u32,
+    pub last_error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub sent_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

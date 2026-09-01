@@ -7,9 +7,9 @@ import { WorkspaceFolderItem, WorkspaceIcon } from '../organize';
 import { AccountProviderMark } from '../../components/provider-icons';
 import { useI18n } from '../i18n';
 
-export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, messageStats, draftsCount, contactsCount, view, accountFilter, groupFilter, activeLabel, activeMailbox, expandedWorkspaces, sidebarOpen, onClose, onCompose, onAddAccount, onSettings, onSelectScope, onSelectMailbox, onSelectLabel, onEditWorkspace, onToggleWorkspace, onContextTarget, onLogout, smartFolders }: {
+export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, messageStats, draftsCount, outboxCount, contactsCount, view, accountFilter, groupFilter, activeLabel, activeMailbox, expandedWorkspaces, sidebarOpen, onClose, onCompose, onAddAccount, onSettings, onSelectScope, onSelectMailbox, onSelectLabel, onEditWorkspace, onToggleWorkspace, onContextTarget, onLogout, smartFolders }: {
   smartFolders?: ComponentChildren;
-  user: { login: string; displayName: string }; accounts: Account[]; groups: string[]; workspaceFolders: Map<string, WorkspaceFolder[]>; labels: string[]; messageStats: MessageStats; draftsCount: number;
+  user: { login: string; displayName: string }; accounts: Account[]; groups: string[]; workspaceFolders: Map<string, WorkspaceFolder[]>; labels: string[]; messageStats: MessageStats; draftsCount: number; outboxCount: number;
   contactsCount: number;
   view: AppView; accountFilter: string; groupFilter: string | null; activeLabel: string | null; activeMailbox: WorkspaceFolder | null; expandedWorkspaces: Set<string>; sidebarOpen: boolean;
   onClose: () => void; onCompose: (accountId?: string) => void; onAddAccount: () => void; onSettings: () => void; onSelectScope: (view: AppView, accountId?: string, group?: string | null) => void;
@@ -32,6 +32,7 @@ export function AppSidebar({ user, accounts, groups, workspaceFolders, labels, m
       <button title={t('已加星标')} aria-label={t('已加星标')} data-icon-tone="warning" className={view === 'starred' ? 'active' : ''} onClick={() => onSelectScope('starred')}><Star size={19} /><span>{t('已加星标')}</span></button>
       <button title={t('已发送')} aria-label={t('已发送')} data-icon-tone="info" className={view === 'sent' ? 'active' : ''} onClick={() => onSelectScope('sent')}><PaperPlaneTilt size={19} /><span>{t('已发送')}</span></button>
       <button title={t('草稿')} aria-label={t('草稿')} data-icon-tone="accent" className={view === 'drafts' ? 'active' : ''} onClick={() => onSelectScope('drafts')}><PencilSimple size={19} /><span>{t('草稿')}</span><b>{draftsCount || ''}</b></button>
+      <button title="发件箱" aria-label="发件箱" data-icon-tone="warning" className={view === 'outbox' ? 'active' : ''} onClick={() => onSelectScope('outbox')}><Clock size={19} /><span>发件箱</span><b>{outboxCount || ''}</b></button>
       <button title={t('联系人')} aria-label={t('联系人')} data-icon-tone="info" className={view === 'contacts' ? 'active' : ''} onClick={() => onSelectScope('contacts')}><AddressBook size={19} /><span>{t('联系人')}</span><b>{contactsCount || ''}</b></button>
       <button title={t('稍后处理')} aria-label={t('稍后处理')} data-icon-tone="warning" className={view === 'snoozed' ? 'active' : ''} onClick={() => onSelectScope('snoozed')}><Clock size={19} /><span>{t('稍后处理')}</span></button>
       <button title={t('归档')} aria-label={t('归档')} data-icon-tone="neutral" className={view === 'archive' ? 'active' : ''} onClick={() => onSelectScope('archive')}><Archive size={19} /><span>{t('归档')}</span></button>

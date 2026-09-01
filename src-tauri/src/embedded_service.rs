@@ -222,6 +222,18 @@ pub enum EmbeddedDomainCall {
     MessageSend {
         input: serde_json::Value,
     },
+    OutboxList,
+    OutboxSchedule {
+        input: serde_json::Value,
+    },
+    OutboxCancel {
+        #[serde(rename = "itemId")]
+        item_id: String,
+    },
+    OutboxRetry {
+        #[serde(rename = "itemId")]
+        item_id: String,
+    },
     DraftsList,
     DraftCreate {
         #[serde(rename = "draftId")]
@@ -565,6 +577,18 @@ impl EmbeddedDomainCall {
             Self::ContactsList => ("/api/contacts".into(), "GET", None),
             Self::NotificationsList => ("/api/notifications".into(), "GET", None),
             Self::MessageSend { input } => json_request("/api/send", "POST", input),
+            Self::OutboxList => ("/api/outbox".into(), "GET", None),
+            Self::OutboxSchedule { input } => json_request("/api/outbox", "POST", input),
+            Self::OutboxCancel { item_id } => (
+                format!("/api/outbox/{}", path_segment(&item_id)),
+                "DELETE",
+                None,
+            ),
+            Self::OutboxRetry { item_id } => (
+                format!("/api/outbox/{}/retry", path_segment(&item_id)),
+                "POST",
+                None,
+            ),
             Self::DraftsList => ("/api/drafts".into(), "GET", None),
             Self::DraftCreate {
                 draft_id: requested_id,
@@ -1142,6 +1166,38 @@ impl EmbeddedMailServiceState {
                 .await
                 .map_err(|_| "本地读取任务失败".to_string())??;
                 Ok(Some(json_response(200, body)))
+            }
+            EmbeddedDomainCall::OutboxList
+            | EmbeddedDomainCall::OutboxSchedule { .. }
+            | EmbeddedDomainCall::OutboxCancel { .. }
+            | EmbeddedDomainCall::OutboxRetry { .. } => {
+                let Some(user_id) = self.current_user_id()? else {
+                    return Ok(Some(unauthorized_response()));
+                };
+                let host = self
+                    .host
+                    .get()
+                    .ok_or_else(|| "嵌入式服务尚未初始化".to_string())?;
+                let (operation, id, input, success_status) = match call {
+                    EmbeddedDomainCall::OutboxList => ("list", None, None, 200),
+                    EmbeddedDomainCall::OutboxSchedule { input } => {
+                        ("schedule", None, Some(input.clone()), 201)
+                    }
+                    EmbeddedDomainCall::OutboxCancel { item_id } => {
+                        ("cancel", Some(item_id.clone()), None, 200)
+                    }
+                    EmbeddedDomainCall::OutboxRetry { item_id } => {
+                        ("retry", Some(item_id.clone()), None, 200)
+                    }
+                    _ => unreachable!(),
+                };
+                let response = match host.outbox_operation(user_id, operation, id, input).await {
+                    Ok(value) => json_response(success_status, value),
+                    Err(error) => {
+                        json_response(error.status, serde_json::json!({"error":error.message}))
+                    }
+                };
+                Ok(Some(response))
             }
             EmbeddedDomainCall::DraftsList => {
                 let Some(user_id) = self.current_user_id()? else {

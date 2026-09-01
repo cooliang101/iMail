@@ -27,6 +27,7 @@ mod credential_codec;
 mod developer_tokens;
 mod export_encryption;
 mod migration;
+mod outbox;
 mod privacy_data;
 pub mod rules;
 mod search;
@@ -43,6 +44,7 @@ pub use backup::{
 pub use credential_codec::MasterKeyCredentialCodec;
 pub use export_encryption::PortableAuthorizationExportEncryptor;
 pub use migration::{migrate_database, MigrationError, MigrationReport};
+pub use outbox::OutboxWorkItem;
 pub use sync_runtime::{
     SyncCompletion, SyncEnqueue, SyncFailure, SyncPolicySettings, SyncRuntimeError,
     SyncRuntimeStore,

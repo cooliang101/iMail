@@ -122,6 +122,22 @@ export type DraftAttachment = {
   data: string;
 };
 
+export type OutboxItem = {
+  id: string;
+  accountId: string;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  scheduledAt: string;
+  status: 'scheduled' | 'sending' | 'sent' | 'failed' | 'needsReview' | 'cancelled';
+  attempts: number;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string;
+};
+
 export type DeveloperToken = {
   id: string;
   name: string;

@@ -122,7 +122,10 @@ impl ContentRepository for SqliteAuthStore {
             "SELECT d.id, d.account_id, d.to_json, d.cc_json, d.subject, d.text_body,
                     d.html_body, d.attachments_json, d.created_at, d.updated_at, d.compose_json
              FROM drafts d JOIN accounts a ON a.id=d.account_id
-             WHERE a.user_id=?1 ORDER BY d.updated_at DESC, d.id",
+             WHERE a.user_id=?1 AND NOT EXISTS(
+               SELECT 1 FROM outbox_items o WHERE o.user_id=?1 AND o.draft_id=d.id
+               AND o.status IN ('scheduled','sending','failed','needsReview')
+             ) ORDER BY d.updated_at DESC, d.id",
         )?;
         let rows = statement
             .query_map([user_id], |row| {

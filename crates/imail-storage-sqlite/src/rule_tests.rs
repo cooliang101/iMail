@@ -141,7 +141,7 @@ fn editing_or_deleting_running_rules_cancels_remaining_actions_even_after_restar
     }
 }
 fn setup() -> (Fixture, SqliteAuthStore) {
-    let fixture = Fixture::new(14);
+    let fixture = Fixture::new(15);
     let store = SqliteAuthStore::open_database(fixture.root.join("imail.sqlite")).unwrap();
     (fixture, store)
 }

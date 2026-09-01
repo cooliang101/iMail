@@ -44,6 +44,10 @@ export type EmbeddedDomainCall =
   | { operation: 'attachmentPreviewCreate'; messageId: string; index: number }
   | { operation: 'attachmentPreviewDelete'; previewId: string }
   | { operation: 'messageSend'; input: Record<string, unknown> }
+  | { operation: 'outboxList' }
+  | { operation: 'outboxSchedule'; input: Record<string, unknown> }
+  | { operation: 'outboxCancel'; itemId: string }
+  | { operation: 'outboxRetry'; itemId: string }
   | { operation: 'draftsList' }
   | { operation: 'draftCreate'; draftId?: string; input: Record<string, unknown> }
   | { operation: 'draftUpdate'; draftId: string; input: Record<string, unknown> }
@@ -107,6 +111,7 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
       '/api/contacts': { operation: 'contactsList' },
       '/api/notifications': { operation: 'notificationsList' },
       '/api/drafts': { operation: 'draftsList' },
+      '/api/outbox': { operation: 'outboxList' },
       '/api/preferences': { operation: 'preferencesGet' },
       '/api/smart-folders': { operation: 'smartFoldersList' },
       '/api/mail-rules': { operation: 'mailRulesList' },
@@ -183,6 +188,11 @@ export function embeddedDomainCall(path: string, options: RequestInit = {}): Emb
   if (method === 'POST' && url.pathname === '/api/oauth/start' && body) return { operation: 'oauthStart', input: body };
   if (method === 'POST' && url.pathname === '/api/oauth/status' && body) return { operation: 'oauthStatus', input: body };
   if (method === 'POST' && url.pathname === '/api/send' && body) return { operation: 'messageSend', input: body };
+  if (method === 'POST' && url.pathname === '/api/outbox' && body) return { operation: 'outboxSchedule', input: body };
+  const outboxRetry = url.pathname.match(/^\/api\/outbox\/([^/]+)\/retry$/);
+  if (outboxRetry && method === 'POST' && options.body === undefined) return { operation: 'outboxRetry', itemId: decodeURIComponent(outboxRetry[1]) };
+  const outboxItem = url.pathname.match(/^\/api\/outbox\/([^/]+)$/);
+  if (outboxItem && method === 'DELETE' && options.body === undefined) return { operation: 'outboxCancel', itemId: decodeURIComponent(outboxItem[1]) };
   if (method === 'POST' && url.pathname === '/api/drafts' && body) {
     const draftId = new Headers(options.headers).get('X-Draft-Id') ?? undefined;
     return { operation: 'draftCreate', ...(draftId ? { draftId } : {}), input: body };
