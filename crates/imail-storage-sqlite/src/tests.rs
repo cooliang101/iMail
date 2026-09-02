@@ -2790,6 +2790,45 @@ fn rust_migrates_v16_to_v17_with_mail_work_queue_table() {
 }
 
 #[test]
+fn migration_repairs_cached_modified_utf7_names_without_changing_server_paths() {
+    let fixture = Fixture::new(17);
+    let database = fixture.root.join("imail.sqlite");
+    let connection = Connection::open(&database).unwrap();
+    connection.execute(
+        "UPDATE accounts SET mailboxes_json=?1 WHERE id='a-first'",
+        [json!([
+            {"path":"&gX6Lrw-","name":"&gX6Lrw-","delimiter":"/","selectable":true},
+            {"path":"&XfJT0ZABkK5O9g-","name":"&XfJT0ZABkK5O9g-","delimiter":"/","selectable":true},
+            {"path":"broken&name","name":"broken&name","delimiter":"/","selectable":true}
+        ])
+        .to_string()],
+    )
+    .unwrap();
+    drop(connection);
+
+    let report = migrate_database(&database).unwrap();
+    assert!(report.applied_versions.is_empty());
+    let connection = Connection::open(&database).unwrap();
+    let stored: String = connection
+        .query_row(
+            "SELECT mailboxes_json FROM accounts WHERE id='a-first'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let folders: serde_json::Value = serde_json::from_str(&stored).unwrap();
+    assert_eq!(folders[0]["path"], "&gX6Lrw-");
+    assert_eq!(folders[0]["name"], "腾讯");
+    assert_eq!(folders[1]["path"], "&XfJT0ZABkK5O9g-");
+    assert_eq!(folders[1]["name"], "已发送邮件");
+    assert_eq!(folders[2]["name"], "broken&name");
+    assert!(migrate_database(&database)
+        .unwrap()
+        .applied_versions
+        .is_empty());
+}
+
+#[test]
 fn rust_migrates_v7_to_v11_with_local_hme_cache_tables() {
     let fixture = raw_migration_fixture(
         "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;

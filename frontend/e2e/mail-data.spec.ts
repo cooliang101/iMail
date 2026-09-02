@@ -199,6 +199,22 @@ test('mail work queue adds, displays and completes a message', async ({ page }) 
   await expect(page.getByText('当前没有处理项目', { exact: true })).toBeVisible();
 });
 
+test('mail work queue header stays on one line in the three-column desktop layout', async ({ page }) => {
+  await page.setViewportSize({ width: 1038, height: 800 });
+  const state = await installMailFixture(page, { total: 3 });
+  await page.getByRole('button', { name: '加入邮件处理队列' }).click();
+  await expect.poll(() => state.workItems.length).toBe(1);
+  await page.getByRole('button', { name: '邮件处理队列', exact: true }).click();
+
+  const header = page.locator('.work-queue-header');
+  const title = header.getByText('邮件处理队列', { exact: true });
+  await expect(title).toBeVisible();
+  const box = await title.boundingBox();
+  expect(box?.width).toBeGreaterThan(80);
+  expect(box?.height).toBeLessThanOrEqual(24);
+  await expect(header.locator('.app-select')).toBeVisible();
+});
+
 test('narrow desktop keeps the reader inside the viewport', async ({ page }) => {
   await page.setViewportSize({ width: 937, height: 817 });
   await installMailFixture(page);

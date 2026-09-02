@@ -12,11 +12,10 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use imail_mail::{
-    attachment_content, parse_rfc822, ImapPort, ImapSyncPort, ImapWakePort, MailAuthentication,
-    MailConnectionConfig, OutgoingAttachment, OutgoingMessage, RemoteMailbox, RemoteMessageLocator,
-    RemoteSyncRequest, SmtpPort, SyncCursor, SyncTarget,
+    attachment_content, decode_modified_utf7, parse_rfc822, ImapPort, ImapSyncPort, ImapWakePort,
+    MailAuthentication, MailConnectionConfig, OutgoingAttachment, OutgoingMessage, RemoteMailbox,
+    RemoteMessageLocator, RemoteSyncRequest, SmtpPort, SyncCursor, SyncTarget,
 };
 use imail_mail_network::{NetworkCancellation, NetworkMailAdapter};
 use imail_oauth::{
@@ -406,33 +405,6 @@ fn is_junk_mailbox(path: &str, special_use: Option<&str>) -> bool {
         .trim()
         .to_ascii_lowercase();
     matches!(leaf.as_str(), "junk" | "spam" | "junk mail" | "垃圾邮件")
-}
-
-fn decode_modified_utf7(value: &str) -> Option<String> {
-    let mut result = String::new();
-    let mut rest = value;
-    while let Some(start) = rest.find('&') {
-        result.push_str(&rest[..start]);
-        rest = &rest[start + 1..];
-        let end = rest.find('-')?;
-        let encoded = &rest[..end];
-        if encoded.is_empty() {
-            result.push('&');
-        } else {
-            let bytes = STANDARD_NO_PAD.decode(encoded.replace(',', "/")).ok()?;
-            if bytes.len() % 2 != 0 {
-                return None;
-            }
-            let utf16 = bytes
-                .chunks_exact(2)
-                .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
-                .collect::<Vec<_>>();
-            result.push_str(&String::from_utf16(&utf16).ok()?);
-        }
-        rest = &rest[end + 1..];
-    }
-    result.push_str(rest);
-    Some(result)
 }
 
 fn interactive_oauth_authentication(

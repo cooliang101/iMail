@@ -3,6 +3,7 @@ use std::{
     time::Duration,
 };
 
+use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use imail_protocol::MessageReadModel;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, to_value};
@@ -33,10 +34,11 @@ pub fn mailbox_role_for(path: &str, special_use: Option<&str>) -> String {
         Some("\\junk") => return "junk".into(),
         _ => {}
     }
-    let leaf = path
+    let decoded = decode_modified_utf7(path).unwrap_or_else(|| path.to_string());
+    let leaf = decoded
         .rsplit(['/', '.', '\\'])
         .next()
-        .unwrap_or(path)
+        .unwrap_or(decoded.as_str())
         .trim()
         .to_lowercase();
     match leaf.as_str() {
@@ -53,6 +55,33 @@ pub fn mailbox_role_for(path: &str, special_use: Option<&str>) -> String {
         _ => "custom",
     }
     .into()
+}
+
+pub fn decode_modified_utf7(value: &str) -> Option<String> {
+    let mut result = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(start) = rest.find('&') {
+        result.push_str(&rest[..start]);
+        rest = &rest[start + 1..];
+        let end = rest.find('-')?;
+        let encoded = &rest[..end];
+        if encoded.is_empty() {
+            result.push('&');
+        } else {
+            let bytes = STANDARD_NO_PAD.decode(encoded.replace(',', "/")).ok()?;
+            if bytes.len() % 2 != 0 {
+                return None;
+            }
+            let utf16 = bytes
+                .chunks_exact(2)
+                .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+                .collect::<Vec<_>>();
+            result.push_str(&String::from_utf16(&utf16).ok()?);
+        }
+        rest = &rest[end + 1..];
+    }
+    result.push_str(rest);
+    Some(result)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -408,6 +437,16 @@ mod tests {
             authentication: MailAuthentication::Password("secret".into()),
             proxy: None,
         }
+    }
+
+    #[test]
+    fn decodes_imap_modified_utf7_and_uses_it_for_mailbox_roles() {
+        assert_eq!(decode_modified_utf7("&gX6Lrw-").as_deref(), Some("腾讯"));
+        assert_eq!(decode_modified_utf7("A&-B").as_deref(), Some("A&B"));
+        assert_eq!(decode_modified_utf7("broken&name"), None);
+        assert_eq!(mailbox_role_for("&XfJT0ZABkK5O9g-", None), "sent");
+        assert_eq!(mailbox_role_for("&g0l6P3ux-", None), "drafts");
+        assert_eq!(mailbox_role_for("&V4NXPpCuTvY-", None), "junk");
     }
 
     fn cached(uid: i64, unread: bool, flagged: bool) -> MessageReadModel {

@@ -12,10 +12,11 @@ use async_imap::{Authenticator, Client, Session};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use futures_util::TryStreamExt;
 use imail_mail::{
-    mailbox_role_for, ImapPort, ImapSyncPort, ImapWakePort, MailAuthentication,
-    MailConnectionConfig, MailProxy, MailboxWakeReason, OutgoingMessage, ProtocolFailure,
-    ProtocolStage, RemoteFetchedSyncMessage, RemoteFlagUpdate, RemoteMailbox, RemoteMessageLocator,
-    RemoteMoveConfirmation, RemoteSyncBatch, RemoteSyncRequest, SmtpPort, SyncMailboxFolder,
+    decode_modified_utf7, mailbox_role_for, ImapPort, ImapSyncPort, ImapWakePort,
+    MailAuthentication, MailConnectionConfig, MailProxy, MailboxWakeReason, OutgoingMessage,
+    ProtocolFailure, ProtocolStage, RemoteFetchedSyncMessage, RemoteFlagUpdate, RemoteMailbox,
+    RemoteMessageLocator, RemoteMoveConfirmation, RemoteSyncBatch, RemoteSyncRequest, SmtpPort,
+    SyncMailboxFolder,
 };
 use imail_protocol::{RemoteMessageFlagPatch, SendMessageResult};
 use mail_builder::MessageBuilder;
@@ -523,15 +524,13 @@ async fn fetch_incremental(
     while let Some(name) = listed.try_next().await.map_err(NetworkError::imap)? {
         let delimiter = name.delimiter().unwrap_or("/").to_string();
         let path = name.name().to_string();
+        let raw_name = path.rsplit(&delimiter).next().unwrap_or(path.as_str());
+        let display_name = decode_modified_utf7(raw_name).unwrap_or_else(|| raw_name.to_string());
         let selectable = !name
             .attributes()
             .contains(&async_imap::types::NameAttribute::NoSelect);
         folders.push(SyncMailboxFolder {
-            name: path
-                .rsplit(&delimiter)
-                .next()
-                .unwrap_or(path.as_str())
-                .to_string(),
+            name: display_name,
             path,
             delimiter,
             special_use: special_use(name.attributes()),

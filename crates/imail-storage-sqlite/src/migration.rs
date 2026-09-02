@@ -160,6 +160,7 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
         transaction.execute_batch(include_str!("../sql/migration-v17-mail-work-items.sql"))?;
         applied_versions.push(17);
     }
+    repair_mailbox_display_names(&transaction)?;
     ensure_message_query_indexes(&transaction)?;
     if from_version < CURRENT_SCHEMA_VERSION {
         transaction.execute(
@@ -194,6 +195,53 @@ fn migrate_locked(connection: &mut Connection) -> Result<MigrationReport, Migrat
     };
     transaction.commit()?;
     Ok(report)
+}
+
+fn repair_mailbox_display_names(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
+    if !columns(transaction, "accounts")?.contains("mailboxes_json") {
+        return Ok(());
+    }
+    let rows = {
+        let mut statement = transaction.prepare("SELECT id,mailboxes_json FROM accounts")?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+    for (account_id, encoded) in rows {
+        let mut mailboxes: Value = serde_json::from_str(&encoded)?;
+        let mut changed = false;
+        if let Some(folders) = mailboxes.as_array_mut() {
+            for folder in folders {
+                let Some(object) = folder.as_object_mut() else {
+                    continue;
+                };
+                let Some(raw_name) = object
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                else {
+                    continue;
+                };
+                let Some(decoded) = imail_mail::decode_modified_utf7(&raw_name) else {
+                    continue;
+                };
+                if decoded != raw_name {
+                    object.insert("name".into(), Value::String(decoded));
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            transaction.execute(
+                "UPDATE accounts SET mailboxes_json=?1 WHERE id=?2",
+                (serde_json::to_string(&mailboxes)?, account_id),
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn ensure_message_query_indexes(transaction: &Transaction<'_>) -> Result<(), rusqlite::Error> {
