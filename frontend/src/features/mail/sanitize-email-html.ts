@@ -49,6 +49,42 @@ export function sanitizeEmailHtml(html: string, Parser: typeof DOMParser = DOMPa
   return document.body.innerHTML;
 }
 
+export function sanitizePlainEmailHtml(html: string, Parser: typeof DOMParser = DOMParser) {
+  const source = /<(?:html|body)\b/i.test(html) ? html : `<!doctype html><html><body>${html}</body></html>`;
+  const document = new Parser().parseFromString(source, 'text/html');
+  const elements = Array.from(document.body.querySelectorAll('*'));
+
+  for (const element of elements) {
+    const tag = element.tagName.toLocaleLowerCase();
+    if (!element.isConnected) continue;
+    if (isExplicitlyHidden(element)) { element.remove(); continue; }
+    if (tag === 'img' || blockedElements.has(tag)) {
+      if (tag === 'form' || tag === 'button') element.replaceWith(...Array.from(element.childNodes));
+      else element.remove();
+      continue;
+    }
+    if (!allowedElements.has(tag) || tag === 'font' || tag === 'col' || tag === 'colgroup') {
+      element.replaceWith(...Array.from(element.childNodes));
+      continue;
+    }
+    const href = tag === 'a' ? element.getAttribute('href') : null;
+    for (const attribute of Array.from(element.attributes)) element.removeAttribute(attribute.name);
+    if (tag === 'a' && href && isSafeUrl(href, ['http:', 'https:', 'mailto:', 'tel:'])) {
+      element.setAttribute('href', href);
+      element.setAttribute('target', '_blank');
+      element.setAttribute('rel', 'noopener noreferrer');
+      element.setAttribute('referrerpolicy', 'no-referrer');
+    }
+  }
+  return document.body.innerHTML;
+}
+
+function isExplicitlyHidden(element: Element) {
+  if (element.hasAttribute('hidden')) return true;
+  const style = normalizeCssForInspection(element.getAttribute('style') ?? '');
+  return /(?:^|;)\s*(?:display\s*:\s*none\b|visibility\s*:\s*hidden\b|mso-hide\s*:\s*all\b)/i.test(style);
+}
+
 function preserveLegacyPresentation(element: Element, tag: string) {
   copyColorAttribute(element, 'bgcolor', 'background-color');
   copyColorAttribute(element, 'color', 'color');

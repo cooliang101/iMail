@@ -1,12 +1,16 @@
 import { HtmlEmailBody } from './HtmlEmailBody';
 import type { MessageBodyView } from '../../app-model';
 import { splitPlainHistory } from './quoted-history';
+import { sanitizePlainEmailHtml } from './sanitize-email-html';
 
 export function MessageBody({ text, html, subject, view }: { text: string; html?: string; subject: string; view: MessageBodyView }) {
   const plainText = emailPlainText(text, html);
-  return view === 'rendered' && html
-    ? <HtmlEmailBody html={html} subject={subject} />
-    : <div className="mail-plain-body">{plainText
+  if (view === 'rendered' && html) return <HtmlEmailBody html={html} subject={subject} />;
+  const plainHtml = html ? sanitizePlainEmailHtml(html) : '';
+  if (plainHtml.trim()) return <div className="mail-plain-body"
+    // This sink receives only minimal semantic markup and validated links; styles and remote resources are removed.
+    dangerouslySetInnerHTML={{ __html: plainHtml }} />;
+  return <div className="mail-plain-body">{plainText
       ? splitPlainHistory(plainText).map((section, index) => {
         const content = section.text.split(/\n{2,}/).map((block, blockIndex) => <p className={isPreformattedBlock(block) ? 'mail-plain-preformatted' : undefined} key={blockIndex}>{block}</p>);
         return section.quoted ? <details key={index} className="mail-quoted-history"><summary>展开引用内容</summary>{content}</details> : <div key={index}>{content}</div>;
