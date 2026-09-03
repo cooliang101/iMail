@@ -913,6 +913,15 @@ impl EmbeddedServiceHost {
             .await
     }
 
+    pub async fn download_message_source(
+        &self,
+        owner_id: String,
+        message_id: String,
+    ) -> Result<Vec<u8>, EmbeddedOperationError> {
+        messages::embedded_download_message_source(Arc::clone(&self.state), owner_id, message_id)
+            .await
+    }
+
     pub async fn create_attachment_preview(
         &self,
         owner_id: String,
@@ -6223,6 +6232,14 @@ mod tests {
             .unwrap()
             .raw;
         drop(store);
+        let original_source = b"From: Sender <sender@example.com>\r\nSubject: Quarterly invoice\r\nX-Exact: untouched\r\n\r\n<html><script>kept-as-bytes</script></html>";
+        rusqlite::Connection::open(&database)
+            .unwrap()
+            .execute(
+                "INSERT INTO message_sources(message_id,source) VALUES (?1,?2)",
+                (&message_id, original_source.as_slice()),
+            )
+            .unwrap();
 
         use sha2::Digest as _;
         let logo_directory = directory.join("sender-logos");
@@ -6376,6 +6393,71 @@ mod tests {
         )
         .await;
         assert_eq!(detail["message"]["text"], "full confidential body");
+        let blocked_image_download = router
+            .clone()
+            .oneshot(request(
+                Method::POST,
+                "/api/resources/image-download".into(),
+                &owner_session,
+                Body::from(r#"{"url":"http://127.0.0.1/private.png"}"#),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(blocked_image_download.status(), StatusCode::BAD_REQUEST);
+        let source_preview = router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                format!("/api/messages/{message_id}/source"),
+                &owner_session,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(source_preview.status(), StatusCode::OK);
+        assert_eq!(
+            source_preview.headers()["cache-control"],
+            "private, no-store, max-age=0"
+        );
+        assert_eq!(source_preview.headers()["pragma"], "no-cache");
+        assert_eq!(source_preview.headers()["expires"], "0");
+        let source_download = router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                format!("/api/messages/{message_id}/source/download"),
+                &owner_session,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(source_download.status(), StatusCode::OK);
+        assert_eq!(source_download.headers()[CONTENT_TYPE], "message/rfc822");
+        assert_eq!(
+            source_download.headers()["cache-control"],
+            "private, no-store, max-age=0"
+        );
+        assert_eq!(source_download.headers()["pragma"], "no-cache");
+        assert_eq!(source_download.headers()["expires"], "0");
+        assert!(source_download.headers()[CONTENT_DISPOSITION]
+            .to_str()
+            .unwrap()
+            .contains("message.eml"));
+        assert_eq!(
+            to_bytes(source_download.into_body(), 1024).await.unwrap(),
+            original_source.as_slice()
+        );
+        let foreign_source_download = router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                format!("/api/messages/{message_id}/source/download"),
+                &other_session,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(foreign_source_download.status(), StatusCode::NOT_FOUND);
         let stats = json(
             router
                 .clone()

@@ -8,6 +8,8 @@ const runtime: PlatformRuntime = {
   kind: 'web',
   openExternal: vi.fn(),
   saveDownload: vi.fn(),
+  saveImage: vi.fn(),
+  saveText: vi.fn(),
   prepareNotifications: vi.fn(async () => false),
   notify: vi.fn(),
   subscribeNotificationClicks: vi.fn(() => () => undefined),

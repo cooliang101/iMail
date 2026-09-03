@@ -3,6 +3,13 @@ import { renderToStaticMarkup } from 'preact-render-to-string';
 import { parseHTML } from 'linkedom';
 import type { Account, Message } from '../../types';
 import { MessageReader } from './MessageReader';
+import { PlatformProvider } from '../../platform/runtime';
+import type { PlatformRuntime } from '../../platform/types';
+
+const runtime: PlatformRuntime = {
+  kind: 'web', openExternal: vi.fn(), saveDownload: vi.fn(), saveImage: vi.fn(), saveText: vi.fn(), prepareNotifications: vi.fn(async () => false),
+  notify: vi.fn(), subscribeNotificationClicks: vi.fn(() => () => undefined),
+};
 
 const account: Account = {
   id: 'account-1', provider: 'custom', email: 'owner@example.test', displayName: 'Owner',
@@ -17,7 +24,7 @@ const message: Message = {
 };
 
 function renderReader(currentMessage: Message) {
-  return parseHTML(renderToStaticMarkup(<MessageReader
+  return parseHTML(renderToStaticMarkup(<PlatformProvider runtime={runtime}><MessageReader
     message={currentMessage} account={account} accounts={[account]} contacts={[]}
     defaultBodyView="source" onComposeConversationMessage={vi.fn()}
     onReply={vi.fn()} onReplyAll={vi.fn()} onForward={vi.fn()} onComposeSender={vi.fn()}
@@ -25,7 +32,7 @@ function renderReader(currentMessage: Message) {
     onArchive={vi.fn()} onDelete={vi.fn()} onSnooze={vi.fn()} onAddToWorkQueue={vi.fn()} onManageLabels={vi.fn()}
     onMarkUnread={vi.fn()} onPrevious={vi.fn()} onNext={vi.fn()}
     hasPrevious={false} hasNext={false} actionBusy={false}
-  />)).document;
+  /></PlatformProvider>)).document;
 }
 
 describe('MessageReader reply-all toolbar action', () => {

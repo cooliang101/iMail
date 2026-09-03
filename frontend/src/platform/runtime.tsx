@@ -1,11 +1,17 @@
 import { createContext, useContext, type ReactNode } from 'preact/compat';
-import type { DownloadRequest, NotificationTarget, PlatformRuntime, SystemNotification } from './types';
-import { desktopDownload } from '../services';
+import type { DownloadRequest, NotificationTarget, PlatformRuntime, ShareRequest, SystemNotification, TextSaveRequest } from './types';
+import { absoluteServiceUrl, desktopDownload } from '../services';
 import { isTauriRuntime } from './tauri-runtime';
 export { isTauriRuntime } from './tauri-runtime';
 export function externalHttpUrl(value: string) {
   const url = new URL(value);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('只允许打开 HTTP 或 HTTPS 地址');
+  return url.href;
+}
+
+export function externalActionUrl(value: string) {
+  const url = new URL(value);
+  if (!['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol.toLocaleLowerCase())) throw new Error('不支持打开此类链接');
   return url.href;
 }
 
@@ -15,6 +21,56 @@ async function webDownload({ url, filename }: DownloadRequest) {
   anchor.download = filename;
   anchor.rel = 'noreferrer';
   anchor.click();
+}
+
+const MAX_SAVED_IMAGE_BYTES = 25 * 1024 * 1024;
+const rasterImageType = /^image\/(?:avif|bmp|gif|jpeg|png|webp)(?:;|$)/i;
+
+function safeImageUrl(value: string) {
+  if (/^data:image\/(?:avif|bmp|gif|jpeg|png|webp);base64,/i.test(value)) return value;
+  const url = new URL(value, window.location.href);
+  if (url.protocol === 'blob:' && url.origin === window.location.origin) return url.href;
+  return externalHttpUrl(url.href);
+}
+
+async function fetchSavedImage(url: string) {
+  const safeUrl = safeImageUrl(url);
+  const remote = /^https?:/i.test(safeUrl);
+  const response = await fetch(remote ? absoluteServiceUrl('/api/resources/image-download') : safeUrl, remote ? {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: safeUrl }),
+  } : { credentials: 'omit', referrerPolicy: 'no-referrer' });
+  if (!response.ok) throw new Error(`图片下载失败（${response.status}）`);
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!rasterImageType.test(contentType)) throw new Error('远程资源不是受支持的图片格式');
+  const declaredSize = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredSize) && declaredSize > MAX_SAVED_IMAGE_BYTES) throw new Error('图片超过 25 MiB，无法保存');
+  const blob = await response.blob();
+  if (blob.size > MAX_SAVED_IMAGE_BYTES) throw new Error('图片超过 25 MiB，无法保存');
+  return blob;
+}
+
+async function webSaveImage({ url, filename }: DownloadRequest) {
+  const blob = await fetchSavedImage(url);
+  const blobUrl = URL.createObjectURL(blob);
+  try { await webDownload({ url: blobUrl, filename }); }
+  finally { window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0); }
+}
+
+async function webSaveText({ text, filename }: TextSaveRequest) {
+  const blobUrl = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  try { await webDownload({ url: blobUrl, filename }); }
+  finally { window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0); }
+}
+
+async function shareWithFallback(input: ShareRequest) {
+  if (typeof navigator.share === 'function') {
+    try { await navigator.share(input); return 'shared' as const; }
+    catch (reason) { if (reason instanceof DOMException && reason.name === 'AbortError') throw reason; }
+  }
+  const value = input.url || input.text;
+  if (!value) throw new Error('没有可分享的内容');
+  await navigator.clipboard.writeText(value);
+  return 'copied' as const;
 }
 
 function createWebRuntime(): PlatformRuntime {
@@ -50,10 +106,15 @@ function createWebRuntime(): PlatformRuntime {
   return {
     kind: 'web',
     async openExternal(value) {
-      const opened = window.open(externalHttpUrl(value), '_blank', 'noopener,noreferrer');
+      const url = externalActionUrl(value);
+      if (!/^https?:/i.test(url)) { window.location.assign(url); return; }
+      const opened = window.open(externalHttpUrl(url), '_blank', 'noopener,noreferrer');
       if (!opened) throw new Error('浏览器阻止了新窗口，请允许弹出窗口后重试');
     },
+    share: shareWithFallback,
     saveDownload: webDownload,
+    saveImage: webSaveImage,
+    saveText: webSaveText,
     prepareNotifications,
     async notify({ title, body, tag, target }: SystemNotification) {
       if (!await prepareNotifications()) throw new Error('系统通知权限未开启');
@@ -88,13 +149,33 @@ function createTauriRuntime(): PlatformRuntime {
     kind: 'tauri',
     async openExternal(value) {
       const { openUrl } = await import('@tauri-apps/plugin-opener');
-      await openUrl(externalHttpUrl(value));
+      await openUrl(externalActionUrl(value));
     },
+    share: shareWithFallback,
     async saveDownload({ url, filename }) {
       const { save } = await import('@tauri-apps/plugin-dialog');
       const target = await save({ defaultPath: filename });
       if (!target) return;
       await desktopDownload(url, target);
+    },
+    async saveImage({ url, filename }) {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const target = await save({ defaultPath: filename });
+      if (!target) return;
+      const { invoke } = await import('@tauri-apps/api/core');
+      if (/^https?:/i.test(url)) {
+        await invoke('desktop_download_external_image', { url: externalHttpUrl(url), target });
+        return;
+      }
+      const bytes = new Uint8Array(await (await fetchSavedImage(url)).arrayBuffer());
+      await invoke('desktop_save_binary', { bytes: Array.from(bytes), target });
+    },
+    async saveText({ text, filename }) {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const target = await save({ defaultPath: filename });
+      if (!target) return;
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('desktop_save_text', { text, target });
     },
     prepareNotifications,
     async notify(input) {

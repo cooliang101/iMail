@@ -51,12 +51,20 @@ use crate::{
 
 pub(crate) fn routes() -> Router<Arc<AppState>> {
     Router::new()
+        .route(
+            "/api/resources/image-download",
+            post(download_external_image),
+        )
         .route("/api/messages", get(list))
         .route("/api/message-stats", get(stats))
         .route("/api/contacts", get(contacts))
         .route("/api/contacts/logo", get(contact_logo))
         .route("/api/messages/:id", get(detail).patch(update_message))
         .route("/api/messages/:id/source", get(message_source))
+        .route(
+            "/api/messages/:id/source/download",
+            get(download_message_source),
+        )
         .route("/api/messages/:id/conversation", get(conversation))
         .route("/api/messages/:id/sender-logo", get(sender_logo))
         .route("/api/messages/:id/move", post(move_message))
@@ -67,6 +75,36 @@ pub(crate) fn routes() -> Router<Arc<AppState>> {
         .route("/api/labels", get(labels))
         .route("/api/notifications", get(notifications))
         .route("/api/send", post(send_message))
+}
+
+const MAX_EXTERNAL_IMAGE_BYTES: usize = 25 * 1024 * 1024;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ExternalImageDownloadInput {
+    url: String,
+}
+
+async fn download_external_image(Json(input): Json<ExternalImageDownloadInput>) -> Response {
+    match tokio::task::spawn_blocking(move || {
+        crate::logo::fetch_external_image(&input.url, MAX_EXTERNAL_IMAGE_BYTES)
+    })
+    .await
+    {
+        Ok(Ok((content, content_type))) => {
+            let mut response = content.into_response();
+            response
+                .headers_mut()
+                .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+            response.headers_mut().insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("private, no-store, max-age=0"),
+            );
+            response
+        }
+        Ok(Err(message)) => error(StatusCode::BAD_REQUEST, &message),
+        Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "图片下载任务失败"),
+    }
 }
 
 #[derive(Default, Deserialize)]
@@ -355,9 +393,72 @@ async fn message_source(
     })
     .await
     {
-        Ok(source) => Json(embedded_message_source(source)).into_response(),
+        Ok(source) => (
+            [
+                (header::CACHE_CONTROL, "private, no-store, max-age=0"),
+                (header::PRAGMA, "no-cache"),
+                (header::EXPIRES, "0"),
+            ],
+            Json(embedded_message_source(source)),
+        )
+            .into_response(),
         Err(cause) => application_error(cause),
     }
+}
+
+async fn download_message_source(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(message_id): Path<String>,
+) -> Response {
+    match message_source_for(state, user.user_id, message_id).await {
+        Ok(Some(source)) => (
+            StatusCode::OK,
+            [
+                (
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("message/rfc822"),
+                ),
+                (
+                    header::CONTENT_DISPOSITION,
+                    HeaderValue::from_static("attachment; filename=message.eml"),
+                ),
+                (
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static("private, no-store, max-age=0"),
+                ),
+                (header::PRAGMA, HeaderValue::from_static("no-cache")),
+                (header::EXPIRES, HeaderValue::from_static("0")),
+            ],
+            source,
+        )
+            .into_response(),
+        Ok(None) => error(StatusCode::NOT_FOUND, "这封邮件没有可下载的原始原件"),
+        Err(cause) => application_error(cause),
+    }
+}
+
+async fn message_source_for(
+    state: Arc<AppState>,
+    owner: String,
+    message_id: String,
+) -> Result<Option<Vec<u8>>, ApplicationError<AuthStoreError>> {
+    let database = state.config.data_dir.join("imail.sqlite");
+    run(database, move |store| {
+        MessageQueryService::new(&*store).source(&owner, &message_id)
+    })
+    .await
+}
+
+pub(crate) async fn embedded_download_message_source(
+    state: Arc<AppState>,
+    owner: String,
+    message_id: String,
+) -> Result<Vec<u8>, crate::EmbeddedOperationError> {
+    message_source_for(state, owner, message_id)
+        .await
+        .map_err(embedded_application_error)?
+        .ok_or_else(|| embedded_error(404, "这封邮件没有可下载的原始原件"))
 }
 
 async fn update_message(

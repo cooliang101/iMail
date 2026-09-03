@@ -325,11 +325,33 @@ pub(crate) fn image_type(content: &[u8]) -> Option<&'static str> {
         Some("image/gif")
     } else if content.starts_with(b"RIFF") && content.get(8..12) == Some(b"WEBP") {
         Some("image/webp")
+    } else if content.starts_with(b"BM") {
+        Some("image/bmp")
+    } else if content.get(4..8) == Some(b"ftyp")
+        && matches!(content.get(8..12), Some(b"avif") | Some(b"avis"))
+    {
+        Some("image/avif")
     } else if content.starts_with(&[0, 0, 1, 0]) {
         Some("image/x-icon")
     } else {
         None
     }
+}
+
+pub(crate) fn fetch_external_image(
+    value: &str,
+    limit: usize,
+) -> Result<(Vec<u8>, &'static str), String> {
+    let url = Url::parse(value).map_err(|_| "图片地址无效".to_string())?;
+    let response = safe_fetch(
+        url,
+        "image/avif,image/webp,image/png,image/jpeg,image/gif,image/bmp",
+        limit,
+    )
+    .map_err(|error| error.detail)?;
+    let content_type =
+        image_type(&response.content).ok_or_else(|| "远程资源不是受支持的图片格式".to_string())?;
+    Ok((response.content, content_type))
 }
 
 pub(crate) fn is_public_ip(address: IpAddr) -> bool {
@@ -562,6 +584,8 @@ mod tests {
             Some("image/png")
         );
         assert_eq!(image_type(b"<svg></svg>"), None);
+        assert_eq!(image_type(b"BMrest"), Some("image/bmp"));
+        assert_eq!(image_type(b"\0\0\0\x18ftypavifrest"), Some("image/avif"));
         let now = Utc::now();
         assert!(fresh_failure(
             &(now - ChronoDuration::hours(23)).to_rfc3339(),

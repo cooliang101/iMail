@@ -8,6 +8,7 @@ use std::{
     collections::HashMap,
     fs,
     io::{BufReader, Write},
+    net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
@@ -309,6 +310,179 @@ pub async fn desktop_download(
     std::fs::write(target, bytes).map_err(|error| format!("保存附件失败：{error}"))
 }
 
+const MAX_EXTERNAL_IMAGE_BYTES: usize = 25 * 1024 * 1024;
+
+fn public_network_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, ..] = ip.octets();
+            !(a == 0
+                || a == 10
+                || a == 127
+                || (a == 100 && (64..=127).contains(&b))
+                || (a == 169 && b == 254)
+                || (a == 172 && (16..=31).contains(&b))
+                || (a == 192 && b == 168)
+                || (a == 192 && b == 0)
+                || (a == 198 && b == 51)
+                || (a == 198 && (b == 18 || b == 19))
+                || (a == 203 && b == 0)
+                || a >= 224)
+        }
+        IpAddr::V6(ip) => {
+            if let Some(ipv4) = ip.to_ipv4_mapped() {
+                return public_network_ip(IpAddr::V4(ipv4));
+            }
+            let segments = ip.segments();
+            !(ip.is_unspecified()
+                || ip.is_loopback()
+                || ip.is_multicast()
+                || (segments[0] & 0xfe00) == 0xfc00
+                || (segments[0] & 0xffc0) == 0xfe80
+                || (segments[0] == 0x2001 && segments[1] == 0x0db8))
+        }
+    }
+}
+
+fn raster_image_type(content: &[u8]) -> Option<&'static str> {
+    if content.starts_with(&[137, 80, 78, 71, 13, 10, 26, 10]) {
+        Some("image/png")
+    } else if content.starts_with(&[0xff, 0xd8, 0xff]) {
+        Some("image/jpeg")
+    } else if content.starts_with(b"GIF87a") || content.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if content.starts_with(b"RIFF") && content.get(8..12) == Some(b"WEBP") {
+        Some("image/webp")
+    } else if content.starts_with(b"BM") {
+        Some("image/bmp")
+    } else if content.get(4..8) == Some(b"ftyp")
+        && matches!(content.get(8..12), Some(b"avif") | Some(b"avis"))
+    {
+        Some("image/avif")
+    } else {
+        None
+    }
+}
+
+async fn validated_external_image_client(url: &Url) -> Result<Client, String> {
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err("图片地址无效".into());
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| "图片地址缺少主机名".to_string())?;
+    if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
+        return Err("不允许从本机或内网地址保存图片".into());
+    }
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| "图片地址端口无效".to_string())?;
+    let addresses = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|_| "无法解析图片地址".to_string())?
+        .collect::<Vec<SocketAddr>>();
+    if addresses.is_empty()
+        || addresses
+            .iter()
+            .any(|address| !public_network_ip(address.ip()))
+    {
+        return Err("不允许从本机或内网地址保存图片".into());
+    }
+    Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(45))
+        .resolve_to_addrs(host, &addresses)
+        .build()
+        .map_err(|error| format!("图片下载客户端初始化失败：{error}"))
+}
+
+#[tauri::command]
+pub async fn desktop_download_external_image(url: String, target: PathBuf) -> Result<(), String> {
+    let mut url = Url::parse(&url).map_err(|_| "图片地址无效".to_string())?;
+    for redirect_count in 0..=5 {
+        let client = validated_external_image_client(&url).await?;
+        let response = client
+            .get(url.clone())
+            .header(
+                "Accept",
+                "image/avif,image/webp,image/png,image/jpeg,image/gif,image/bmp",
+            )
+            .send()
+            .await
+            .map_err(|error| format!("图片下载失败：{error}"))?;
+        if response.status().is_redirection() {
+            if redirect_count == 5 {
+                return Err("图片重定向次数过多".into());
+            }
+            let location = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| "图片重定向地址无效".to_string())?;
+            url = url
+                .join(location)
+                .map_err(|_| "图片重定向地址无效".to_string())?;
+            continue;
+        }
+        if !response.status().is_success() {
+            return Err(format!("图片下载失败：{}", response.status().as_u16()));
+        }
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        if !matches!(
+            content_type.as_str(),
+            "image/avif" | "image/bmp" | "image/gif" | "image/jpeg" | "image/png" | "image/webp"
+        ) {
+            return Err("远程资源不是受支持的图片格式".into());
+        }
+        if response
+            .content_length()
+            .is_some_and(|size| size > MAX_EXTERNAL_IMAGE_BYTES as u64)
+        {
+            return Err("图片超过 25 MiB，无法保存".into());
+        }
+        let mut bytes = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|error| format!("读取图片失败：{error}"))?;
+            if bytes.len().saturating_add(chunk.len()) > MAX_EXTERNAL_IMAGE_BYTES {
+                return Err("图片超过 25 MiB，无法保存".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        if raster_image_type(&bytes) != Some(content_type.as_str()) {
+            return Err("远程资源的图片内容与格式不匹配".into());
+        }
+        return fs::write(target, bytes).map_err(|error| format!("保存图片失败：{error}"));
+    }
+    unreachable!()
+}
+
+#[tauri::command]
+pub fn desktop_save_text(text: String, target: PathBuf) -> Result<(), String> {
+    fs::write(target, text.as_bytes()).map_err(|error| format!("保存邮件正文失败：{error}"))
+}
+
+#[tauri::command]
+pub fn desktop_save_binary(bytes: Vec<u8>, target: PathBuf) -> Result<(), String> {
+    if bytes.len() > MAX_EXTERNAL_IMAGE_BYTES {
+        return Err("图片超过 25 MiB，无法保存".into());
+    }
+    fs::write(target, bytes).map_err(|error| format!("保存图片失败：{error}"))
+}
+
 #[tauri::command]
 pub async fn desktop_read_binary(
     state: State<'_, HttpBridgeState>,
@@ -461,6 +635,38 @@ mod tests {
         );
         assert!(request_url("https://mail.example.com", "//evil.example.com").is_err());
         assert!(request_method(Some("CONNECT")).is_err());
+    }
+
+    #[test]
+    fn permits_only_public_addresses_for_external_image_downloads() {
+        for blocked in [
+            "127.0.0.1",
+            "10.0.0.1",
+            "172.16.2.3",
+            "192.168.1.1",
+            "169.254.1.1",
+            "100.64.0.1",
+            "198.51.100.1",
+            "203.0.113.1",
+            "224.0.0.1",
+            "::1",
+            "fc00::1",
+            "fe80::1",
+            "2001:db8::1",
+        ] {
+            assert!(
+                !public_network_ip(blocked.parse().unwrap()),
+                "{blocked} must be blocked"
+            );
+        }
+        assert_eq!(raster_image_type(b"BMrest"), Some("image/bmp"));
+        assert_eq!(raster_image_type(b"<svg></svg>"), None);
+        for allowed in ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"] {
+            assert!(
+                public_network_ip(allowed.parse().unwrap()),
+                "{allowed} must be allowed"
+            );
+        }
     }
 
     #[test]

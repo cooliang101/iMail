@@ -2552,6 +2552,13 @@ impl EmbeddedMailServiceState {
         let segments = parsed
             .path_segments()
             .map(|items| items.collect::<Vec<_>>());
+        if let Some(["api", "messages", message_id, "source", "download"]) = segments.as_deref() {
+            let message_id = decode_path_segment(message_id)?;
+            return host
+                .download_message_source(user_id, message_id)
+                .await
+                .map_err(|error| format!("嵌入式原始邮件读取失败：{}", error.status));
+        }
         if let Some(["api", "messages", message_id, "attachments", index]) = segments.as_deref() {
             let message_id = decode_path_segment(message_id)?;
             let index = index
