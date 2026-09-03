@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'preact/compat';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { AppSelect } from '../../components/form-controls';
 import { Globe, X } from '../../components/icons';
@@ -23,9 +23,24 @@ export const translationDisplayOptions = [
   { mode: 'original', label: '关闭翻译' },
 ] satisfies Array<{ mode: TranslationDisplayMode; label: string }>;
 
-export function TranslationReaderControl({ messageId, open, displayMode, onDisplayModeChange, onPresentationChange, onDismiss }: {
+export type TranslationContextPoint = { x: number; y: number };
+
+export function translationContextPosition(point: TranslationContextPoint, size: { width: number; height: number }, viewport: { width: number; height: number }) {
+  return {
+    x: Math.max(8, Math.min(point.x, viewport.width - size.width - 8)),
+    y: Math.max(8, Math.min(point.y, viewport.height - size.height - 8)),
+  };
+}
+
+export function abortTranslationRequest(controller: AbortController | undefined, currentGeneration: number) {
+  controller?.abort();
+  return currentGeneration + 1;
+}
+
+export function TranslationReaderControl({ messageId, open, contextPoint, displayMode, onDisplayModeChange, onPresentationChange, onDismiss }: {
   messageId: string;
   open: boolean;
+  contextPoint?: TranslationContextPoint;
   displayMode: TranslationDisplayMode;
   onDisplayModeChange: (mode: TranslationDisplayMode) => void;
   onPresentationChange: (presentation?: TranslationPresentation) => void;
@@ -43,6 +58,7 @@ export function TranslationReaderControl({ messageId, open, displayMode, onDispl
   const abortRef = useRef<AbortController>();
   const controlRef = useRef<HTMLElement>(null);
   const requestGenerationRef = useRef(0);
+  const [contextPosition, setContextPosition] = useState(contextPoint);
 
   const publishArtifact = useCallback((nextPreparation: TranslationPreparation, nextArtifact: TranslationArtifact) => {
     setPreparation(nextPreparation);
@@ -54,8 +70,14 @@ export function TranslationReaderControl({ messageId, open, displayMode, onDispl
   const dismissAndRestoreFocus = useCallback(() => {
     const trigger = controlRef.current?.parentElement?.querySelector<HTMLButtonElement>('.mail-translation-trigger');
     onDismiss();
-    window.requestAnimationFrame(() => trigger?.focus());
-  }, [onDismiss]);
+    if (!contextPoint) window.requestAnimationFrame(() => trigger?.focus());
+  }, [contextPoint, onDismiss]);
+
+  useLayoutEffect(() => {
+    if (!open || !contextPoint || !controlRef.current) return;
+    const bounds = controlRef.current.getBoundingClientRect();
+    setContextPosition(translationContextPosition(contextPoint, bounds, { width: window.innerWidth, height: window.innerHeight }));
+  }, [contextPoint, open]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,14 +137,13 @@ export function TranslationReaderControl({ messageId, open, displayMode, onDispl
     void translationSettingsApi.prepareMessage(messageId, { profileId, targetLanguage }, controller.signal).then((result) => {
       if (cancelled) return;
       setPreparation(result);
-      if (result.cached) publishArtifact(result, result.cached);
     }).catch((reason) => {
       if (!cancelled) setMessage(reason instanceof Error ? reason.message : '无法准备邮件翻译');
     }).finally(() => {
       if (!cancelled) setPreparing(false);
     });
     return () => { cancelled = true; controller.abort(); };
-  }, [messageId, onPresentationChange, profileId, publishArtifact, targetLanguage]);
+  }, [messageId, onPresentationChange, profileId, targetLanguage]);
 
   async function prepare() {
     if (!profileId || !preparation) return;
@@ -134,8 +155,6 @@ export function TranslationReaderControl({ messageId, open, displayMode, onDispl
     setBusy(true);
     setMessage('');
     setArtifact(undefined);
-    onDisplayModeChange('bilingual');
-    onPresentationChange({ document: preparation.document, targetLanguage, busy: true });
     try {
       if (pendingEdge) {
         await completeEdgeTranslation(pendingEdge.preparation, pendingEdge.sourceLanguage, controller, requestGeneration);
@@ -196,6 +215,14 @@ export function TranslationReaderControl({ messageId, open, displayMode, onDispl
     }
   }
 
+  function cancelTranslation() {
+    requestGenerationRef.current = abortTranslationRequest(abortRef.current, requestGenerationRef.current);
+    abortRef.current = undefined;
+    setBusy(false);
+    setMessage('已取消翻译');
+    onPresentationChange(undefined);
+  }
+
   async function completeEdgeTranslation(edgePreparation: TranslationPreparation, sourceLanguage: string, controller: AbortController, requestGeneration: number) {
     const onProgress = (progress: EdgeTranslationProgress) => setMessage(progressMessage(progress));
     const segments = await translateDocumentWithEdge(edgePreparation.document, sourceLanguage, targetLanguage, { signal: controller.signal, onProgress });
@@ -207,12 +234,14 @@ export function TranslationReaderControl({ messageId, open, displayMode, onDispl
     setMessage('');
   }
 
-  return <section ref={controlRef} id="mail-translation-popover" className="mail-translation-control" role="dialog" aria-label="邮件翻译设置" aria-modal="false" tabIndex={-1} hidden={!open}>
+  const contextStyle = contextPoint ? { left: contextPosition?.x ?? contextPoint.x, top: contextPosition?.y ?? contextPoint.y, right: 'auto' } as CSSProperties : undefined;
+  return <section ref={controlRef} id="mail-translation-popover" className={`mail-translation-control${contextPoint ? ' is-context' : ''}`} style={contextStyle} role="dialog" aria-label="邮件翻译设置" aria-modal="false" tabIndex={-1} hidden={!open}>
     <header><span className="mail-translation-heading"><Globe size={18} /><span><strong>翻译邮件</strong><small>{artifact ? '译文已生成' : '选择服务与目标语言'}</small></span></span><button className="mail-translation-close" type="button" title="收起翻译设置" aria-label="收起翻译设置" onClick={dismissAndRestoreFocus}><X size={17} /></button></header>
     {readyProfiles.length > 0 && <div className="mail-translation-fields">
       <label><span>翻译服务</span><AppSelect aria-label="翻译服务" value={profileId} options={readyProfiles.map(({ profile }) => ({ value: profile.id, label: profile.displayName }))} onValueChange={setProfileId} /></label>
       <label><span>目标语言</span><AppSelect aria-label="目标语言" value={targetLanguage} options={languages} onValueChange={setTargetLanguage} /></label>
       <AppButton appearance="primary" disabled={busy || preparing || !profileId || !preparation || Boolean(artifact)} onClick={() => void prepare()}>{preparing ? '准备中…' : busy ? '处理中…' : artifact ? '已翻译' : pendingEdge ? '继续翻译' : '开始翻译'}</AppButton>
+      {busy && <AppButton appearance="secondary" onClick={cancelTranslation}>取消翻译</AppButton>}
     </div>}
     {readyProfiles.length === 0 && <p>暂无可用翻译服务，请先在“设置 → 邮件翻译”中完成配置。</p>}
     {message && <p className="mail-translation-message">{message}</p>}

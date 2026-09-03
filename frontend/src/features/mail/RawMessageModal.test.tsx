@@ -53,7 +53,8 @@ describe('RawMessageModal', () => {
     expect(html).not.toContain('<img src=');
     expect(html).toContain('正在读取原始邮件');
     expect(html).toContain('不会渲染 HTML、执行脚本、加载图片或访问邮件中的任何资源');
-    expect(html).toContain('下载原始邮件');
+    expect(html).toContain('aria-label="下载原始邮件"');
+    expect(html).not.toContain('>下载原始邮件</button>');
     expect(html).toContain('raw-message-source app-scrollbar');
   });
 });

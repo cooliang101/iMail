@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Overlay } from '../../components/Overlay';
 import { DownloadSimple, File, X } from '../../components/icons';
-import { AppButton } from '../../components/AppButton';
 import { usePlatform } from '../../platform/runtime';
 import { api } from '../../services';
 import type { Message } from '../../types';
@@ -71,9 +70,7 @@ export function RawMessageModal({ message, onClose }: { message: Message; onClos
         <span className="raw-message-icon"><File size={20} /></span>
         <span><strong>原始邮件</strong><small>{detail}</small></span>
         <span className="raw-message-header-actions">
-          <AppButton appearance="secondary" icon={<DownloadSimple size={16} />} disabled={state.status !== 'ready' || downloadBusy} onClick={() => void download()}>
-            {downloadBusy ? '正在下载…' : '下载原始邮件'}
-          </AppButton>
+          <button className="raw-message-download-button" type="button" aria-label={downloadBusy ? '正在下载原始邮件' : '下载原始邮件'} title={downloadBusy ? '正在下载…' : '下载原始邮件'} disabled={state.status !== 'ready' || downloadBusy} onClick={() => void download()}><DownloadSimple size={18} /></button>
           <button type="button" aria-label="关闭原始邮件" title="关闭" onClick={onClose}><X size={19} /></button>
         </span>
       </header>

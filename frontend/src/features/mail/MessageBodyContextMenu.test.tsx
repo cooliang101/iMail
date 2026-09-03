@@ -39,7 +39,7 @@ describe('MessageBodyContextMenu', () => {
     expect(html).toContain('复制当前显示内容');
     expect(html).toContain('下载原始邮件（.eml）');
     expect(html).toContain('保存当前显示内容（.txt）');
-    expect(html).toContain('翻译邮件…');
+    expect(html).toContain('选择翻译服务与目标语言…');
     expect(html).toContain('切换到原始样式');
     expect(menu({ kind: 'body' }, { translationActive: true })).not.toContain('切换到原始样式');
   });

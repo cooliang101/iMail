@@ -47,7 +47,7 @@ export function MessageBodyContextMenu({ x, y, target, platform, bodyView, hasHt
       { id: 'copy-body', label: '复制当前显示内容', icon: <Copy size={17} />, onSelect: () => onCopy('') },
       { id: 'download-source', label: '下载原始邮件（.eml）', icon: <DownloadSimple size={17} />, onSelect: onDownloadRaw },
       { id: 'save-body', label: '保存当前显示内容（.txt）', icon: <DownloadSimple size={17} />, onSelect: onSaveBody },
-      { id: 'translate', label: '翻译邮件…', icon: <Globe size={17} />, separatorBefore: true, onSelect: onTranslate },
+      { id: 'translate', label: '选择翻译服务与目标语言…', icon: <Globe size={17} />, separatorBefore: true, onSelect: onTranslate },
       ...(hasHtml && !translationActive ? [{ id: 'toggle-render', label: bodyView === 'source' ? '切换到原始样式' : '切换到纯文本阅读', icon: bodyView === 'source' ? <Eye size={17} /> : <Code size={17} />, onSelect: onToggleBodyView }] : []),
     ];
   }
