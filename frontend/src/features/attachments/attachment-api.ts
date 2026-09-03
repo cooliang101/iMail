@@ -1,5 +1,6 @@
 import { absoluteServiceUrl, api, desktopReadBinary } from '../../services';
 import type { MessageAttachment } from '../../types';
+export { formatFileSize as formatAttachmentSize } from '../../components/file-utils';
 
 export type PreviewKind = 'image' | 'pdf' | 'video' | 'archive' | 'text' | 'unsupported';
 
@@ -70,10 +71,4 @@ export async function resolvePreviewText(path: string, tauri: boolean) {
   const response = await fetch(absoluteServiceUrl(path), { credentials: 'include' });
   if (!response.ok) throw new Error(`文本内容读取失败（${response.status}）`);
   return response.text();
-}
-
-export function formatAttachmentSize(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }

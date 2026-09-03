@@ -1,4 +1,6 @@
 export { api, createApiTransport, type ApiTransport } from './api';
+export * from './response-shape';
+export * from './model-response';
 export * from './config';
 export * from './mail';
 export { subscribeSyncEvents, type SyncEventType } from './sync-events';

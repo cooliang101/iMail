@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMessageQuery } from '../../app/selectors';
+import { buildMessageQuery } from '../mail/message-query';
 import { filtersFromQuery, localDateInput, validateFilters } from './search-model';
 import { embeddedDomainCall } from '../../services/mail';
 

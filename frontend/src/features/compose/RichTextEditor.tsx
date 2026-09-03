@@ -9,20 +9,12 @@ import { ArrowClockwise, ArrowCounterClockwise, ImageSquare, LinkSimple, ListBul
 import { selectRichTextToolbarState, type RichTextToolbarState } from './rich-text-toolbar-state';
 import { ComposeSignature, signatureHtml } from './signature-node';
 import { textToHtml } from './compose-utils';
+import { readFileAsDataUrl } from '../../components/file-utils';
 
 export type RichTextEditorHandle = {
   insertText: (text: string) => void;
   switchSignature: (accountId: string, text: string) => boolean;
 };
-
-function fileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error(`无法读取 ${file.name}`));
-    reader.readAsDataURL(file);
-  });
-}
 
 export const RichTextEditor = forwardRef<RichTextEditorHandle, {
   initialHtml: string;
@@ -40,8 +32,10 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const onChangeRef = useRef(onChange);
+  const manageSignatureRef = useRef(manageSignature);
   const managedSignature = useRef<string | null>(null);
   onChangeRef.current = onChange;
+  manageSignatureRef.current = manageSignature;
 
   useEffect(() => {
     const element = editorContainerRef.current;
@@ -61,7 +55,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, {
       editorProps: { attributes: { class: 'composer-editor-content', 'aria-label': '邮件正文' } },
       onUpdate: ({ editor: current }) => onChangeRef.current(current.getHTML(), current.getText({ blockSeparator: '\n' })),
     });
-    if (manageSignature) currentEditor.state.doc.forEach(node => {
+    if (manageSignatureRef.current) currentEditor.state.doc.forEach(node => {
       if (node.type.name === 'composeSignature') managedSignature.current = JSON.stringify(node.toJSON());
     });
     const updateToolbarState = () => setState(selectRichTextToolbarState({ editor: currentEditor }));
@@ -80,7 +74,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, {
   useImperativeHandle(ref, () => ({
     insertText(value) { editor?.chain().focus().insertContent(textToHtml(value)).run(); },
     switchSignature(accountId, value) {
-      if (!editor || !manageSignature) return false;
+      if (!editor || !manageSignatureRef.current) return false;
       let found: { from: number; to: number; fingerprint: string } | undefined;
       let quoteAt: number | undefined;
       editor.state.doc.forEach((node, offset) => {
@@ -97,13 +91,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, {
       });
       return true;
     },
-  }), [editor, manageSignature]);
+  }), [editor]);
 
   async function addInlineImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0]; event.currentTarget.value = '';
     if (!file || !editor) return;
     if (file.size > 3 * 1024 * 1024) { onError('正文图片不能超过 3 MB'); return; }
-    try { editor.chain().focus().setImage({ src: await fileAsDataUrl(file), alt: file.name }).run(); }
+    try { editor.chain().focus().setImage({ src: await readFileAsDataUrl(file), alt: file.name }).run(); }
     catch (error) { onError(error instanceof Error ? error.message : '图片读取失败'); }
   }
 

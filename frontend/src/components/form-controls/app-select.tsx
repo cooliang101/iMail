@@ -1,4 +1,4 @@
-import { createPortal, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'preact/compat';
+import { createPortal, useCallback, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'preact/compat';
 import { CaretDown, Check } from '../icons';
 
 export type AppSelectOption = { value: string; label: string; disabled?: boolean };
@@ -45,7 +45,7 @@ export function AppSelect({ name, value, defaultValue, options, onValueChange, c
   const selectedOption = options[selectedIndex] ?? options.find((option) => !option.disabled);
   const unavailable = disabled || !selectedOption;
 
-  function positionListbox() {
+  const positionListbox = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
@@ -65,7 +65,7 @@ export function AppSelect({ name, value, defaultValue, options, onValueChange, c
       width,
       maxHeight,
     });
-  }
+  }, [options.length]);
 
   function openListbox(preferredIndex = selectedIndex) {
     if (unavailable) return;
@@ -125,7 +125,7 @@ export function AppSelect({ name, value, defaultValue, options, onValueChange, c
       window.removeEventListener('resize', reposition);
       window.removeEventListener('scroll', reposition, true);
     };
-  }, [open, options.length]);
+  }, [open, positionListbox]);
 
   return <span className="app-select-wrap">
     {name && <input type="hidden" name={name} value={selectedOption?.value ?? ''} disabled={disabled} required={required} form={form} />}

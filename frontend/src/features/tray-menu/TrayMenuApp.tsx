@@ -4,7 +4,7 @@ import type { AppThemeId, CustomThemeDefinition } from '../../app-model';
 import { ProviderIcon } from '../../components/provider-icons';
 import { customThemeCssVariables } from '../appearance/theme-runtime';
 import { defaultCustomTheme, normalizeCustomTheme, normalizeThemeId } from '../appearance/theme-model';
-import { visibleTrayAccounts } from './tray-menu-model';
+import { COLLAPSED_TRAY_ACCOUNT_LIMIT, visibleTrayAccounts } from './tray-menu-model';
 import './tray-menu.css';
 
 type TrayAccount = {
@@ -92,8 +92,8 @@ export function TrayMenuApp() {
         </button>)}
         {data.accounts.length === 0 && <div className="tray-menu-empty">暂未添加邮箱</div>}
       </div>
-      {data.accounts.length > 5 && <button className="tray-menu-more" type="button" onClick={() => setExpanded((value) => !value)}>
-        {expanded ? <CaretUp size={15} /> : <CaretDown size={15} />}{expanded ? '收起邮箱' : `展示更多（${data.accounts.length - 5}）`}
+      {data.accounts.length > COLLAPSED_TRAY_ACCOUNT_LIMIT && <button className="tray-menu-more" type="button" onClick={() => setExpanded((value) => !value)}>
+        {expanded ? <CaretUp size={15} /> : <CaretDown size={15} />}{expanded ? '收起邮箱' : `展示更多（${data.accounts.length - COLLAPSED_TRAY_ACCOUNT_LIMIT}）`}
       </button>}
       <div className="tray-menu-divider" />
       <button className="tray-menu-quit" type="button" onClick={() => action('quit')}><Power size={17} />退出 iMail</button>

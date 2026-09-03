@@ -3,13 +3,7 @@ import { Check, Copy, EnvelopeSimple, MagnifyingGlass } from '../../components/i
 import { SenderAvatar } from '../../components/shared';
 import type { MailParticipant, ParticipantRole } from '../../app-model';
 import type { Contact, ContactLogo } from '../../types';
-
-function contactRecency(value?: string) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
-}
+import { formatDate } from '../../components/date-format';
 
 export function ParticipantPopover({ id, role, participant, contact, logo, color, trigger, onClose, onCompose, onFilter }: {
   id: string;
@@ -80,7 +74,7 @@ export function ParticipantPopover({ id, role, participant, contact, logo, color
         {copied ? <Check size={16} weight="bold" /> : <Copy size={16} />}
       </button>
     </header>
-    {role === 'sender' && contact && <div className="participant-contact-facts"><span><strong>{contact.messageCount}</strong> 封往来邮件</span>{contact.lastContactAt && <span>最近联系 {contactRecency(contact.lastContactAt)}</span>}</div>}
+    {role === 'sender' && contact && <div className="participant-contact-facts"><span><strong>{contact.messageCount}</strong> 封往来邮件</span>{contact.lastContactAt && <span>最近联系 {formatDate(contact.lastContactAt, { year: 'numeric', month: 'short', day: 'numeric' })}</span>}</div>}
     <footer>
       <button type="button" title={role === 'sender' ? '查看来自此地址的邮件' : '查看发往此地址的邮件'} onClick={() => { onClose(false); onFilter(role, participant); }}><MagnifyingGlass size={16} />{role === 'sender' ? '来自此地址' : '发往此地址'}</button>
       <button type="button" className="participant-compose-action" onClick={() => { onClose(false); onCompose(participant.address); }}><EnvelopeSimple size={16} />写邮件</button>

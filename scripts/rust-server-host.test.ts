@@ -64,8 +64,11 @@ describe('Rust standalone HTTP service host', () => {
     await writeFile(controlFile, 'rust-daemon-control-secret\n');
     const port = await availablePort();
     const errors: Buffer[] = [];
+    const cargoTargetArguments = process.platform === 'win32'
+      ? ['--target', 'x86_64-pc-windows-msvc']
+      : [];
     child = spawn('cargo', [
-      'run', '--quiet', '-p', 'imail-http-service',
+      'run', '--quiet', ...cargoTargetArguments, '-p', 'imail-http-service',
       '--bin', 'imail-server', '--', '--data-dir', dataDir, '--daemon-control-file', controlFile,
     ], {
       cwd: path.resolve(import.meta.dirname, '..'),

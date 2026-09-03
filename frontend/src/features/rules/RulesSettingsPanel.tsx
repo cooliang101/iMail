@@ -6,6 +6,7 @@ import { AppSwitch } from '../../components/form-controls';
 import { SettingsLinkRow, SettingsPanelHeading } from '../../components/settings-navigation';
 import { Clock, Plus, SlidersHorizontal } from '../../components/icons';
 import { mailRulesService } from '../../services/mail-rules';
+import { formatDate } from '../../components/date-format';
 import { RuleEditor } from './RuleEditor';
 import { ruleInput, validateRule } from './rule-model';
 import './rules.css';
@@ -69,7 +70,7 @@ export function RulesSettingsPanel({ accounts, onReload }: { accounts: Account[]
         <ol className="rule-run-list">{runs.map(run => <li key={run.id}>
           <div><strong>{run.ruleName}</strong><span className={`rule-status is-${run.status}`}>{statuses[run.status]}</span></div>
           <small>{accounts.find(a => a.id === run.accountId)?.email ?? '邮箱已移除'} · {run.source === 'manual' ? '手动执行' : '新收件'} · {run.completedActions}/{run.totalActions} 个动作</small>
-          <time dateTime={run.updatedAt}>{new Date(run.updatedAt).toLocaleString()}</time>
+          <time dateTime={run.updatedAt}>{formatDate(run.updatedAt, { dateStyle: 'short', timeStyle: 'medium' }, 'zh-CN', '时间未知')}</time>
           {run.errorCode && <p className="rule-hint">{run.status === 'needsReview' ? '归档结果不确定，请先检查邮箱；为避免重复移动，不会自动重试。' : `错误：${run.errorCode}`}</p>}
           {run.status === 'failed' && <AppButton disabled={busy} onClick={() => void perform(async () => { await mailRulesService.retry(run.id); await refresh(); })}>重试未完成动作</AppButton>}
         </li>)}</ol>

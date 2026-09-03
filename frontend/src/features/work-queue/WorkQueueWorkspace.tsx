@@ -4,6 +4,7 @@ import { AppSelect } from '../../components/form-controls';
 import { CheckCircle, ClipboardText, Clock, PencilSimple } from '../../components/icons';
 import { AccountProviderMark } from '../../components/provider-icons';
 import type { Account, MailWorkItemView, MailWorkStatus } from '../../types';
+import { formatDate, parseValidDate } from '../../components/date-format';
 
 const statusCopy: Record<MailWorkStatus, string> = {
   needsReply: '待回复', needsReview: '待确认', followUp: '待跟进', waiting: '等待对方',
@@ -11,8 +12,12 @@ const statusCopy: Record<MailWorkStatus, string> = {
 const statusOptions = Object.entries(statusCopy).map(([value, label]) => ({ value, label }));
 
 function dateLabel(value?: string) {
-  if (!value) return '';
-  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  return formatDate(value, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }, 'zh-CN', '时间未知');
+}
+
+function isPast(value?: string) {
+  const date = parseValidDate(value);
+  return Boolean(date && date.getTime() < Date.now());
 }
 
 export function WorkQueueWorkspace({ items, accounts, selectedId, onSelect, onUpdate, onComplete, onOpenDraft }: {
@@ -26,13 +31,13 @@ export function WorkQueueWorkspace({ items, accounts, selectedId, onSelect, onUp
 }) {
   const [filter, setFilter] = useState<MailWorkStatus | 'all'>('all');
   const visible = useMemo(() => filter === 'all' ? items : items.filter(({ item }) => item.status === filter), [filter, items]);
-  const overdue = items.filter(({ item }) => item.dueAt && new Date(item.dueAt).getTime() < Date.now()).length;
+  const overdue = items.filter(({ item }) => isPast(item.dueAt)).length;
   return <section className="message-pane work-queue-pane">
     <header className="draft-pane-header work-queue-header"><div><strong>邮件处理队列</strong><small>{items.length} 项待处理{overdue ? `，${overdue} 项已到期` : ''}</small></div><AppSelect aria-label="筛选处理状态" value={filter} options={[{ value: 'all', label: '全部状态' }, ...statusOptions]} onValueChange={(value) => setFilter(value as MailWorkStatus | 'all')} /></header>
     {visible.length === 0 ? <div className="draft-empty"><ClipboardText size={42} weight="duotone" /><h2>当前没有处理项目</h2><p>在邮件阅读页加入队列，或让 Agent 按规则整理待办。</p></div> : <div className="work-queue-list app-scrollbar">
       {visible.map(({ item, message }) => {
         const account = accounts.find((value) => value.id === item.accountId);
-        const isOverdue = item.dueAt && new Date(item.dueAt).getTime() < Date.now();
+        const isOverdue = isPast(item.dueAt);
         return <article key={item.id} className={`work-queue-item ${selectedId === message.id ? 'is-selected' : ''}`} onClick={() => onSelect(message.id)}>
           <div className="work-queue-item-heading"><span>{account && <AccountProviderMark provider={account.provider} />}<span>{message.from.name || message.from.address}</span></span><em className={`work-queue-status is-${item.status}`}>{statusCopy[item.status]}</em></div>
           <strong>{message.subject || '（无主题）'}</strong><p>{message.preview}</p>

@@ -13,8 +13,11 @@ let fixtureDirectory: string | undefined;
 
 async function startRustFixture(): Promise<FixtureConnection> {
   fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), 'imail-mcp-sdk-'));
+  const cargoTargetArguments = process.platform === 'win32'
+    ? ['--target', 'x86_64-pc-windows-msvc']
+    : [];
   child = spawn('cargo', [
-    'run', '--quiet', '-p', 'imail-http',
+    'run', '--quiet', ...cargoTargetArguments, '-p', 'imail-http',
     '--bin', 'imail-mcp-fixture-server', '--', '--data-dir', fixtureDirectory,
   ], {
     cwd: path.resolve(import.meta.dirname, '..'),

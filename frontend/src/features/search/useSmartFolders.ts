@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/compat';
 import type { SearchFilters, SmartFolder } from '../../app-model';
-import { api } from '../../services';
+import { api, responseObjectArray } from '../../services';
+
+function invalidateGeneration(generation: { current: number }) {
+  generation.current += 1;
+}
 
 export function useSmartFolders(userId: string) {
   const [folders, setFolders] = useState<SmartFolder[]>([]);
@@ -11,12 +15,12 @@ export function useSmartFolders(userId: string) {
     const current = ++generation.current;
     setLoading(true); setError('');
     try {
-      const result = await api<{ folders: SmartFolder[] }>('/api/smart-folders');
-      if (current === generation.current) setFolders(result.folders);
+      const result = await api<unknown>('/api/smart-folders');
+      if (current === generation.current) setFolders(responseObjectArray<SmartFolder>(result, 'folders'));
     } catch (cause) { if (current === generation.current) setError(cause instanceof Error ? cause.message : '智能文件夹加载失败'); }
     finally { if (current === generation.current) setLoading(false); }
   }, []);
-  useEffect(() => { setFolders([]); void reload(); return () => { generation.current++; }; }, [reload, userId]);
+  useEffect(() => { setFolders([]); void reload(); return () => invalidateGeneration(generation); }, [reload, userId]);
   async function save(name: string, filters: SearchFilters, id?: string) {
     const current = generation.current;
     const { folder } = await api<{ folder: SmartFolder }>(id ? `/api/smart-folders/${encodeURIComponent(id)}` : '/api/smart-folders', { method: id ? 'PUT' : 'POST', body: JSON.stringify({ name, filters }) });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMessageQuery } from './selectors';
+import { buildMessageQuery } from '../features/mail/message-query';
 
 describe('buildMessageQuery', () => {
   it('adds exact participant addresses without replacing the other active filters', () => {

@@ -22,5 +22,6 @@ describe('contacts workspace model', () => {
     const now = new Date('2026-08-05T12:00:00.000Z');
     expect(contactRecency('2026-08-05T02:00:00.000Z', now)).toBe('今天联系');
     expect(contactRecency('2026-08-03T02:00:00.000Z', now)).toBe('2 天前联系');
+    expect(contactRecency('', now)).toBe('联系时间未知');
   });
 });

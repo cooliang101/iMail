@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'preact/compat';
-import { api, desktopLog, describeDesktopLogValue, subscribeSyncEvents } from '../../services';
-import { buildMessageQuery } from '../../app/selectors';
+import { api, contactsFromResponse, desktopLog, describeDesktopLogValue, messageFromResponse, subscribeSyncEvents } from '../../services';
+import { buildMessageQuery } from './message-query';
 import type { Account, Contact, Message } from '../../types';
 import type { AppView, MessageStats, Notice, ParticipantFilters, SearchFilters, WorkspaceFolder } from '../../app-model';
 import { appendMessagePage, applyMessageChanges, applyMessageStatsChanges, cacheMessageBody, messageTotalDelta, type MessageChange } from './message-cache';
 import type { MailListFilter } from './MessagePane';
-
-type MessagePage = { messages: Message[]; total: number; nextOffset: number; nextCursor?: string; hasMore: boolean };
+import { messagePageFromResponse } from './mail-response';
+const MESSAGE_PAGE_SIZE = 60;
 
 type Options = {
   searchFilters?: SearchFilters | null;
@@ -58,7 +58,7 @@ export function useMessageCollection(options: Options) {
         // advanced matches or counts from incomplete client-side messages.
         setRevision((value) => value + 1);
         void api<MessageStats>('/api/message-stats').then(setStats).catch(() => {});
-        void api<{ contacts: Contact[] }>('/api/contacts').then((result) => setContacts(result.contacts))
+        void api<unknown>('/api/contacts').then((result) => setContacts(contactsFromResponse(result)))
           .catch((error) => desktopLog('warn', 'contacts.refresh_failed', describeDesktopLogValue(error)));
         return;
       }
@@ -68,7 +68,7 @@ export function useMessageCollection(options: Options) {
       setMessages((current) => applyMessageChanges(current, changes, currentQuery, currentAccounts));
       setMessageTotal((current) => Math.max(0, current + messageTotalDelta(changes, currentQuery, currentAccounts)));
       setStats((current) => applyMessageStatsChanges(current, changes, currentAccounts));
-      void api<{ contacts: Contact[] }>('/api/contacts').then((result) => setContacts(result.contacts))
+      void api<unknown>('/api/contacts').then((result) => setContacts(contactsFromResponse(result)))
         .catch((error) => desktopLog('warn', 'contacts.refresh_failed', describeDesktopLogValue(error)));
     } catch (error) {
       void desktopLog('warn', 'sync.event_invalid', describeDesktopLogValue(error));
@@ -81,7 +81,7 @@ export function useMessageCollection(options: Options) {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setLoading(true);
-      void api<MessagePage>(`/api/messages?${query}&limit=60&offset=0`).then((result) => {
+      void api<unknown>(`/api/messages?${query}&limit=${MESSAGE_PAGE_SIZE}&offset=0`).then(messagePageFromResponse).then((result) => {
         if (cancelled) return;
         implicitSelectedIdRef.current = result.messages[0]?.id ?? null;
         setMessages(result.messages);
@@ -102,7 +102,7 @@ export function useMessageCollection(options: Options) {
   useEffect(() => {
     if (view === 'contacts' || view === 'tokens' || !selected || selected.text !== undefined) return;
     let cancelled = false;
-    void api<{ message: Message }>(`/api/messages/${selected.id}`).then(({ message }) => {
+    void api<unknown>(`/api/messages/${selected.id}`).then(messageFromResponse).then((message) => {
       if (!cancelled) setMessages((current) => {
         const cached = cacheMessageBody(current, message, recentBodyIdsRef.current);
         recentBodyIdsRef.current = cached.recentBodyIds;
@@ -120,7 +120,7 @@ export function useMessageCollection(options: Options) {
     setLoading(true);
     try {
       const cursorParameter = nextCursor ? `&cursor=${encodeURIComponent(nextCursor)}` : '';
-      const result = await api<MessagePage>(`/api/messages?${queryAtStart}&limit=60${cursorParameter}`);
+      const result = messagePageFromResponse(await api<unknown>(`/api/messages?${queryAtStart}&limit=${MESSAGE_PAGE_SIZE}${cursorParameter}`));
       if (queryRef.current !== queryAtStart) return;
       setMessages((current) => appendMessagePage(current, result.messages));
       setMessageTotal(result.total);

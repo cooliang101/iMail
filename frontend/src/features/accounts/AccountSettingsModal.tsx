@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'preact/compat';
 import { Envelope, WarningCircle } from '../../components/icons';
-import { api } from '../../services';
+import { api, responseObjectArray } from '../../services';
 import { oauthCallbackOrigins } from '../../config/provider-guides';
 import type { Account } from '../../types';
 import type { Notice } from '../../app-model';
@@ -9,6 +9,7 @@ import { proxyInputFromForm } from './ProxyFields';
 import { usePlatform } from '../../platform/runtime';
 import { SettingsLinkRow, SettingsPanelHeading } from '../../components/settings-navigation';
 import { ProviderIcon, providerLabel } from '../../components/shared';
+import { OAUTH_POPUP_CHECK_INTERVAL_MS, OAUTH_WAIT_TIMEOUT_MS, openOAuthPopup, waitForOAuthStatus } from './oauth-flow';
 
 export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNotice }: { accounts: Account[]; onAddAccount: () => void; onReload: () => Promise<void>; setNotice: (notice: Notice) => void }) {
   const platform = usePlatform();
@@ -27,8 +28,9 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
   useEffect(() => {
     if (!providersRequestedRef.current) {
       providersRequestedRef.current = true;
-      void api<{ oauth: Array<{ redirectUri: string }> }>('/api/providers').then((result) => {
-        oauthOriginsRef.current = oauthCallbackOrigins(result.oauth.map((item) => item.redirectUri), window.location.origin);
+      void api<unknown>('/api/providers').then((result) => {
+        const oauth = responseObjectArray<{ redirectUri: string }>(result, 'oauth');
+        oauthOriginsRef.current = oauthCallbackOrigins(oauth.map((item) => item.redirectUri), window.location.origin);
       }).catch((reason) => setError(reason instanceof Error ? reason.message : '快捷登录配置读取失败'));
     }
     const receive = (event: MessageEvent) => {
@@ -45,7 +47,7 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
     window.addEventListener('message', receive);
     const timer = window.setInterval(() => {
       if (popupRef.current?.closed) { popupRef.current = null; setBusyId(null); setError('授权窗口已关闭；如果已经完成授权，请点击“重试连接”确认状态。'); }
-    }, 700);
+    }, OAUTH_POPUP_CHECK_INTERVAL_MS);
     return () => { window.removeEventListener('message', receive); window.clearInterval(timer); };
   }, [onReload, setNotice]);
 
@@ -63,9 +65,9 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
       try {
         const result = await api<{ authorizationUrl: string; state: string }>(`/api/accounts/${account.id}/oauth/reconnect`, { method: 'POST' });
         await platform.openExternal(result.authorizationUrl);
-        const deadline = Date.now() + 10 * 60_000;
+        const deadline = Date.now() + OAUTH_WAIT_TIMEOUT_MS;
         while (oauthAttemptRef.current === attempt && Date.now() < deadline) {
-          await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+          await waitForOAuthStatus();
           const status = await api<{ completed: false } | { completed: true; account: Account }>('/api/oauth/status', { method: 'POST', body: JSON.stringify({ state: result.state }) });
           if (!status.completed) continue;
           await onReload();
@@ -82,9 +84,8 @@ export function AccountSettingsPanel({ accounts, onAddAccount, onReload, setNoti
       }
       return;
     }
-    const popup = window.open('', 'imail-oauth', 'popup,width=560,height=720,menubar=no,toolbar=no');
+    const popup = openOAuthPopup();
     if (!popup) { setError('浏览器阻止了登录窗口，请允许弹出窗口后重试'); return; }
-    popup.document.write('<title>iMail</title><p style="font-family:system-ui;padding:32px">正在打开安全登录…</p>');
     popupRef.current = popup;
     setBusyId(account.id);
     try {

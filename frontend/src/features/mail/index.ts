@@ -5,4 +5,7 @@ export * from './HtmlEmailBody';
 export * from './message-cache';
 export * from './message-actions';
 export * from './useMessageCollection';
+export * from './useMessageActions';
 export * from './participant-filter';
+export * from './mail-response';
+export * from './message-query';

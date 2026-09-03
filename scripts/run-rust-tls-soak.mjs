@@ -58,8 +58,11 @@ async function run() {
   if (!await pathExists(parent)) {
     throw new Error('长稳报告父目录不存在；请先确认验收输出目录');
   }
+  const cargoTargetArguments = process.platform === 'win32'
+    ? ['--target', 'x86_64-pc-windows-msvc']
+    : [];
   const args = [
-    'test', '--release', '--locked',
+    'test', '--release', ...cargoTargetArguments, '--locked',
     '-p', 'imail-http',
     'tests::real_mail_fixture::real_tls_idle_runtime_soak_acceptance',
     '--', '--ignored', '--exact', '--nocapture',

@@ -2,7 +2,7 @@ import '../../styles/dialogs.css';
 import { useEffect, useRef, useState, type FormEvent } from 'preact/compat';
 import { AppButton } from '../../components/AppButton';
 import { WarningCircle, X } from '../../components/icons';
-import { api } from '../../services';
+import { accountsFromResponse, api, responseObjectArray } from '../../services';
 import { credentialGuideFor, oauthCallbackOrigins } from '../../config/provider-guides';
 import type { Account, ProviderId } from '../../types';
 import type { Notice } from '../../app-model';
@@ -13,6 +13,7 @@ import { ProviderPicker } from './ProviderPicker';
 import { usePlatform } from '../../platform/runtime';
 import { proxyInputFromForm } from './ProxyFields';
 import { customMailSettingsFromForm } from './custom-mail-settings';
+import { OAUTH_POPUP_CHECK_INTERVAL_MS, OAUTH_WAIT_TIMEOUT_MS, oauthWaitExpired, openOAuthPopup, waitForOAuthStatus } from './oauth-flow';
 
 const defaultWorkspaceNames = ['工作', '个人', '对外支持', '开发测试', '同学联系'];
 
@@ -46,10 +47,11 @@ export function AddAccountModal({ accounts, initialProvider = 'outlook', managed
   useEffect(() => { onAddedRef.current = onAdded; }, [onAdded]);
 
   useEffect(() => {
-    void api<{ oauth: Array<{ id: string; configured: boolean; redirectUri: string; configurationHint: string }> }>('/api/providers')
+    void api<unknown>('/api/providers')
       .then((result) => {
-        setOauthCatalog(result.oauth);
-        oauthOriginsRef.current = oauthCallbackOrigins(result.oauth.map((item) => item.redirectUri), window.location.origin);
+        const oauth = responseObjectArray<{ id: string; configured: boolean; redirectUri: string; configurationHint: string }>(result, 'oauth');
+        setOauthCatalog(oauth);
+        oauthOriginsRef.current = oauthCallbackOrigins(oauth.map((item) => item.redirectUri), window.location.origin);
       })
       .catch(() => setError('暂时无法读取快捷登录配置，请稍后重试。'));
   }, []);
@@ -61,8 +63,8 @@ export function AddAccountModal({ accounts, initialProvider = 'outlook', managed
   useEffect(() => {
     const reconcileOAuthAccount = async (failureMessage: string) => {
       try {
-        const result = await api<{ accounts: Account[] }>('/api/accounts');
-        const connected = result.accounts.find((account) =>
+        const accounts = accountsFromResponse(await api<unknown>('/api/accounts'));
+        const connected = accounts.find((account) =>
           !oauthAccountIdsRef.current.has(account.id)
           && account.provider === oauthProviderRef.current
           && account.authMethod === 'oauth2',
@@ -90,13 +92,13 @@ export function AddAccountModal({ accounts, initialProvider = 'outlook', managed
     const watchPopup = window.setInterval(() => {
       const popup = popupRef.current;
       if (!popup) return;
-      if (Date.now() - oauthStartedAtRef.current > 10 * 60_000) {
+      if (oauthWaitExpired(oauthStartedAtRef.current)) {
         popup.close(); popupRef.current = null; setBusy(false); void reconcileOAuthAccount('授权等待已超时，请重新发起登录。'); return;
       }
       try {
         if (popup.closed) { popupRef.current = null; setBusy(false); void reconcileOAuthAccount('授权窗口已关闭，邮箱尚未添加。你可以检查配置后重试。'); }
       } catch { /* 跨域授权页只需继续等待回调 */ }
-    }, 400);
+    }, OAUTH_POPUP_CHECK_INTERVAL_MS);
     window.addEventListener('message', receive);
     return () => { window.removeEventListener('message', receive); window.clearInterval(watchPopup); popupRef.current?.close(); };
   }, []);
@@ -117,14 +119,14 @@ export function AddAccountModal({ accounts, initialProvider = 'outlook', managed
       oauthProviderRef.current = provider;
       if (platform.kind === 'tauri') {
         try {
-          const snapshot = await api<{ accounts: Account[] }>('/api/accounts');
-          oauthAccountIdsRef.current = new Set(snapshot.accounts.map((account) => account.id));
+          const snapshot = accountsFromResponse(await api<unknown>('/api/accounts'));
+          oauthAccountIdsRef.current = new Set(snapshot.map((account) => account.id));
           const result = await api<{ authorizationUrl: string }>('/api/oauth/start', { method: 'POST', body: JSON.stringify({ provider, displayName: form.get('displayName') || undefined, group: form.get('group'), color: '#168f78', proxy }) });
           await platform.openExternal(result.authorizationUrl);
-          while (!oauthCancelledRef.current && Date.now() - oauthStartedAtRef.current <= 10 * 60_000) {
-            await new Promise((resolve) => window.setTimeout(resolve, 1_000));
-            const current = await api<{ accounts: Account[] }>('/api/accounts');
-            const connected = current.accounts.find((account) => !oauthAccountIdsRef.current.has(account.id) && account.provider === oauthProviderRef.current && account.authMethod === 'oauth2');
+          while (!oauthCancelledRef.current && Date.now() - oauthStartedAtRef.current <= OAUTH_WAIT_TIMEOUT_MS) {
+            await waitForOAuthStatus();
+            const current = accountsFromResponse(await api<unknown>('/api/accounts'));
+            const connected = current.find((account) => !oauthAccountIdsRef.current.has(account.id) && account.provider === oauthProviderRef.current && account.authMethod === 'oauth2');
             if (!connected) continue;
             setBusy(false);
             await onAddedRef.current(connected.status === 'connected' ? undefined : { warning: `${connected.email} 的授权已保存；${connected.lastError || '邮件连接仍需重试'}` });
@@ -138,13 +140,12 @@ export function AddAccountModal({ accounts, initialProvider = 'outlook', managed
         }
         return;
       }
-      const popup = window.open('', 'imail-oauth', 'popup,width=560,height=720,menubar=no,toolbar=no');
+      const popup = openOAuthPopup();
       if (!popup) { setError('浏览器阻止了登录窗口，请允许弹出窗口后重试'); setBusy(false); return; }
-      popup.document.write('<title>iMail</title><p style="font-family:system-ui;padding:32px">正在打开安全登录…</p>');
       popupRef.current = popup;
       try {
-        const snapshot = await api<{ accounts: Account[] }>('/api/accounts');
-        oauthAccountIdsRef.current = new Set(snapshot.accounts.map((account) => account.id));
+        const snapshot = accountsFromResponse(await api<unknown>('/api/accounts'));
+        oauthAccountIdsRef.current = new Set(snapshot.map((account) => account.id));
         const result = await api<{ authorizationUrl: string }>('/api/oauth/start', { method: 'POST', body: JSON.stringify({ provider, displayName: form.get('displayName') || undefined, group: form.get('group'), color: '#168f78', proxy }) });
         popup.location.replace(result.authorizationUrl);
       } catch (value) {

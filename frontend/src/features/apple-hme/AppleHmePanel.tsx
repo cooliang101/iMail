@@ -6,6 +6,7 @@ import { CheckCircle, Copy, Globe, Key, LockKey, Plus, WarningCircle } from '../
 import { SettingsLinkRow } from '../../components/settings-navigation';
 import { api } from '../../services';
 import type { Account } from '../../types';
+import { formatDate, parseValidDate } from '../../components/date-format';
 
 type HmeStatus = {
   accountId: string;
@@ -35,7 +36,7 @@ type LoginResult = {
 export type AppleHmeView = 'overview' | 'addresses' | 'create' | 'appleAccountLogin' | 'icloudWebLogin';
 
 function keepaliveLabel(value?: string) {
-  return value ? `最近成功保活：${new Date(value).toLocaleString()}` : '尚无成功保活记录';
+  return value ? `最近成功保活：${formatDate(value, { dateStyle: 'short', timeStyle: 'medium' }, 'zh-CN', '时间未知')}` : '尚无成功保活记录';
 }
 
 export function AppleHmePanel({ account, setNotice, view, onViewChange }: { account: Account; setNotice: (notice: Notice) => void; view: AppleHmeView; onViewChange: (view: AppleHmeView) => void }) {
@@ -53,7 +54,7 @@ export function AppleHmePanel({ account, setNotice, view, onViewChange }: { acco
   const loadAddresses = useCallback(async () => {
     const result = await api<{ addresses: AppleHmeAddress[]; lastSyncedAt?: string | null }>(`/api/accounts/${account.id}/apple-hme/addresses`);
     setAddresses(result.addresses);
-    setLastSyncedAt(result.lastSyncedAt ?? null);
+    setLastSyncedAt(parseValidDate(result.lastSyncedAt) ? result.lastSyncedAt ?? null : null);
   }, [account.id]);
 
   const loadStatus = useCallback(async () => {
@@ -89,7 +90,7 @@ export function AppleHmePanel({ account, setNotice, view, onViewChange }: { acco
     try {
       const result = await api<{ addresses: AppleHmeAddress[]; lastSyncedAt: string }>(`/api/accounts/${account.id}/apple-hme/addresses/sync`, { method: 'POST' });
       setAddresses(result.addresses);
-      setLastSyncedAt(result.lastSyncedAt);
+      setLastSyncedAt(parseValidDate(result.lastSyncedAt) ? result.lastSyncedAt : null);
       setNotice({ kind: 'success', text: `已从 Apple 同步 ${result.addresses.length} 个隐藏邮件地址` });
     } catch (value) {
       setError(value instanceof Error ? value.message : '隐藏邮件地址同步失败');

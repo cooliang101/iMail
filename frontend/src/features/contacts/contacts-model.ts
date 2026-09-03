@@ -1,4 +1,5 @@
 import type { Contact } from '../../types';
+import { parseValidDate } from '../../components/date-format';
 
 export function filterContacts(contacts: Contact[], queryValue: string) {
   const query = queryValue.trim().toLocaleLowerCase();
@@ -14,7 +15,8 @@ export function contactAccent(address: string) {
 }
 
 export function contactRecency(value: string, now = new Date()) {
-  const date = new Date(value);
+  const date = parseValidDate(value);
+  if (!date || Number.isNaN(now.getTime())) return '联系时间未知';
   const elapsedDays = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 86_400_000));
   if (elapsedDays === 0) return '今天联系';
   if (elapsedDays === 1) return '昨天联系';

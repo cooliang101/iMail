@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'preact/compat';
 import type { Account, Message } from '../../types';
 import type { ComposeMode, MessageBodyView } from '../../app-model';
 import { api } from '../../services';
+import { formatDate } from '../../components/date-format';
 import { AppButton } from '../../components/AppButton';
 import { MessageBody } from './MessageBody';
 import '../../styles/conversation.css';
@@ -52,7 +53,7 @@ function ConversationMessage({ summary, account, view, onCompose }: {
   return <details className="conversation-message" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>
       <strong>{summary.from.name || summary.from.address}</strong><span>{summary.subject}</span>
-      <small>{account?.email ?? summary.accountId} · {summary.mailbox} · {new Date(summary.date).toLocaleString()} {summary.unread ? '· 未读' : ''}</small>
+      <small>{account?.email ?? summary.accountId} · {summary.mailbox} · {formatDate(summary.date, { dateStyle: 'short', timeStyle: 'medium' }, 'zh-CN', '时间未知')} {summary.unread ? '· 未读' : ''}</small>
     </summary>
     {open && <div className="conversation-message-content">
       {error ? <><p role="alert">{error}</p><AppButton onClick={() => setRevision(value => value + 1)}>重试</AppButton></> : detail ? <>

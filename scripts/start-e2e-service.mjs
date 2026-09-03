@@ -4,8 +4,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 const dataDirectory = await mkdtemp(path.join(tmpdir(), 'imail-frontend-e2e-'));
+const cargoTargetArguments = process.platform === 'win32'
+  ? ['--target', 'x86_64-pc-windows-msvc']
+  : [];
 const cargo = spawn('cargo', [
-  'run', '--locked', '-p', 'imail-http-service', '--',
+  'run', ...cargoTargetArguments, '--locked', '-p', 'imail-http-service', '--',
   '--data-dir', dataDirectory,
   '--host', '127.0.0.1',
   '--port', '18787',

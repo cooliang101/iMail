@@ -1,11 +1,11 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/compat';
 import { ArrowCounterClockwise, Check, WarningCircle } from './components/icons';
-import { api, desktopLog, describeDesktopLogValue } from './services';
-import { buildMessageQuery, buildWorkspaceFolders } from './app/selectors';
-import type { Account, Contact, DeveloperToken, Draft, MailWorkItemView, MailWorkStatus, Message, OutboxItem, ProviderId } from './types';
-import type { ApiGatewayCredential, AppView, ContextTarget, MailNotification, MailParticipant, MessageStats, Notice, ParticipantRole, SearchFilters, SmartFolder, WorkspaceFolder } from './app-model';
+import { accountsFromResponse, api, contactsFromResponse, desktopLog, describeDesktopLogValue, draftsFromResponse, notificationsFromResponse, outboxFromResponse, responseStringArray, tokensFromResponse, workItemsFromResponse } from './services';
+import { buildWorkspaceFolders } from './app/selectors';
+import type { Account, Contact, DeveloperToken, Draft, MailWorkItemView, Message, OutboxItem, ProviderId } from './types';
+import type { ApiGatewayCredential, AppView, ContextTarget, MailNotification, MailParticipant, Notice, ParticipantRole, SearchFilters, SmartFolder, WorkspaceFolder } from './app-model';
 import { AppAccountRail, AppSidebar, AppTopbar, useWorkspaceNavigation } from './features/navigation';
-import { applyOptimisticMessageMutation, clearParticipantFilter, EMPTY_PARTICIPANT_FILTERS, MessageActionCoordinator, MessagePane, MessageReader, rollbackOptimisticMessageMutation, setParticipantFilter, type MailListFilter, useMessageCollection } from './features/mail';
+import { buildMessageQuery, clearParticipantFilter, EMPTY_PARTICIPANT_FILTERS, MessageActionCoordinator, MessagePane, MessageReader, messageStatsFromResponse, setParticipantFilter, type MailListFilter, useMessageActions, useMessageCollection } from './features/mail';
 import { AdvancedSearchPanel } from './features/search/AdvancedSearchPanel';
 import { SmartFoldersNav } from './features/search/SmartFoldersNav';
 import { useSmartFolders } from './features/search/useSmartFolders';
@@ -27,13 +27,16 @@ import { useNewMailNotifications } from './features/notifications';
 import { useI18n } from './features/i18n';
 import { FeatureErrorBoundary, WorkspaceErrorBoundary } from './components/ErrorBoundary';
 import { AddAccountModal, AppContextMenu, ComposePane, CreateApiTokenModal, CreateMcpTokenModal, LabelModal, NotificationsModal, PreferencesSyncErrorDialog, preloadDeferredFeaturesDuringIdle, SettingsModal, SnoozeModal, WorkspaceModal } from './app/lazy-features';
+import { MOBILE_MAIL_QUERY, NOTICE_VISIBLE_MS, OUTBOX_REFRESH_INTERVAL_MS } from './app/constants';
+import { useOutboxActions } from './features/compose/useOutboxActions';
+import { useWorkQueueActions } from './features/work-queue/useWorkQueueActions';
+import { applySettledResult } from './app/settled-result';
 
 function FeatureFallback({ label, kind = 'overlay' }: { label: string; kind?: 'workspace' | 'pane' | 'overlay' }) {
   const { t } = useI18n();
   return <div className={`feature-loading feature-loading-${kind}`} role="status">{t('正在加载{label}…', { label: t(label) })}</div>;
 }
 
-type PendingMove = { message: Message; index: number; nextId: string | null; destination: 'archive' | 'trash'; unreadDelta: number };
 type AddAccountIntent = { initialProvider?: ProviderId; managedIcloud?: boolean; returnToSettings?: SettingsTab };
 
 function App() {
@@ -70,8 +73,6 @@ function App() {
   const [activeDraft, setActiveDraft] = useState<Draft | undefined>();
   const [composeAccountId, setComposeAccountId] = useState<string | undefined>();
   const [composeInitialTo, setComposeInitialTo] = useState<string[]>([]);
-  const [messageActionBusy, setMessageActionBusy] = useState(false);
-  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const realAccountsRef = useRef<Account[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const folderDiscoveryStarted = useRef(false);
@@ -117,46 +118,56 @@ function App() {
 
   const load = useCallback(async () => {
     const results = await Promise.allSettled([
-      api<{ accounts: Account[] }>('/api/accounts'),
-      api<{ tokens: DeveloperToken[] }>('/api/developer-tokens'),
-      api<MessageStats>('/api/message-stats'),
-      api<{ drafts: Draft[] }>('/api/drafts'),
-      api<{ labels: string[] }>('/api/labels'),
-      api<{ contacts: Contact[] }>('/api/contacts'),
-      api<{ items: OutboxItem[] }>('/api/outbox'),
-      api<{ items: MailWorkItemView[] }>('/api/mail-work-items'),
+      api<unknown>('/api/accounts'),
+      api<unknown>('/api/developer-tokens'),
+      api<unknown>('/api/message-stats'),
+      api<unknown>('/api/drafts'),
+      api<unknown>('/api/labels'),
+      api<unknown>('/api/contacts'),
+      api<unknown>('/api/outbox'),
+      api<unknown>('/api/mail-work-items'),
     ] as const);
     const [accountResult, tokenResult, statsResult, draftResult, labelResult, contactResult, outboxResult, workItemsResult] = results;
     if (accountResult.status === 'rejected') {
       setNotice({ kind: 'error', text: accountResult.reason instanceof Error ? accountResult.reason.message : '邮箱账户加载失败' });
       return;
     }
-    setRealAccounts(accountResult.value.accounts);
-    if (tokenResult.status === 'fulfilled') setTokens(tokenResult.value.tokens);
-    if (statsResult.status === 'fulfilled') setMessageStats(statsResult.value);
-    if (draftResult.status === 'fulfilled') setDrafts(draftResult.value.drafts);
-    if (labelResult.status === 'fulfilled') setLabels(labelResult.value.labels);
-    if (contactResult.status === 'fulfilled') setContacts(contactResult.value.contacts);
-    if (outboxResult.status === 'fulfilled') setOutbox(outboxResult.value.items);
-    if (workItemsResult.status === 'fulfilled') setWorkItems(workItemsResult.value.items);
-    const optionalFailure = results.slice(1).find((result) => result.status === 'rejected');
-    if (optionalFailure?.status === 'rejected') {
-      setNotice({ kind: 'error', text: optionalFailure.reason instanceof Error ? optionalFailure.reason.message : '部分邮箱数据加载失败，已保留现有内容' });
+    try {
+      setRealAccounts(accountsFromResponse(accountResult.value));
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮箱账户数据格式不正确' });
+      return;
+    }
+    const optionalFailures = [
+      applySettledResult(tokenResult, tokensFromResponse, setTokens),
+      applySettledResult(statsResult, messageStatsFromResponse, setMessageStats),
+      applySettledResult(draftResult, draftsFromResponse, setDrafts),
+      applySettledResult(labelResult, (value) => responseStringArray(value, 'labels'), setLabels),
+      applySettledResult(contactResult, contactsFromResponse, setContacts),
+      applySettledResult(outboxResult, outboxFromResponse, setOutbox),
+      applySettledResult(workItemsResult, workItemsFromResponse, setWorkItems),
+    ].filter((failure) => failure !== undefined);
+    if (optionalFailures.length > 0) {
+      const failure = optionalFailures[0];
+      setNotice({ kind: 'error', text: failure instanceof Error ? failure.message : '部分邮箱数据加载失败，已保留现有内容' });
     }
   }, [setMessageStats]);
 
   const loadOutbox = useCallback(async () => {
-    const result = await api<{ items: OutboxItem[] }>('/api/outbox');
-    setOutbox(result.items);
+    const result = await api<unknown>('/api/outbox');
+    setOutbox(outboxFromResponse(result));
   }, []);
+
+  const { cancelOutboxItem, retryOutboxItem, resolveOutboxItem } = useOutboxActions({ reloadAll: load, reloadOutbox: loadOutbox, setNotice });
+  const { setWorkItem, completeWorkItem } = useWorkQueueActions({ workItems, selectedId, setSelectedId, setWorkItems, setNotice });
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     let active = true;
-    const refresh = () => void api<{ items: OutboxItem[] }>('/api/outbox')
-      .then((result) => { if (active) setOutbox(result.items); })
+    const refresh = () => void api<unknown>('/api/outbox')
+      .then((result) => { if (active) setOutbox(outboxFromResponse(result)); })
       .catch(() => undefined);
-    const timer = window.setInterval(refresh, 3_000);
+    const timer = window.setInterval(refresh, OUTBOX_REFRESH_INTERVAL_MS);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
   useEffect(() => {
@@ -186,7 +197,7 @@ function App() {
   }, [accounts, load]);
   useEffect(() => {
     if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 4200);
+    const timer = window.setTimeout(() => setNotice(null), NOTICE_VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [notice]);
 
@@ -195,6 +206,7 @@ function App() {
   const selectedIndex = selected ? messages.findIndex((message) => message.id === selected.id) : -1;
   const activeAccount = accountFilter === 'all' ? undefined : accounts.find((account) => account.id === accountFilter);
   const visibleMessages = mailFilter === 'unread' ? messages.filter((message) => message.unread) : messages;
+  const { messageActionBusy, pendingMove, setMessageUnread, markSelectedUnread, toggleSelectedFlag, moveSelected, undoPendingMove } = useMessageActions({ accounts, messages, selected, view, mailFilter, coordinator: messageActionsRef.current, setMessages: setRealMessages, setMessageTotal, setMessageStats, setMessageRevision, setSelectedId, setNotice });
 
   useEffect(() => {
     if (!['sent', 'archive', 'drafts', 'trash', 'junk'].includes(view) || accounts.length === 0) return;
@@ -226,7 +238,7 @@ function App() {
   }
 
   async function openNotifications() {
-    try { const result = await api<{ notifications: MailNotification[] }>('/api/notifications'); setNotifications(result.notifications.filter((item) => preferences.notificationKinds[item.kind])); setNotificationsOpen(true); }
+    try { const result = await api<unknown>('/api/notifications'); setNotifications(notificationsFromResponse(result).filter((item) => preferences.notificationKinds[item.kind])); setNotificationsOpen(true); }
     catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '通知加载失败' }); }
   }
 
@@ -239,54 +251,6 @@ function App() {
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件更新失败' }); }
   }
 
-  async function setMessageUnread(message: Message, unread: boolean) {
-    if (message.unread === unread || messageActionsRef.current.isActive(message.id)) return;
-    await messageActionsRef.current.run(message.id, async () => {
-      setMessageActionBusy(true);
-      setRealMessages((current) => applyOptimisticMessageMutation(current, message.id, { unread }));
-      if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current + (unread ? 1 : -1)));
-      if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, unread ? 1 : -1);
-      try {
-        await api(`/api/messages/${message.id}`, { method: 'PATCH', body: JSON.stringify({ unread }) });
-        setNotice({ kind: 'success', text: unread ? '邮件已标记为未读' : '邮件已标记为已读' });
-      } catch (error) {
-        setRealMessages((current) => rollbackOptimisticMessageMutation(current, message.id, { unread }, { unread: message.unread }));
-        if (mailFilter === 'unread') setMessageTotal((current) => Math.max(0, current + (unread ? -1 : 1)));
-        if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 0, unread ? -1 : 1);
-        setNotice({ kind: 'error', text: error instanceof Error ? error.message : '已读状态更新失败' });
-      } finally { setMessageRevision((value) => value + 1); setMessageActionBusy(false); }
-    });
-  }
-
-  async function markSelectedUnread() { if (selected) await setMessageUnread(selected, true); }
-
-  async function toggleSelectedFlag(target = selected) {
-    if (!target || messageActionsRef.current.isActive(target.id)) return;
-    const flagged = !target.flagged;
-    await messageActionsRef.current.run(target.id, async () => {
-      setMessageActionBusy(true);
-      setRealMessages((current) => applyOptimisticMessageMutation(current, target.id, { flagged }));
-      try {
-        await api(`/api/messages/${target.id}`, { method: 'PATCH', body: JSON.stringify({ flagged }) });
-        if (view === 'starred' && !flagged) setMessageRevision((value) => value + 1);
-      } catch (error) {
-        setRealMessages((current) => rollbackOptimisticMessageMutation(current, target.id, { flagged }, { flagged: target.flagged }));
-        setNotice({ kind: 'error', text: error instanceof Error ? error.message : '星标更新失败' });
-      } finally { setMessageRevision((value) => value + 1); setMessageActionBusy(false); }
-    });
-  }
-
-  function adjustMessageStats(accountId: string, totalDelta: number, unreadDelta: number) {
-    const account = accounts.find((item) => item.id === accountId);
-    setMessageStats((current) => ({
-      ...current,
-      total: Math.max(0, current.total + totalDelta),
-      unread: Math.max(0, current.unread + unreadDelta),
-      byAccount: current.byAccount.map((item) => item.accountId === accountId ? { ...item, total: Math.max(0, item.total + totalDelta), unread: Math.max(0, item.unread + unreadDelta) } : item),
-      byGroup: current.byGroup.map((item) => item.group === account?.group ? { ...item, total: Math.max(0, item.total + totalDelta), unread: Math.max(0, item.unread + unreadDelta) } : item),
-    }));
-  }
-
   async function selectMessage(id: string) {
     if (composeMode && !await composePaneRef.current?.close()) return;
     setSelectedId(id);
@@ -294,59 +258,6 @@ function App() {
     if (!message?.unread || !preferences.markReadOnOpen) return;
 
     void setMessageUnread(message, false);
-  }
-
-  async function moveSelected(destination: 'archive' | 'trash', target = selected) {
-    if (!target || messageActionBusy || !messageActionsRef.current.begin(target.id)) return;
-    const message = target;
-    const index = messages.findIndex((item) => item.id === message.id);
-    const nextId = messages[index + 1]?.id ?? messages[index - 1]?.id ?? null;
-    const unreadDelta = message.unread ? -1 : 0;
-    setMessageActionBusy(true);
-    setRealMessages((current) => current.filter((item) => item.id !== message.id));
-    setMessageTotal((current) => Math.max(0, current - 1));
-    if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, -1, unreadDelta);
-    setSelectedId(nextId);
-    setPendingMove({ message, index, nextId, destination, unreadDelta });
-  }
-
-  function restorePendingMove(move: PendingMove) {
-    const { message, index, unreadDelta } = move;
-    setRealMessages((current) => {
-      if (current.some((item) => item.id === message.id)) return current;
-      const restored = [...current]; restored.splice(Math.min(index, restored.length), 0, message); return restored;
-    });
-    setMessageTotal((current) => current + 1);
-    if (message.mailboxRole === 'inbox') adjustMessageStats(message.accountId, 1, -unreadDelta);
-    setSelectedId(message.id);
-    setMessageActionBusy(false);
-  }
-
-  useEffect(() => {
-    if (!pendingMove) return;
-    const timer = window.setTimeout(() => {
-      const move = pendingMove;
-      setPendingMove(null);
-      void api(`/api/messages/${move.message.id}/move`, { method: 'POST', body: JSON.stringify({ destination: move.destination }) }).then(() => {
-        setNotice({ kind: 'success', text: move.destination === 'archive' ? '邮件已归档' : '邮件已移至垃圾箱' });
-      }).catch((error) => {
-        restorePendingMove(move);
-        setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件移动失败' });
-      }).finally(() => {
-        messageActionsRef.current.end(move.message.id);
-        setMessageRevision((value) => value + 1); setMessageActionBusy(false);
-      });
-    }, 4500);
-    return () => window.clearTimeout(timer);
-  }, [pendingMove]);
-
-  function undoPendingMove() {
-    if (!pendingMove) return;
-    const move = pendingMove;
-    setPendingMove(null);
-    restorePendingMove(move);
-    messageActionsRef.current.end(move.message.id);
-    setNotice({ kind: 'success', text: '已撤销邮件移动' });
   }
 
   function openAdvancedSearch() {
@@ -372,69 +283,6 @@ function App() {
     selectNavigationScope(nextView, nextAccount, nextGroup); setSelectedId(null);
   }
 
-  async function cancelOutboxItem(id: string) {
-    try {
-      await api(`/api/outbox/${id}`, { method: 'DELETE' });
-      await load();
-      setNotice({ kind: 'success', text: '定时任务已取消，邮件已返回草稿' });
-    } catch (error) {
-      void loadOutbox();
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '定时任务取消失败' });
-    }
-  }
-
-  async function retryOutboxItem(id: string) {
-    try {
-      await api(`/api/outbox/${id}/retry`, { method: 'POST' });
-      await load();
-      setNotice({ kind: 'success', text: '邮件已重新加入发送队列' });
-    } catch (error) {
-      void loadOutbox();
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '邮件重新发送失败' });
-    }
-  }
-
-  async function resolveOutboxItem(id: string, resolution: 'sent' | 'notSent') {
-    try {
-      await api(`/api/outbox/${id}/resolve`, { method: 'POST', body: JSON.stringify({ resolution }) });
-      await load();
-      setNotice({ kind: 'success', text: resolution === 'sent' ? '邮件已标记为人工核对完成' : '邮件已返回草稿' });
-    } catch (error) {
-      void loadOutbox();
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '人工核对结果保存失败' });
-    }
-  }
-
-  async function refreshWorkQueue() {
-    const result = await api<{ items: MailWorkItemView[] }>('/api/mail-work-items');
-    setWorkItems(result.items);
-  }
-
-  async function setWorkItem(messageId: string, status: MailWorkStatus = 'needsReply') {
-    const existing = workItems.find(({ item }) => item.messageId === messageId)?.item;
-    try {
-      await api(`/api/messages/${encodeURIComponent(messageId)}/work-item`, {
-        method: 'PUT',
-        body: JSON.stringify({ status, dueAt: existing?.dueAt, note: existing?.note ?? '' }),
-      });
-      await refreshWorkQueue();
-      setNotice({ kind: 'success', text: existing ? '处理状态已更新' : '邮件已加入处理队列' });
-    } catch (error) {
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '处理队列更新失败' });
-    }
-  }
-
-  async function completeWorkItem(messageId: string) {
-    try {
-      await api(`/api/messages/${encodeURIComponent(messageId)}/work-item`, { method: 'DELETE' });
-      await refreshWorkQueue();
-      if (selectedId === messageId) setSelectedId(null);
-      setNotice({ kind: 'success', text: '处理项目已完成' });
-    } catch (error) {
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '处理项目完成失败' });
-    }
-  }
-
   async function selectMailbox(folder: WorkspaceFolder) {
     if (composePaneRef.current && !await composePaneRef.current.close()) return;
     selectNavigationMailbox(folder); setSelectedId(null);
@@ -447,7 +295,7 @@ function App() {
 
   function filterParticipant(role: ParticipantRole, participant: MailParticipant) {
     setParticipantFilters((current) => setParticipantFilter(current, role, participant));
-    if (window.matchMedia('(max-width: 650px)').matches) setSelectedId(null);
+    if (window.matchMedia(MOBILE_MAIL_QUERY).matches) setSelectedId(null);
   }
 
   function removeParticipantFilter(role: ParticipantRole) {
