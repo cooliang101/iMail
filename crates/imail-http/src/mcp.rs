@@ -179,7 +179,7 @@ impl McpSendInput {
 }
 
 async fn handle(State(state): State<Arc<AppState>>, request: Request) -> Response {
-    if !crate::host_allowed(
+    if !crate::boundary::host_allowed(
         request
             .headers()
             .get(header::HOST)

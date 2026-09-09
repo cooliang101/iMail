@@ -41,7 +41,7 @@ schema 12 为邮件加入安全解析后的头部 JSON，为草稿加入写信 e
 | 引用展示安全 | `frontend/src/features/mail/quoted-history.test.ts`：多层引用、行内回复、服务商容器及 HTML 清理 |
 | 会话关系 | `crates/imail-core/src/messages/conversation.rs`：缺失祖先、循环、重复 ID 冲突、账户/文件夹副本与一万封长链 |
 | 数据与隔离 | `crates/imail-storage-sqlite/src/tests.rs`：schema 12 回填、原始邮件不变、Bcc 草稿往返、配置持久化及用户隔离 |
-| 投递隐私 | `crates/imail-mail-network/src/lib.rs` 的真实 TLS fixture：Bcc 进入 SMTP 收件人且不进入投递 MIME，回复头正确 |
+| 投递隐私 | `crates/imail-mail-network/src/tests.rs` 的真实 TLS fixture：Bcc 进入 SMTP 收件人且不进入投递 MIME，回复头正确 |
 | 控制面 | HTTP 会话所有权和无正文摘要、MCP/Gateway 写信输入校验、Tauri 路由及字段保真、官方 MCP SDK 互通 |
 
 常规检查从仓库根目录运行：

@@ -21,6 +21,7 @@
 ## 架构与集成
 
 - [架构说明](architecture.md)：模块、数据、安全、同步、MCP 与联系人 Logo 边界。
+- [Rust 模块职责边界](rust-module-boundaries.md)：HTTP 与邮件网络适配层的模块划分、依赖方向和拆分原则。
 - [MCP 接入指南](mcp-integration.md)：授权、工具、推荐调用顺序和安全约束。
 - [附件预览](attachment-preview.md)：支持格式、缓存、预览会话与 ZIP 安全边界。
 - [ADR](adr/)：仍有效或被后续决策修订的架构决定。

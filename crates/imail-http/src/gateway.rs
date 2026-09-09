@@ -548,7 +548,7 @@ fn websocket_origin_allowed(state: &AppState, headers: &HeaderMap) -> bool {
     else {
         return true;
     };
-    let Ok(normalized) = crate::normalize_origin(origin) else {
+    let Ok(normalized) = crate::config::normalize_origin(origin) else {
         return false;
     };
     let Ok(origin_url) = url::Url::parse(&normalized) else {
@@ -562,7 +562,9 @@ fn websocket_origin_allowed(state: &AppState, headers: &HeaderMap) -> bool {
     if same_authority {
         return !state.config.production
             || origin_url.scheme() == "https"
-            || origin_url.host_str().is_some_and(crate::is_loopback_host);
+            || origin_url
+                .host_str()
+                .is_some_and(crate::config::is_loopback_host);
     }
     state.config.cors_origins.contains(&normalized)
 }
