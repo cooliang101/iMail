@@ -534,6 +534,10 @@ impl SyncRuntimeStore {
             params![job.account_id,result.mailbox,job.mailbox_role,result.uid_validity,result.last_seen_uid,result.highest_modseq,now_iso,next],
         )?;
         transaction.execute("DELETE FROM mailbox_sync_states WHERE account_id=?1 AND mailbox LIKE '@role:%' AND mailbox<>?2", params![job.account_id,result.mailbox])?;
+        transaction.execute(
+            "UPDATE accounts SET status=CASE WHEN EXISTS(SELECT 1 FROM mailbox_sync_states WHERE account_id=?1 AND last_error_code IS NOT NULL) THEN 'error' ELSE 'connected' END,last_error=(SELECT last_error_message FROM mailbox_sync_states WHERE account_id=?1 AND last_error_code IS NOT NULL ORDER BY (connection_status='authRequired') DESC,last_attempt_at DESC LIMIT 1) WHERE id=?1",
+            [&job.account_id],
+        )?;
         insert_event(
             &transaction,
             "sync.completed",
@@ -584,6 +588,10 @@ impl SyncRuntimeStore {
             job,
             json!({"mailbox":failure.mailbox,"mailboxRole":job.mailbox_role,"code":failure.code,"message":failure.message,"nextSyncAt":next}),
             &now_iso,
+        )?;
+        transaction.execute(
+            "UPDATE accounts SET status='error',last_error=?1 WHERE id=?2",
+            params![failure.message, job.account_id],
         )?;
         transaction.commit()?;
         Ok(())
@@ -714,6 +722,14 @@ impl SyncRuntimeStore {
             }
             if account.status == "connected" {
                 self.resume_after_authorization(&account.id, now)?;
+            }
+            let auth_required: bool = self.connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM mailbox_sync_states WHERE account_id=?1 AND connection_status='authRequired')",
+                [&account.id],
+                |row| row.get(0),
+            )?;
+            if auth_required {
+                continue;
             }
             for target in targets_for_policy(&account, &policy) {
                 let state = self.mailbox_state_for_target(
@@ -1844,9 +1860,25 @@ mod tests {
         assert_eq!(state.connection_status, "authRequired");
         assert_eq!(state.sync_state, "paused");
         assert_eq!(state.next_sync_at, None);
+        let account = sync_accounts(&store.connection).unwrap().remove(0);
+        assert_eq!(account.status, "error");
+        assert_eq!(account.last_error.as_deref(), Some("authorization failed"));
+        // Neither the failed folder nor other standard folders may auto-resume.
+        assert!(store
+            .enqueue_due_syncs("scheduled", at(3))
+            .unwrap()
+            .is_empty());
         store
-            .resume_after_authorization("account-1", at(3))
+            .connection
+            .execute(
+                "UPDATE accounts SET status='connected',last_error=NULL WHERE id='account-1'",
+                [],
+            )
             .unwrap();
+        assert!(!store
+            .enqueue_due_syncs("scheduled", at(3))
+            .unwrap()
+            .is_empty());
         let resumed = store.mailbox_state("account-1", "INBOX").unwrap().unwrap();
         assert_eq!(resumed.connection_status, "connected");
         assert_eq!(resumed.consecutive_failures, 0);
@@ -1949,5 +1981,37 @@ mod tests {
             .unwrap();
         assert_eq!(recovery.len(), 1);
         assert_eq!(recovery[0].reason, "recovery");
+        let account = sync_accounts(&store.connection).unwrap().remove(0);
+        assert_eq!(account.status, "error");
+        assert_eq!(account.last_error.as_deref(), Some("network timeout"));
+        let job = store
+            .claim_next(
+                "worker-a",
+                StdDuration::from_secs(60),
+                at(2) + Duration::minutes(6),
+            )
+            .unwrap()
+            .unwrap();
+        store
+            .complete(
+                &job,
+                &SyncCompletion {
+                    mailbox: "INBOX".into(),
+                    uid_validity: None,
+                    highest_modseq: None,
+                    last_seen_uid: 1,
+                    synced: 0,
+                    created: 0,
+                    updated: 0,
+                    deleted: 0,
+                    message_changes: vec![],
+                },
+                30,
+                at(2) + Duration::minutes(6),
+            )
+            .unwrap();
+        let account = sync_accounts(&store.connection).unwrap().remove(0);
+        assert_eq!(account.status, "connected");
+        assert_eq!(account.last_error, None);
     }
 }

@@ -166,8 +166,9 @@ impl OAuthProviderPort for OAuthHttpAdapter {
             .into_json()
             .map_err(|_| provider_error("OAuth Token 响应不是有效 JSON"))?;
         if let Some(error) = wire.error.as_deref() {
-            return Err(provider_error(
-                wire.error_description.as_deref().unwrap_or(error),
+            return Err(oauth_response_error(
+                error,
+                wire.error_description.as_deref(),
             ));
         }
         let access_token = wire
@@ -221,14 +222,17 @@ impl OAuthProviderPort for OAuthHttpAdapter {
 fn token_response_error(response: ureq::Response) -> OAuthError {
     let status = response.status();
     match response.into_json::<TokenResponse>() {
-        Ok(wire) => provider_error(
-            wire.error_description
-                .as_deref()
-                .or(wire.error.as_deref())
-                .unwrap_or("OAuth Token 交换失败"),
+        Ok(wire) => oauth_response_error(
+            wire.error.as_deref().unwrap_or("OAuth Token 交换失败"),
+            wire.error_description.as_deref(),
         ),
         Err(_) => provider_error(&format!("OAuth Token 交换失败 ({status})")),
     }
+}
+
+fn oauth_response_error(code: &str, description: Option<&str>) -> OAuthError {
+    // Preserve the protocol error code even when a localized description is present.
+    provider_error(&format!("{code}: {}", description.unwrap_or(code)))
 }
 
 fn http_error(error: ureq::Error) -> OAuthError {
@@ -277,6 +281,20 @@ mod tests {
         net::TcpListener,
         thread,
     };
+
+    #[test]
+    fn token_errors_preserve_codes_and_redact_secrets() {
+        let error = oauth_response_error(
+            "invalid_grant",
+            Some("grant rejected password=secret-value"),
+        );
+        let message = error.to_string();
+        assert!(message.contains("invalid_grant"));
+        assert!(!message.contains("secret-value"));
+        assert!(oauth_response_error("temporarily_unavailable", None)
+            .to_string()
+            .contains("temporarily_unavailable"));
+    }
 
     #[test]
     fn exchanges_authorization_code_and_reads_google_identity() {

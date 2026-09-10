@@ -29,14 +29,26 @@ pub fn classify_sync_failure(detail: &str) -> ClassifiedSyncFailure {
     let message = redact_protocol_detail(detail);
     let normalized = message.to_lowercase();
     let auth_required = [
-        "auth",
-        "credential",
-        "password",
-        "token",
-        "oauth",
-        "登录",
-        "授权",
-        "凭据",
+        "authenticationfailed",
+        "authentication failed",
+        "authentication failure",
+        "authenticate failed",
+        "auth failed",
+        "authorization failed",
+        "invalid credentials",
+        "invalid password",
+        "login fail",
+        "username and password not accepted",
+        "invalid_grant",
+        "invalid_token",
+        "expired_token",
+        "credentials have been revoked",
+        "token has been expired or revoked",
+        "认证失败",
+        "登录失败",
+        "授权已过期",
+        "凭据不可用",
+        "凭据格式无效",
     ]
     .iter()
     .any(|needle| normalized.contains(needle));
@@ -201,7 +213,7 @@ mod tests {
 
     #[test]
     fn classifies_and_redacts_worker_failures() {
-        let auth = classify_sync_failure("AUTH authorization=Bearer-super-secret");
+        let auth = classify_sync_failure("AUTH failed authorization=Bearer-super-secret");
         assert_eq!(auth.code, "AUTH_REQUIRED");
         assert!(auth.auth_required);
         assert!(!auth.message.contains("super-secret"));
@@ -214,5 +226,28 @@ mod tests {
             classify_sync_failure("connection reset").code,
             "IMAP_UNAVAILABLE"
         );
+    }
+
+    #[test]
+    fn oauth_transport_errors_do_not_require_reauthorization() {
+        for detail in [
+            "OAuth 网络请求失败：OAuth HTTP 请求失败：connection reset",
+            "OAuth Token 交换失败 (503)",
+            "OAuth Token 响应不是有效 JSON",
+        ] {
+            let failure = classify_sync_failure(detail);
+            assert!(!failure.auth_required, "{detail}");
+            assert_eq!(failure.code, "IMAP_UNAVAILABLE");
+        }
+        assert_eq!(classify_sync_failure("OAuth HTTP timeout").code, "TIMEOUT");
+        for detail in [
+            "OAuth 网络请求失败：invalid_grant: grant rejected",
+            "IMAP 验证失败：[AUTHENTICATIONFAILED] Invalid credentials",
+            "IMAP 验证失败：AUTHENTICATE failed.",
+            "IMAP 验证失败：Login fail. Please check your account",
+            "OAuth 授权已过期且没有刷新 Token，请重新连接邮箱",
+        ] {
+            assert!(classify_sync_failure(detail).auth_required, "{detail}");
+        }
     }
 }

@@ -601,7 +601,7 @@ pub fn provider_error(detail: &str) -> OAuthError {
     let safe = NAMED_SECRET
         .get_or_init(|| {
             Regex::new(
-                r"(?i)(access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization)(\s*[:=]\s*)[^\s,;]+",
+                r"(?i)(access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization|password)(\s*[:=]\s*)[^\s,;]+",
             )
             .unwrap()
         })

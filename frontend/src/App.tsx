@@ -31,6 +31,7 @@ import { MOBILE_MAIL_QUERY, NOTICE_VISIBLE_MS, OUTBOX_REFRESH_INTERVAL_MS } from
 import { useOutboxActions } from './features/compose/useOutboxActions';
 import { useWorkQueueActions } from './features/work-queue/useWorkQueueActions';
 import { applySettledResult } from './app/settled-result';
+import { subscribeAccountStatus } from './features/accounts/account-status-refresh';
 
 function FeatureFallback({ label, kind = 'overlay' }: { label: string; kind?: 'workspace' | 'pane' | 'overlay' }) {
   const { t } = useI18n();
@@ -162,6 +163,7 @@ function App() {
   const { setWorkItem, completeWorkItem } = useWorkQueueActions({ workItems, selectedId, setSelectedId, setWorkItems, setNotice });
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => subscribeAccountStatus(setRealAccounts), [user.id]);
   useEffect(() => {
     let active = true;
     const refresh = () => void api<unknown>('/api/outbox')
