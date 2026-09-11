@@ -534,8 +534,11 @@ impl SyncRuntimeStore {
             params![job.account_id,result.mailbox,job.mailbox_role,result.uid_validity,result.last_seen_uid,result.highest_modseq,now_iso,next],
         )?;
         transaction.execute("DELETE FROM mailbox_sync_states WHERE account_id=?1 AND mailbox LIKE '@role:%' AND mailbox<>?2", params![job.account_id,result.mailbox])?;
+        // A successful sync proves connectivity. Historical folder errors remain
+        // available in mailbox state, but must not poison the account forever.
+        // Keep explicit authorization failures until authorization is restored.
         transaction.execute(
-            "UPDATE accounts SET status=CASE WHEN EXISTS(SELECT 1 FROM mailbox_sync_states WHERE account_id=?1 AND last_error_code IS NOT NULL) THEN 'error' ELSE 'connected' END,last_error=(SELECT last_error_message FROM mailbox_sync_states WHERE account_id=?1 AND last_error_code IS NOT NULL ORDER BY (connection_status='authRequired') DESC,last_attempt_at DESC LIMIT 1) WHERE id=?1",
+            "UPDATE accounts SET status=CASE WHEN EXISTS(SELECT 1 FROM mailbox_sync_states WHERE account_id=?1 AND connection_status='authRequired') THEN 'error' ELSE 'connected' END,last_error=(SELECT last_error_message FROM mailbox_sync_states WHERE account_id=?1 AND connection_status='authRequired' ORDER BY last_attempt_at DESC LIMIT 1) WHERE id=?1",
             [&job.account_id],
         )?;
         insert_event(
@@ -1947,6 +1950,75 @@ mod tests {
             .enqueue_due_syncs("scheduled", at(3))
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn successful_sync_does_not_restore_historical_folder_connection_errors() {
+        for (connection_status, code, detail, expected_status) in [
+            (
+                "unreachable",
+                "IMAP_UNAVAILABLE",
+                "database is locked",
+                "connected",
+            ),
+            (
+                "unreachable",
+                "IMAP_UNAVAILABLE",
+                "peer closed connection",
+                "connected",
+            ),
+            (
+                "authRequired",
+                "AUTH_REQUIRED",
+                "invalid credentials",
+                "error",
+            ),
+        ] {
+            let fixture = Fixture::new();
+            let mut store = SyncRuntimeStore::open_database(&fixture.0).unwrap();
+            store.connection.execute(
+                "INSERT INTO mailbox_sync_states(account_id,mailbox,mailbox_role,last_attempt_at,connection_status,sync_state,last_error_code,last_error_message) VALUES ('account-1','Old folder','custom',?1,?2,'paused',?3,?4)",
+                params![timestamp(at(0)), connection_status, code, detail],
+            ).unwrap();
+            // Connection testing clears the account error, but does not sync
+            // historical folders. Subsequent inbox syncs must not resurrect it.
+            for second in [10, 20] {
+                store.enqueue(&input("manual", 1), at(second)).unwrap();
+                let job = store
+                    .claim_next("worker-a", StdDuration::from_secs(60), at(second + 1))
+                    .unwrap()
+                    .unwrap();
+                store
+                    .complete(
+                        &job,
+                        &SyncCompletion {
+                            mailbox: "INBOX".into(),
+                            uid_validity: None,
+                            highest_modseq: None,
+                            last_seen_uid: 1,
+                            synced: 0,
+                            created: 0,
+                            updated: 0,
+                            deleted: 0,
+                            message_changes: vec![],
+                        },
+                        30,
+                        at(second + 2),
+                    )
+                    .unwrap();
+                let account = sync_accounts(&store.connection).unwrap().remove(0);
+                assert_eq!(account.status, expected_status, "{detail}");
+                assert_eq!(
+                    account.last_error.as_deref(),
+                    (expected_status == "error").then_some(detail)
+                );
+                let old = store
+                    .mailbox_state("account-1", "Old folder")
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(old.last_error_message.as_deref(), Some(detail));
+            }
+        }
     }
 
     #[test]
